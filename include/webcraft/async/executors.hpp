@@ -31,9 +31,6 @@ namespace webcraft::async
     public:
         /// Schedules the current coroutine onto the thread pool
         virtual task<void> schedule(scheduling_priority priority = scheduling_priority::LOW) = 0;
-
-        /// Schedules an async function to be run on the thread pool asynchronously and provides a join handle which can be awaited to await completion
-        virtual join_handle schedule(task<void> task, scheduling_priority priority = scheduling_priority::LOW) = 0;
     };
 
     /// @brief A class that represents an executor service that can be used to run tasks asynchronously.
