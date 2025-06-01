@@ -3,7 +3,6 @@
 #include <async/awaitable_resume_t.h>
 #include <webcraft/concepts.hpp>
 #include <webcraft/async/awaitable.hpp>
-#include <webcraft/async/join_handle.hpp>
 #include <webcraft/async/runtime.hpp>
 #include <ranges>
 

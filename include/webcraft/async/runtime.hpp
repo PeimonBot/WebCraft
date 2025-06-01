@@ -3,7 +3,6 @@
 #include <webcraft/async/awaitable.hpp>
 #include <thread>
 #include <optional>
-#include <webcraft/async/join_handle.hpp>
 #include <webcraft/concepts.hpp>
 #include <variant>
 #include <algorithm>
