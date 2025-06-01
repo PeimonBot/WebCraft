@@ -84,11 +84,11 @@ namespace webcraft::async
 
         template <typename Fn, typename... Args>
             requires awaitable<std::invoke_result_t<Fn, Args...>>
-        auto schedule(scheduling_priority priority, Fn &&fn, Args &&...args) -> task<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
+        auto schedule(scheduling_priority priority, Fn &&fn, Args &&...args)
         {
             using T = ::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>;
 
-            auto fn = [this, priority](Fn &&fn, Args &&...args) -> task<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
+            auto fn = [this, priority](Fn &&fn, Args &&...args) -> task<T>
             {
                 co_await schedule(priority);
 
@@ -108,15 +108,15 @@ namespace webcraft::async
         }
 
         template <typename Fn, typename... Args>
-            requires awaitable<std::invoke_result_t<Fn, Args...>> && std::is_void_v<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
-        auto schedule_low(Fn &&fn, Args &&...args) -> task<void>
+            requires awaitable<std::invoke_result_t<Fn, Args...>>
+        auto schedule_low(Fn &&fn, Args &&...args)
         {
             return schedule(scheduling_priority::LOW, std::forward<Fn>(fn), std::forward<Args>(args)...);
         }
 
         template <typename Fn, typename... Args>
-            requires awaitable<std::invoke_result_t<Fn, Args...>> && std::is_void_v<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
-        auto schedule_high(Fn &&fn, Args &&...args) -> task<void>
+            requires awaitable<std::invoke_result_t<Fn, Args...>>
+        auto schedule_high(Fn &&fn, Args &&...args)
         {
             return schedule(scheduling_priority::HIGH, std::forward<Fn>(fn), std::forward<Args>(args)...);
         }
