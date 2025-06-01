@@ -21,6 +21,8 @@ namespace webcraft::async
         { t.await_resume() };
     };
 
+    /// @brief Eager task type that can be used to run asynchronous tasks. No need for spawn then!
+    /// @tparam T 
     template <typename T>
     using task = ::async::task<T>;
 

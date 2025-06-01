@@ -21,8 +21,9 @@ else()
 endif()
 
 
-file(GLOB_RECURSE WebCraft_SOURCES CONFIGURE_DEPENDS src/*.cpp)
-add_executable(WebCraft ${WebCraft_SOURCES})
+#file(GLOB_RECURSE WebCraft_SOURCES CONFIGURE_DEPENDS src/webcraft/*.cpp)
+set(WebCraft_SOURCES )
+add_executable(WebCraft src/main.cpp ${WebCraft_SOURCES})
 
 if (WIN32)
     target_link_libraries(WebCraft PRIVATE wsock32 ws2_32)

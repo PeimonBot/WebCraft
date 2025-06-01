@@ -45,6 +45,7 @@ namespace webcraft::async
         void destroy_runtime_handle(native_runtime_handle &handle);
     }
 
+    // TODO: document this class
     class runtime_handle
     {
     private:
@@ -61,9 +62,14 @@ namespace webcraft::async
             unsafe::destroy_runtime_handle(handle);
         }
 
-        unsafe::native_runtime_handle get() const
+        const unsafe::native_runtime_handle &get() const
         {
             return handle;
+        }
+
+        unsafe::native_runtime_handle *get_ptr()
+        {
+            return &handle;
         }
 
         runtime_handle(const runtime_handle &) = delete;
@@ -79,4 +85,36 @@ namespace webcraft::async
             return *this;
         }
     };
+
+#ifdef _WIN32
+#elif defined(__linux__)
+    class runtime_event
+    {
+    private:
+#ifdef _WIN32
+        OVERLAPPED overlapped = {};
+#endif
+        std::coroutine_handle<> handle;
+
+    public:
+        explicit runtime_event(std::coroutine_handle<> h) : handle(h)
+        {
+#ifdef _WIN32
+            ZeroMemory(&overlapped, sizeof(OVERLAPPED));
+#endif
+        }
+        virtual ~runtime_event() = default;
+
+        virtual void start(runtime_handle &handle) = 0;
+        void resume() noexcept
+        {
+            if (handle)
+            {
+                handle.resume();
+            }
+        }
+    };
+#elif defined(__APPLE__)
+#else
+#endif
 }

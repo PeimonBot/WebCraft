@@ -1,6 +1,7 @@
 #include <webcraft/async/config.hpp>
 #include <webcraft/async/runtime.hpp>
 #include <webcraft/async/executors.hpp>
+#include <async/event_signal.h>
 
 static webcraft::async::async_runtime_config config = {
     .max_worker_threads = 2 * std::thread::hardware_concurrency(),
@@ -49,7 +50,14 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
 #ifdef _WIN32
 // PostCompletionStatus() OVERLAPPED
 #elif defined(__linux__)
-// io_uring_submit_sqe
+
+    auto *sqe = webcraft::async::unsafe::io_uring_get_sqe(this->handle.get_ptr());
+    if (sqe == nullptr)
+    {
+        throw std::runtime_error("Failed to get SQE from io_uring");
+    }
+    io_uring_prep_nop(sqe); // Prepare a NOP operation to signal the completion of the task
+
 #elif defined(__APPLE__)
 
 #else
@@ -59,9 +67,22 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
 
 void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
 {
+    struct final_awaiter
+    {
+        ::async::event_signal ev;
+
+        struct promise_type
+        {
+            auto get_return_object() { return final_awaiter{}; }
+            auto initial_suspend() { return std::suspend_always(); }
+            auto final_suspend() noexcept { return std::suspend_never(); }
+            void unhandled_exception() {}
+            void return_void() {}
+        };
+    };
 
 #ifdef _WIN32
-// PostCompletionStatus() OVERLAPPED
+
 #elif defined(__linux__)
 // io_uring_submit_sqe
 #elif defined(__APPLE__)

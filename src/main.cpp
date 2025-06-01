@@ -1,15 +1,15 @@
 #include <thread>
 #include <chrono>
-#include <webcraft/webcraft.hpp>
+#include <webcraft/async/awaitable.hpp>
+#include <iostream>
 
 webcraft::async::task<void> example_task()
 {
+    std::cout << "Running example task..." << std::endl;
     co_return;
 }
 
 int main()
 {
-    webcraft::async::async_runtime &runtime = webcraft::async::async_runtime::get_instance();
-
-    runtime.run_async(example_task);
+    auto t = example_task();
 }

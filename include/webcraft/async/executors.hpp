@@ -82,88 +82,43 @@ namespace webcraft::async
             return schedule(scheduling_priority::HIGH);
         }
 
-        /// @brief Schedules an async task to be run on the thread pool asynchronously and provides a join handle which can be awaited to await completion
-        /// @param task schedules the task to run on the executor
-        /// @param priority the priority the task should run with
-        /// @return a join handle to await completion
-        inline join_handle schedule(task<void> task, scheduling_priority priority = scheduling_priority::LOW)
+        template <typename Fn, typename... Args>
+            requires awaitable<std::invoke_result_t<Fn, Args...>>
+        auto schedule(scheduling_priority priority, Fn &&fn, Args &&...args) -> task<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
         {
-            return strategy->schedule(task, priority);
-        }
+            using T = ::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>;
 
-        /// @brief Schedules an async task with a low priority to be run on the executor asynchronously and provides a join handle which can be awaited to await completion
-        /// @param task schedules the task to run on the executor
-        /// @return a join handle to await completion
-        inline join_handle schedule_low(task<void> task)
-        {
-            return strategy->schedule(task, scheduling_priority::LOW);
-        }
-
-        /// @brief Schedules an async task with a high priority to be run on the executor asynchronously and provides a join handle which can be awaited to await completion
-        /// @param task schedules the task to run on the executor
-        /// @return a join handle to await completion
-        inline join_handle schedule_high(task<void> task)
-        {
-            return strategy->schedule(task, scheduling_priority::HIGH);
-        }
-
-        /// @brief Schedules an async function with a low priority to be run on the executor asynchronously and provides a join handle which can be awaited to await completion
-        /// @tparam T the return type
-        /// @tparam ...Args the types of arguments for the function
-        /// @param async_fn the asynchronous function
-        /// @param ...args the arguments for the asynchronous function
-        /// @return a join handle
-        template <typename T, typename... Args>
-        join_handle schedule_low(std::function<task<T>(Args...)> async_fn, Args... args)
-        {
-            return schedule_low(async_fn(args...));
-        }
-
-        /// @brief Schedules an async function with a high priority to be run on the executor asynchronously and provides a join handle which can be awaited to await completion
-        /// @tparam T the return type
-        /// @tparam ...Args the types of arguments for the function
-        /// @param async_fn the asynchronous function
-        /// @param ...args the arguments for the asynchronous function
-        /// @return a join handle
-        template <typename T, typename... Args>
-        join_handle schedule_high(std::function<task<T>(Args...)> async_fn, Args... args)
-        {
-            return schedule_high(async_fn(args...));
-        }
-
-        /// @brief Schedules a function with a low priority to be run on the executor asynchronously and provides a join handle which can be awaited to await completion
-        /// @tparam T the return type
-        /// @tparam ...Args the types of the arguments for the function
-        /// @param fn the function to be executed
-        /// @param ...args the arguments for the functions execution
-        /// @return the join handle
-        template <typename T, typename... Args>
-            requires webcraft::not_true<awaitable<T>>
-        join_handle schedule_low(std::function<T(Args...)> fn, Args... args)
-        {
-            auto async_fn = [fn = std::move(fn)](Args... args) -> task<T>
+            auto fn = [this, priority](Fn &&fn, Args &&...args) -> task<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
             {
-                co_return fn(args...);
+                co_await schedule(priority);
+
+                if constexpr (std::is_void_v<T>)
+                {
+                    // If the result type is void, we can just co_await the function
+                    co_await std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...);
+                    co_return;
+                }
+                else
+                {
+                    co_return co_await std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...);
+                }
             };
 
-            return schedule_low(async_fn(args...));
+            return task<T>(fn(std::forward<Fn>(fn), std::forward<Args>(args)...));
         }
 
-        /// @brief Schedules a function with a high priority to be run on the executor asynchronously and provides a join handle which can be awaited to await completion
-        /// @tparam T the return type
-        /// @tparam ...Args the types of the arguments for the function
-        /// @param fn the function to be executed
-        /// @param ...args the arguments for the functions execution
-        /// @return the join handle
-        template <typename T, typename... Args>
-        join_handle schedule_high(std::function<T(Args...)> fn, Args... args)
+        template <typename Fn, typename... Args>
+            requires awaitable<std::invoke_result_t<Fn, Args...>> && std::is_void_v<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
+        auto schedule_low(Fn &&fn, Args &&...args) -> task<void>
         {
-            auto async_fn = [fn = std::move(fn)](Args... args) -> task<T>
-            {
-                co_return fn(args...);
-            };
+            return schedule(scheduling_priority::LOW, std::forward<Fn>(fn), std::forward<Args>(args)...);
+        }
 
-            return schedule_high(async_fn(args...));
+        template <typename Fn, typename... Args>
+            requires awaitable<std::invoke_result_t<Fn, Args...>> && std::is_void_v<::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>>
+        auto schedule_high(Fn &&fn, Args &&...args) -> task<void>
+        {
+            return schedule(scheduling_priority::HIGH, std::forward<Fn>(fn), std::forward<Args>(args)...);
         }
 
 #pragma endregion
@@ -177,8 +132,8 @@ namespace webcraft::async
         inline task<void> runParallel(range tasks)
         {
             // schedule and join the tasks
-            co_await runtime.join(tasks | std::ranges::transform([&](task<void> task)
-                                                                 { return schedule(task); }));
+            co_await runtime.when_all(tasks | std::ranges::transform([&](task<void> task)
+                                                                     { return schedule(task); }));
         }
 
         template <std::ranges::range range>
@@ -192,20 +147,20 @@ namespace webcraft::async
             std::vector<std::optional<T>> vec;
 
             // Assign each task a return destination, schedule them all and join them
-            co_await runtime.join(tasks | std::ranges::transform(
-                                              [&](task<T> t)
-                                              {
-                                                  vec.push_back({std::nullopt});
-                                                  size_t index = vec.size() - 1;
-
-                                                  auto fn = [vec, index](task<T> t) -> task<T>
+            co_await runtime.when_all(tasks | std::ranges::transform(
+                                                  [&](task<T> t)
                                                   {
-                                                      vec[index] = co_await t;
-                                                  };
+                                                      vec.push_back({std::nullopt});
+                                                      size_t index = vec.size() - 1;
 
-                                                  // schedule the tasks
-                                                  return schedule(fn(t));
-                                              }));
+                                                      auto fn = [vec, index](task<T> t) -> task<T>
+                                                      {
+                                                          vec[index] = co_await t;
+                                                      };
+
+                                                      // schedule the tasks
+                                                      return schedule(fn(t));
+                                                  }));
 
             auto pipe = vec | std::views::transform([](std::optional<T> opt)
                                                     { return opt.value(); });
