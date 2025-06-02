@@ -37,6 +37,7 @@ namespace webcraft::async
         std::unique_ptr<io::io_service> io_svc;
         std::unique_ptr<executor_service> executor_svc;
         std::unique_ptr<timer_service> timer_svc;
+        ::async::event_signal ev;
 #pragma endregion
 
 #pragma region "runtime handle"
@@ -132,16 +133,20 @@ namespace webcraft::async
 
 #pragma endregion
 
-#pragma region "AsyncRuntime.shutdown"
-        /// @brief Shuts down the async runtime and stops the loop and waits for all tasks to finish.
-        void shutdown();
-#pragma endregion
-
     private:
         // internal spawn implementation
         void queue_task_resumption(std::coroutine_handle<> h);
 
     public:
+#pragma region "AsyncRuntime.shutdown"
+        /// @brief Shuts down the async runtime and stops the loop and waits for all tasks to finish.
+        void shutdown()
+        {
+            this->ev.set();
+            queue_task_resumption(std::noop_coroutine());
+        }
+#pragma endregion
+
 #pragma region "AsyncRuntime.when_all"
 
         /// @brief Executes all the tasks concurrently and returns the result of all tasks in the submitted order

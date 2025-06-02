@@ -6,14 +6,12 @@
 // libevent: https://libevent.org/libevent-book/
 // libuv: https://docs.libuv.org/en/v1.x/guide/basics.html
 
-namespace webcraft::async
-{
-    namespace unsafe
-    {
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <mswsock.h>
 #include <windows.h>
-
-        using native_runtime_handle = HANDLE;
 
 #elif defined(__linux__)
 
@@ -25,10 +23,27 @@ namespace webcraft::async
 #include <unistd.h>
 #include <liburing.h>
 
-        using native_runtime_handle = io_uring;
 #elif defined(__APPLE__)
+
 #include <unistd.h>
 #include <sys/event.h>
+#else
+// TODO: figure out what other OS's would be using
+#endif
+
+namespace webcraft::async
+{
+    namespace unsafe
+    {
+#ifdef _WIN32
+#include <windows.h>
+
+        using native_runtime_handle = HANDLE;
+
+#elif defined(__linux__)
+
+        using native_runtime_handle = io_uring;
+#elif defined(__APPLE__)
 
         using native_runtime_handle = int; // kqueue file descriptor
 #else
@@ -95,6 +110,7 @@ namespace webcraft::async
         OVERLAPPED overlapped = {};
 #endif
         std::coroutine_handle<> handle;
+        int result = -1;
 
     public:
         explicit runtime_event(std::coroutine_handle<> h) : handle(h)
@@ -103,15 +119,30 @@ namespace webcraft::async
             ZeroMemory(&overlapped, sizeof(OVERLAPPED));
 #endif
         }
+
+#ifdef _WIN32
+
+        OVERLAPPED *get_overlapped() noexcept
+        {
+            return &overlapped;
+        }
+#endif
+
         virtual ~runtime_event() = default;
 
-        virtual void start(runtime_handle &handle) = 0;
-        void resume() noexcept
+        void resume(int result) noexcept
         {
             if (handle)
             {
                 handle.resume();
             }
+
+            this->result = result;
+        }
+
+        constexpr int get_result() const noexcept
+        {
+            return result;
         }
     };
 #elif defined(__APPLE__)

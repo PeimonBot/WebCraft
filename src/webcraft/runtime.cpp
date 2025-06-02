@@ -28,7 +28,6 @@ webcraft::async::async_runtime &webcraft::async::async_runtime::get_instance()
     return runtime;
 }
 
-// TODO: create the definitions for the async runtime: constructor, destructor, queue_task_resumption, & run
 webcraft::async::async_runtime::async_runtime(async_runtime_config &config)
 {
     webcraft::async::executor_service_params params = {
@@ -48,18 +47,38 @@ webcraft::async::async_runtime::~async_runtime()
 void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle<> h)
 {
 #ifdef _WIN32
-// PostCompletionStatus() OVERLAPPED
+    // PostCompletionStatus() OVERLAPPED
+
+    auto *event = new runtime_event(h);
+    if (!PostCompletionStatus(
+            this->handle.get(),
+            0,                                  // bytes transferred
+            reinterpret_cast<ULONG_PTR>(event), // completion key
+            event->get_overlapped()))           // overlapped structure
+    {
+        delete event; // Clean up the event if posting fails
+        throw std::runtime_error("Failed to queue task resumption: " + std::to_string(GetLastError()));
+    }
+
 #elif defined(__linux__)
 
-    auto *sqe = webcraft::async::unsafe::io_uring_get_sqe(this->handle.get_ptr());
+    auto *sqe = io_uring_get_sqe(this->handle.get_ptr());
     if (sqe == nullptr)
     {
         throw std::runtime_error("Failed to get SQE from io_uring");
     }
+
+    io_uring_sqe_set_data(sqe, new runtime_event(h));
     io_uring_prep_nop(sqe); // Prepare a NOP operation to signal the completion of the task
 
 #elif defined(__APPLE__)
 
+    kevent kev;
+    EV_SET(&kev, this->handle.get(), EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, new runtime_event(h));
+    if (kevent(this->handle.get(), &kev, 1, nullptr, 0, nullptr) == -1)
+    {
+        throw std::runtime_error("Failed to queue task resumption: " + std::to_string(errno));
+    }
 #else
 
 #endif
@@ -69,33 +88,108 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
 {
     struct final_awaiter
     {
-        ::async::event_signal ev;
 
         struct promise_type
         {
             auto get_return_object() { return final_awaiter{}; }
-            auto initial_suspend() { return std::suspend_always(); }
+            auto initial_suspend() { return std::suspend_never(); }
             auto final_suspend() noexcept { return std::suspend_never(); }
             void unhandled_exception() {}
             void return_void() {}
         };
     };
 
+    auto fn = [this](webcraft::async::task<void> &&t, ::async::event_signal &ev) mutable -> final_awaiter
+    {
+        // Wait for the task to finish
+        co_await t;
+
+        // Set the event to signal that the task is done
+        shutdown();
+    };
+
+    auto _ = fn(std::move(t), ev);
+
+    while (!ev.is_set())
+    {
+        runtime_event *event = nullptr;
 #ifdef _WIN32
 
+        // Windows IOCP
+        DWORD bytesTransferred;
+        ULONG_PTR completionKey;
+        LPOVERLAPPED overlapped;
+
+        if (GetQueuedCompletionStatus(this->handle.get(), &bytesTransferred, &completionKey, &overlapped, INFINITE))
+        {
+            event = reinterpret_cast<runtime_event *>(completionKey);
+            if (event)
+            {
+                event->resume(bytesTransferred); // Resume the event
+                delete event;
+                event = nullptr; // Clear the event pointer
+            }
+        }
+
 #elif defined(__linux__)
-// io_uring_submit_sqe
+        // io_uring_submit_sqe
+        io_uring_submit_and_wait(this->handle.get_ptr(), 1); // TODO: look into splitting this into io_uring_submit & io_uring_wait_cqe
+        io_uring_cqe *cqe;
+        int head;
+        int processed = 0;
+
+        io_uring_for_each_cqe(this->handle.get_ptr(), head, cqe)
+        {
+            event = static_cast<runtime_event *>(io_uring_cqe_get_data(cqe));
+            if (event)
+            {
+                event->resume(cqe->res); // Resume the event
+                processed++;
+                delete event;
+                event = nullptr; // Clear the event pointer
+            }
+        }
+
+        io_uring_cq_advance(this->handle.get_ptr(), processed); // Advance the completion queue
+
 #elif defined(__APPLE__)
 
+        // kqueue
+        struct kevent event;
+        struct timespec timeout = {0, 0}; // No timeout, wait indefinitely
+
+        int nev = kevent(this->handle.get(), nullptr, 0, &event, 1, &timeout);
+        if (nev < 0)
+        {
+            throw std::runtime_error("Failed to wait for kqueue event: " + std::to_string(errno));
+        }
+
+        if (nev > 0)
+        {
+            event = reinterpret_cast<runtime_event *>(event.udata);
+            if (event)
+            {
+                event->resume(event.data); // Resume the event
+                delete event;
+                event = nullptr; // Clear the event pointer
+            }
+        }
 #else
 
 #endif
+    }
 }
 
 void webcraft::async::unsafe::initialize_runtime_handle(webcraft::async::unsafe::native_runtime_handle &handle)
 {
 #ifdef _WIN32
     // iocp https://stackoverflow.com/questions/53651391/which-handle-to-pass-to-createiocompletionport-if-using-iocp-for-basic-signalin
+    WSAData wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) // Initialize Winsock
+    {
+        throw std::runtime_error("Failed to initialize Winsock: " + std::to_string(WSAGetLastError()));
+    }
+
     handle = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0); // Create an IOCP handle
     if (handle == nullptr)
     {
@@ -122,6 +216,7 @@ void webcraft::async::unsafe::destroy_runtime_handle(webcraft::async::unsafe::na
 {
 #ifdef _WIN32
     CloseHandle(handle); // Close the IOCP handle
+    WSACleanup();        // Cleanup Winsock
 #elif defined(__linux__)
     io_uring_queue_exit(&handle); // exit the io_uring queue
 #elif defined(__APPLE__)
