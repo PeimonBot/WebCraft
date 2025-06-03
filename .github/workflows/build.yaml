@@ -1,0 +1,23 @@
+name: Build CI/CD Workflow for WebCraft
+run-name: Build and Deploy WebCraft
+on: [push, pull_request]
+jobs:
+    build-linux:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+# to do: add cmake and vcpkg support then have it compile and run
+
+    
+    build-windows:
+        runs-on: windows-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+    
+    build-macos:
+        runs-on: macos-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
