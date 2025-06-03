@@ -60,28 +60,36 @@ namespace webcraft::async
         void destroy_runtime_handle(native_runtime_handle &handle);
     }
 
-    // TODO: document this class
+    /// @brief A class that represents a runtime handle for the async runtime.
     class runtime_handle
     {
     private:
         unsafe::native_runtime_handle handle;
 
     public:
+        /// @brief Constructs a runtime handle and initializes it based on the platform.
         runtime_handle()
         {
+            // Create a new runtime handle based on the platform
             unsafe::initialize_runtime_handle(handle);
         }
 
+        /// @brief Destroys the runtime handle and cleans up resources.
         ~runtime_handle()
         {
+            // Destroy the runtime handle based on the platform
             unsafe::destroy_runtime_handle(handle);
         }
 
+        /// @brief Gets the native runtime handle.
+        /// @return the native runtime handle
         const unsafe::native_runtime_handle &get() const
         {
             return handle;
         }
 
+        /// @brief Gets a pointer to the native runtime handle.
+        /// @return the pointer to the native runtime handle
         unsafe::native_runtime_handle *get_ptr()
         {
             return &handle;
@@ -93,8 +101,7 @@ namespace webcraft::async
         runtime_handle &operator=(runtime_handle &&other) = delete;
     };
 
-#ifdef _WIN32
-#elif defined(__linux__)
+    /// @brief A class that represents a runtime event that can be used to resume a coroutine.
     class runtime_event
     {
     private:
@@ -105,6 +112,8 @@ namespace webcraft::async
         int result = -1;
 
     public:
+        /// @brief Initializes a runtime event with a coroutine handle and submits it to the kernel
+        /// @param h the coroutine handle to be resumed after the event is signaled
         explicit runtime_event(std::coroutine_handle<> h) : handle(h)
         {
 #ifdef _WIN32
@@ -122,6 +131,8 @@ namespace webcraft::async
 
         virtual ~runtime_event() = default;
 
+        /// @brief Resumes the coroutine associated with this event.
+        /// @param result the result of the operation
         void resume(int result) noexcept
         {
             if (handle)
@@ -132,12 +143,11 @@ namespace webcraft::async
             this->result = result;
         }
 
+        /// @brief Gets the result of the operation that was signaled by this event.
+        /// @return the result of the operation
         constexpr int get_result() const noexcept
         {
             return result;
         }
     };
-#elif defined(__APPLE__)
-#else
-#endif
 }

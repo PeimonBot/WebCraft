@@ -31,7 +31,6 @@ namespace webcraft::async
         /// @param duration duration to sleep for
         /// @param token stop token to cancel the sleep operation
         /// @return an awaitable
-        // TODO: implement this
         task<void> sleep_for(std::chrono::steady_clock::duration duration, std::stop_token token = {});
 
         /// @brief Sleeps for duration provided asynchronously
