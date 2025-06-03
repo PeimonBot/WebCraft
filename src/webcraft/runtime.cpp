@@ -76,7 +76,6 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
     }
 
 #elif defined(__linux__)
-    // TODO: double check if this works
 
     auto *sqe = io_uring_get_sqe(this->handle.get_ptr());
     if (sqe == nullptr)
@@ -88,9 +87,8 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
     io_uring_prep_nop(sqe); // Prepare a NOP operation to signal the completion of the task
 
 #elif defined(__APPLE__)
-    // TODO: double check if this works
 
-    kevent kev;
+    struct kevent kev;
     EV_SET(&kev, this->handle.get(), EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, new runtime_event(h));
     if (kevent(this->handle.get(), &kev, 1, nullptr, 0, nullptr) == -1)
     {
@@ -150,7 +148,6 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
         }
 
 #elif defined(__linux__)
-        // TODO: double check if this works
         // io_uring_submit_sqe
         io_uring_submit_and_wait(this->handle.get_ptr(), 1); // TODO: look into splitting this into io_uring_submit & io_uring_wait_cqe
         io_uring_cqe *cqe;
@@ -172,13 +169,12 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
         io_uring_cq_advance(this->handle.get_ptr(), processed); // Advance the completion queue
 
 #elif defined(__APPLE__)
-        // TODO: double check if this works
 
         // kqueue
-        struct kevent event;
+        struct kevent kev;
         struct timespec timeout = {0, 0}; // No timeout, wait indefinitely
 
-        int nev = kevent(this->handle.get(), nullptr, 0, &event, 1, &timeout);
+        int nev = kevent(this->handle.get(), nullptr, 0, &kev, 1, &timeout);
         if (nev < 0)
         {
             throw std::runtime_error("Failed to wait for kqueue event: " + std::to_string(errno));
@@ -186,10 +182,10 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
 
         if (nev > 0)
         {
-            event = reinterpret_cast<runtime_event *>(event.udata);
+            event = reinterpret_cast<runtime_event *>(kev.udata);
             if (event)
             {
-                event->resume(event.data); // Resume the event
+                event->resume(kev.data); // Resume the event
                 delete event;
                 event = nullptr; // Clear the event pointer
             }
@@ -217,14 +213,12 @@ void webcraft::async::unsafe::initialize_runtime_handle(webcraft::async::unsafe:
         throw std::runtime_error("Failed to create IOCP handle: " + std::to_string(GetLastError()));
     }
 #elif defined(__linux__)
-    // TODO: double check if this works
     // io_uring https://pabloariasal.github.io/2022/11/12/couring-1/
     if (io_uring_queue_init(IO_URING_QUEUE_SIZE, &handle, 0) < 0) // Initialize the io_uring queue with a size of 256
     {
         throw std::runtime_error("Failed to initialize io_uring queue");
     }
 #elif defined(__APPLE__)
-    // TODO: double check if this works
     // kqueue https://repo.or.cz/eleutheria.git/blob/master:/kqueue/kqclient.c
     handle = kqueue(); // Create a kqueue handle
     if (handle == -1)
@@ -242,10 +236,8 @@ void webcraft::async::unsafe::destroy_runtime_handle(webcraft::async::unsafe::na
     CloseHandle(handle); // Close the IOCP handle
     WSACleanup();        // Cleanup Winsock
 #elif defined(__linux__)
-    // TODO: double check if this works
     io_uring_queue_exit(&handle); // exit the io_uring queue
 #elif defined(__APPLE__)
-    // TODO: double check if this works
     close(handle); // Close the kqueue handle
 #else
 #endif

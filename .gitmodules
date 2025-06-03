@@ -1,3 +1,6 @@
 [submodule "vcpkg"]
 	path = vcpkg
 	url = https://github.com/microsoft/vcpkg.git
+[submodule "2XC3-data"]
+	path = 2XC3-data
+	url = https://github.com/ProfSamScott/2XC3-data.git
