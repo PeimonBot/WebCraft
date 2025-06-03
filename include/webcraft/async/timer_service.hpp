@@ -7,7 +7,7 @@
 
 namespace webcraft::async
 {
-    class timer_service
+    class timer_service final
     {
     private:
         friend class async_runtime;
@@ -84,7 +84,7 @@ namespace webcraft::async
                 co_await task_supplier(token);
             };
 
-            runtime.spawn(spawn_fn());
+            spawn_fn();
 
             return src;
         }
@@ -107,7 +107,7 @@ namespace webcraft::async
                 co_await task_supplier(token);
             };
 
-            runtime.spawn(spawn_fn());
+            spawn_fn();
 
             return src;
         }
@@ -138,7 +138,7 @@ namespace webcraft::async
                 }
             };
 
-            runtime.spawn(spawn_fn());
+            spawn_fn();
 
             return src;
         }

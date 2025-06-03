@@ -21,8 +21,7 @@ else()
 endif()
 
 
-#file(GLOB_RECURSE WebCraft_SOURCES CONFIGURE_DEPENDS src/webcraft/*.cpp)
-set(WebCraft_SOURCES )
+file(GLOB_RECURSE WebCraft_SOURCES CONFIGURE_DEPENDS src/webcraft/*.cpp)
 add_executable(WebCraft src/main.cpp ${WebCraft_SOURCES})
 
 if (WIN32)

@@ -7,6 +7,7 @@
 #include <variant>
 #include <algorithm>
 #include <async/awaitable_resume_t.h>
+#include <async/event_signal.h>
 #include <ranges>
 #include <webcraft/async/config.hpp>
 #include <webcraft/async/platform.hpp>
@@ -26,7 +27,7 @@ namespace webcraft::async
 #pragma endregion
 
     /// @brief Singleton-like object that manages and provides a runtime for async operations to occur.
-    class async_runtime
+    class async_runtime final
     {
     private:
 #pragma region "friend classes"
@@ -134,7 +135,7 @@ namespace webcraft::async
 #pragma endregion
 
     private:
-        // internal spawn implementation
+        // internal resume coroutine implementation
         void queue_task_resumption(std::coroutine_handle<> h);
 
     public:
@@ -173,22 +174,36 @@ namespace webcraft::async
             {
                 auto &slot = results.emplace_back({std::nullopt});
 
-                auto fn = [&slot](Task t) -> task<void>
+                struct fn_wrapper
                 {
-                    slot = co_await t;
+
+                    webcraft::async::task<void> operator()(Task &&t, std::optional<T> &slot) const
+                    {
+                        // This lambda will be used to store the result of the task in the slot
+                        slot = co_await t;
+                    }
                 };
+
+                fn_wrapper fn;
                 // Create a wrapper task that will store the result in the slot
-                wrappers.emplace_back(fn(std::forward<Task>(task)));
+                wrappers.emplace_back(fn(std::forward<Task>(task), slot));
             }
 
             co_await when_all(wrappers);
 
-            co_return results | std::views::transform([](const std::optional<T> &opt)
-                                                      {
+            auto pipeline = results | std::views::transform([](const std::optional<T> &opt)
+                                                            {
                 if (opt.has_value())
                     return opt.value();
-                throw std::runtime_error("Task did not return a value"); }) |
-                std::ranges::to<std::vector<T>>();
+                throw std::runtime_error("Task did not return a value"); });
+
+            std::vector<T> out;
+            if constexpr (std::ranges::sized_range<range>)
+            {
+                out.reserve(std::ranges::size(pipeline));
+            }
+            std::ranges::copy(pipeline, std::back_inserter(out));
+            co_return out;
         }
 
         /// @brief Executes all the tasks concurrently
@@ -199,7 +214,7 @@ namespace webcraft::async
             requires std::same_as<task<void>, std::ranges::range_value_t<range>>
         task<void> when_all(range tasks)
         {
-            for (auto handle : handles)
+            for (auto &&handle : tasks)
                 co_await handle;
         }
 
@@ -302,7 +317,6 @@ namespace webcraft::async
 
 #pragma region "asynchronous services"
 
-        // TODO: implement these methods as well
         /// @brief Gets the io_service for the runtime.
         /// @return the IO service
         io::io_service &get_io_service();
@@ -326,3 +340,4 @@ namespace webcraft::async
 
 #include <webcraft/async/executors.hpp>
 #include <webcraft/async/timer_service.hpp>
+#include <webcraft/async/io/io_service.hpp>

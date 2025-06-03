@@ -33,17 +33,15 @@ namespace webcraft::async
     };
 
     /// @brief A class that represents an executor service that can be used to run tasks asynchronously.
-    class executor_service
+    class executor_service final
     {
     private:
         friend class async_runtime;
         async_runtime &runtime;
         std::unique_ptr<executor> strategy; // strategy for the executor service
-                                            // TODO: implement the strategies for this in the cpp file
 
 #pragma region "constructors and destructors"
     protected:
-        // TODO: implement the constructor
         executor_service(async_runtime &runtime, executor_service_params &params);
 
     public:
@@ -84,23 +82,23 @@ namespace webcraft::async
         {
             using T = ::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>;
 
-            auto fn = [this, priority](Fn &&fn, Args &&...args) -> task<T>
+            auto fn_ = [this, priority](Fn &&_fn, Args &&..._args) -> task<T>
             {
                 co_await schedule(priority);
 
                 if constexpr (std::is_void_v<T>)
                 {
                     // If the result type is void, we can just co_await the function
-                    co_await std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...);
+                    co_await std::invoke(std::forward<Fn>(_fn), std::forward<Args>(_args)...);
                     co_return;
                 }
                 else
                 {
-                    co_return co_await std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...);
+                    co_return co_await std::invoke(std::forward<Fn>(_fn), std::forward<Args>(_args)...);
                 }
             };
 
-            return task<T>(fn(std::forward<Fn>(fn), std::forward<Args>(args)...));
+            return task<T>(fn_(std::forward<Fn>(fn), std::forward<Args>(args)...));
         }
 
         template <typename Fn, typename... Args>
@@ -124,12 +122,27 @@ namespace webcraft::async
         /// @param tasks the tasks to run in parallel
         /// @return an awaitable
         template <std::ranges::range range>
-            requires std::same_as<task<void>, std::ranges::range_value_t<range>>
+            requires std::convertible_to<std::ranges::range_value_t<range>, std::function<task<void>()>>
         inline task<void> runParallel(range tasks)
         {
+            struct fn_awaiter
+            {
+                executor_service &svc;
+
+                task<void> operator()(std::function<task<void>()> fn) const
+                {
+                    co_await svc.schedule();
+                    co_return co_await fn();
+                }
+            };
+
             // schedule and join the tasks
-            co_await runtime.when_all(tasks | std::ranges::transform([&](task<void> task)
-                                                                     { return schedule(task); }));
+            co_await runtime.when_all(tasks | std::ranges::transform(
+                                                  [&](auto &&task_fn)
+                                                  {
+                                                      fn_awaiter fn{*this};
+                                                      return fn();
+                                                  }));
         }
 
         template <std::ranges::range range>

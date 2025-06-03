@@ -88,17 +88,9 @@ namespace webcraft::async
         }
 
         runtime_handle(const runtime_handle &) = delete;
-        runtime_handle(runtime_handle &&other) noexcept : handle(std::exchange(other.handle, nullptr)) {}
+        runtime_handle(runtime_handle &&other) = delete;
         runtime_handle &operator=(const runtime_handle &) = delete;
-        runtime_handle &operator=(runtime_handle &&other) noexcept
-        {
-            if (this != &other)
-            {
-                unsafe::destroy_runtime_handle(handle);
-                handle = std::exchange(other.handle, nullptr);
-            }
-            return *this;
-        }
+        runtime_handle &operator=(runtime_handle &&other) = delete;
     };
 
 #ifdef _WIN32

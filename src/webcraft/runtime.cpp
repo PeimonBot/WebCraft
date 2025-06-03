@@ -36,8 +36,24 @@ webcraft::async::async_runtime::async_runtime(async_runtime_config &config)
         .idleTimeout = config.idle_timeout,
         .strategy = config.worker_strategy};
 
-    this->executor_svc = std::make_unique<webcraft::async::executor_service>(*this, params);
-    this->timer_svc = std::make_unique<webcraft::async::timer_service>(*this);
+    this->executor_svc.reset(new webcraft::async::executor_service(*this, params));
+    this->timer_svc.reset(new webcraft::async::timer_service(*this));
+    this->io_svc.reset(new webcraft::async::io::io_service(*this));
+}
+
+webcraft::async::io::io_service &webcraft::async::async_runtime::get_io_service()
+{
+    return *(this->io_svc);
+}
+
+webcraft::async::executor_service &webcraft::async::async_runtime::get_executor_service()
+{
+    return *(this->executor_svc);
+}
+
+webcraft::async::timer_service &webcraft::async::async_runtime::get_timer_service()
+{
+    return *(this->timer_svc);
 }
 
 webcraft::async::async_runtime::~async_runtime()
@@ -47,8 +63,7 @@ webcraft::async::async_runtime::~async_runtime()
 void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle<> h)
 {
 #ifdef _WIN32
-    // PostCompletionStatus() OVERLAPPED
-
+    // TODO: double check if this works
     auto *event = new runtime_event(h);
     if (!PostCompletionStatus(
             this->handle.get(),
@@ -61,6 +76,7 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
     }
 
 #elif defined(__linux__)
+    // TODO: double check if this works
 
     auto *sqe = io_uring_get_sqe(this->handle.get_ptr());
     if (sqe == nullptr)
@@ -72,6 +88,7 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
     io_uring_prep_nop(sqe); // Prepare a NOP operation to signal the completion of the task
 
 #elif defined(__APPLE__)
+    // TODO: double check if this works
 
     kevent kev;
     EV_SET(&kev, this->handle.get(), EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, new runtime_event(h));
@@ -114,6 +131,7 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
     {
         runtime_event *event = nullptr;
 #ifdef _WIN32
+        // TODO: double check if this works
 
         // Windows IOCP
         DWORD bytesTransferred;
@@ -132,6 +150,7 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
         }
 
 #elif defined(__linux__)
+        // TODO: double check if this works
         // io_uring_submit_sqe
         io_uring_submit_and_wait(this->handle.get_ptr(), 1); // TODO: look into splitting this into io_uring_submit & io_uring_wait_cqe
         io_uring_cqe *cqe;
@@ -153,6 +172,7 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
         io_uring_cq_advance(this->handle.get_ptr(), processed); // Advance the completion queue
 
 #elif defined(__APPLE__)
+        // TODO: double check if this works
 
         // kqueue
         struct kevent event;
@@ -183,6 +203,7 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
 void webcraft::async::unsafe::initialize_runtime_handle(webcraft::async::unsafe::native_runtime_handle &handle)
 {
 #ifdef _WIN32
+    // TODO: double check if this works
     // iocp https://stackoverflow.com/questions/53651391/which-handle-to-pass-to-createiocompletionport-if-using-iocp-for-basic-signalin
     WSAData wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) // Initialize Winsock
@@ -196,12 +217,14 @@ void webcraft::async::unsafe::initialize_runtime_handle(webcraft::async::unsafe:
         throw std::runtime_error("Failed to create IOCP handle: " + std::to_string(GetLastError()));
     }
 #elif defined(__linux__)
+    // TODO: double check if this works
     // io_uring https://pabloariasal.github.io/2022/11/12/couring-1/
     if (io_uring_queue_init(IO_URING_QUEUE_SIZE, &handle, 0) < 0) // Initialize the io_uring queue with a size of 256
     {
         throw std::runtime_error("Failed to initialize io_uring queue");
     }
 #elif defined(__APPLE__)
+    // TODO: double check if this works
     // kqueue https://repo.or.cz/eleutheria.git/blob/master:/kqueue/kqclient.c
     handle = kqueue(); // Create a kqueue handle
     if (handle == -1)
@@ -215,11 +238,14 @@ void webcraft::async::unsafe::initialize_runtime_handle(webcraft::async::unsafe:
 void webcraft::async::unsafe::destroy_runtime_handle(webcraft::async::unsafe::native_runtime_handle &handle)
 {
 #ifdef _WIN32
+    // TODO: double check if this works
     CloseHandle(handle); // Close the IOCP handle
     WSACleanup();        // Cleanup Winsock
 #elif defined(__linux__)
+    // TODO: double check if this works
     io_uring_queue_exit(&handle); // exit the io_uring queue
 #elif defined(__APPLE__)
+    // TODO: double check if this works
     close(handle); // Close the kqueue handle
 #else
 #endif
