@@ -3,6 +3,7 @@
     "configurePresets": [
         {
             "name": "base-build",
+            "hidden": "true",
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
             }
