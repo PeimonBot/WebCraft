@@ -2,19 +2,23 @@
     "version": 2,
     "configurePresets": [
         {
-            "name": "linux-build",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build",
+            "name": "base-build",
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
             }
         },
         {
+            "name": "linux-build",
+            "inherits": "base-build",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build"
+        },
+        {
             "name": "macos-build",
+            "inherits": "base-build",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
                 "CMAKE_C_COMPILER": "/opt/homebrew/bin/gcc-15",
                 "CMAKE_CXX_COMPILER": "/opt/homebrew/bin/g++-15",
                 "CMAKE_MAKE_PROGRAM": "/opt/homebrew/bin/ninja"
@@ -22,10 +26,10 @@
         },
         {
             "name": "windows-build",
+            "inherits": "base-build",
             "generator": "Visual Studio 17 2022",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
                 "CMAKE_C_COMPILER": "cl.exe",
                 "CMAKE_CXX_COMPILER": "cl.exe"
             }
