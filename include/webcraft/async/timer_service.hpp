@@ -148,7 +148,7 @@ namespace webcraft::async
     template <typename Rep, typename Period>
     auto operator co_await(std::chrono::duration<Rep, Period> d)
     {
-        auto runtime = async_runtime::get_instance();
+        auto &runtime = async_runtime::get_instance();
         return runtime.get_timer_service().sleep_for(d);
     }
 }
