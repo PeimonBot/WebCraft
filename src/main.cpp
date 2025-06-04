@@ -4,6 +4,7 @@
 #include <webcraft/async/runtime.hpp>
 
 using namespace webcraft::async;
+using namespace std::chrono_literals;
 
 task<void> most_likely_incomplete()
 {
@@ -35,6 +36,8 @@ task<void> example_task()
         std::cout << "Count: " << count << std::endl;
         co_await dispatcher.schedule();
     }
+
+    co_await 1s;
 
     std::cout << "Example task completed." << std::endl;
     co_return;
