@@ -28,6 +28,8 @@ namespace webcraft::async
     class executor
     {
     public:
+        virtual ~executor() = default;
+
         /// Schedules the current coroutine onto the thread pool
         virtual task<void> schedule(scheduling_priority priority = scheduling_priority::LOW) = 0;
     };
