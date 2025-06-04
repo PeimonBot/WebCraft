@@ -65,7 +65,7 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
 #ifdef _WIN32
     // TODO: double check if this works
     auto *event = new runtime_event(h);
-    if (!PostCompletionStatus(
+    if (!PostQueuedCompletionStatus(
             this->handle.get(),
             0,                                  // bytes transferred
             reinterpret_cast<ULONG_PTR>(event), // completion key
