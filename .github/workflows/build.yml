@@ -74,18 +74,15 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: Get Version of Compiler
+    - name: Get Version of Windows Compiler
+      if: ${{ matrix.os == 'windows-latest' }}
+      run: cl
+        
+    - name: Get Version of Compiler which is not windows
+      if: ${{ matrix.os != 'windows-latest' }}
       run: |
         echo "C Compiler: ${{ matrix.c_compiler }}"
         echo "C++ Compiler: ${{ matrix.cpp_compiler }}"
-        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          # For Windows, we can use cl.exe to get the version
-          cl /?
-        else
-          # For Linux and macOS, we can use gcc or clang to get the version
-          ${{ matrix.c_compiler }} --version
-          ${{ matrix.cpp_compiler }} --version
-        fi
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
