@@ -73,12 +73,8 @@ jobs:
       shell: bash
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-
-    - name: Get Version of Windows Compiler
-      if: ${{ matrix.os == 'windows-latest' }}
-      run: ${{ matrix.c_compiler }}
         
-    - name: Get Version of Compiler which is not windows
+    - name: Get Version of Compiler which is not Windows
       if: ${{ matrix.os != 'windows-latest' }}
       run: |
         echo "C Compiler: ${{ matrix.c_compiler }}"
