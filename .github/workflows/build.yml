@@ -76,7 +76,7 @@ jobs:
 
     - name: Get Version of Windows Compiler
       if: ${{ matrix.os == 'windows-latest' }}
-      run: cl
+      run: ${{ matrix.c_compiler }}
         
     - name: Get Version of Compiler which is not windows
       if: ${{ matrix.os != 'windows-latest' }}
