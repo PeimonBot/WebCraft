@@ -83,8 +83,8 @@ jobs:
           cl /?
         else
           # For Linux and macOS, we can use gcc or clang to get the version
-          ${matrix.c_compiler} --version
-          ${matrix.cpp_compiler} --version
+          ${{ matrix.c_compiler }} --version
+          ${{ matrix.cpp_compiler }} --version
         fi
 
     - name: Configure CMake
