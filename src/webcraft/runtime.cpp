@@ -2,6 +2,7 @@
 #include <webcraft/async/runtime.hpp>
 #include <webcraft/async/executors.hpp>
 #include <async/event_signal.h>
+#include <iostream>
 
 static webcraft::async::async_runtime_config config = {
     .max_worker_threads = 2 * std::thread::hardware_concurrency(),
@@ -64,42 +65,71 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
 {
     struct yield_event : public runtime_event
     {
-    };
+        unsigned long ptr;
+        webcraft::async::runtime_handle &handle;
 
+        yield_event(webcraft::async::runtime_handle &handle, std::coroutine_handle<> h) : runtime_event(h), handle(handle)
+        {
 #ifdef _WIN32
-    auto *event = new runtime_event(h);
-    if (!PostQueuedCompletionStatus(
-            this->handle.get(),
-            0,                                  // bytes transferred
-            reinterpret_cast<ULONG_PTR>(event), // completion key
-            event->get_overlapped()))           // overlapped structure
-    {
-        delete event; // Clean up the event if posting fails
-        throw std::runtime_error("Failed to queue task resumption: " + std::to_string(GetLastError()));
-    }
+            if (!PostQueuedCompletionStatus(
+                    handle.get(),
+                    0,                                 // bytes transferred
+                    reinterpret_cast<ULONG_PTR>(this), // completion key
+                    event->get_overlapped()))          // overlapped structure
+            {
+                throw std::runtime_error("Failed to queue task resumption: " + std::to_string(GetLastError()));
+            }
 
 #elif defined(__linux__)
 
-    auto *sqe = io_uring_get_sqe(this->handle.get_ptr());
-    if (sqe == nullptr)
-    {
-        throw std::runtime_error("Failed to get SQE from io_uring");
-    }
+            auto *sqe = io_uring_get_sqe(handle.get_ptr());
+            if (sqe == nullptr)
+            {
+                throw std::runtime_error("Failed to get SQE from io_uring");
+            }
 
-    io_uring_sqe_set_data(sqe, new runtime_event(h));
-    io_uring_prep_nop(sqe); // Prepare a NOP operation to signal the completion of the task
+            io_uring_sqe_set_data(sqe, this);
+            io_uring_prep_nop(sqe); // Prepare a NOP operation to signal the completion of the task
 
 #elif defined(__APPLE__)
 
-    struct kevent kev;
-    EV_SET(&kev, this->handle.get(), EVFILT_USER, EV_ADD | EV_CLEAR, NOTE_TRIGGER, 0, new runtime_event(h));
-    if (kevent(this->handle.get(), &kev, 1, nullptr, 0, nullptr) == -1)
-    {
-        throw std::runtime_error("Failed to queue task resumption: " + std::to_string(errno));
-    }
+            ptr = (uintptr_t)h.address();
+            {
+                struct kevent kev;
+                EV_SET(&kev, ptr, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, this);
+                if (kevent(handle.get(), &kev, 1, nullptr, 0, nullptr) < 0)
+                {
+                    throw std::runtime_error("Failed to register task resumption: " + std::to_string(errno));
+                }
+            }
+            {
+                struct kevent kev;
+                EV_SET(&kev, ptr, EVFILT_USER, 0, NOTE_TRIGGER, 0, this);
+                if (kevent(handle.get(), &kev, 1, nullptr, 0, nullptr) < 0)
+                {
+                    throw std::runtime_error("Failed to queue task resumption: " + std::to_string(errno));
+                }
+            }
 #else
-
 #endif
+        }
+
+        ~yield_event()
+        {
+#ifdef __APPLE__
+
+            struct kevent kev;
+            EV_SET(&kev, ptr, EVFILT_USER, EV_DELETE, 0, 0, this);
+            if (kevent(handle.get(), &kev, 1, nullptr, 0, nullptr) < 0)
+            {
+                std::cerr << "Failed to unregister task resumption: " << std::to_string(errno) << std::endl;
+                std::exit(1);
+            }
+#endif
+        }
+    };
+
+    new yield_event(this->handle, h);
 }
 
 void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)

@@ -108,6 +108,7 @@ namespace webcraft::async
 #ifdef _WIN32
         OVERLAPPED overlapped = {};
 #endif
+    protected:
         std::coroutine_handle<> handle;
         int result = -1;
 
