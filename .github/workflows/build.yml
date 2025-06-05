@@ -93,6 +93,7 @@ jobs:
         echo "C++ Compiler: g++-15"
         echo "CC=$(brew --prefix gcc@15)/bin/gcc-15" >> $GITHUB_ENV
         echo "CXX=$(brew --prefix gcc@15)/bin/g++-15" >> $GITHUB_ENV
+        echo "PATH=/opt/homebrew/bin:$PATH" >> $GITHUB_ENV
 
     - name: Configure CMake not for MacOS
       if: ${{ ! (matrix.os == 'macos-latest' && matrix.c_compiler == 'clang') }}
