@@ -62,8 +62,11 @@ webcraft::async::async_runtime::~async_runtime()
 
 void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle<> h)
 {
+    struct yield_event : public runtime_event
+    {
+    };
+
 #ifdef _WIN32
-    // TODO: double check if this works
     auto *event = new runtime_event(h);
     if (!PostQueuedCompletionStatus(
             this->handle.get(),
@@ -129,7 +132,6 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
     {
         runtime_event *event = nullptr;
 #ifdef _WIN32
-        // TODO: double check if this works
 
         // Windows IOCP
         DWORD bytesTransferred;
@@ -199,7 +201,6 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
 void webcraft::async::unsafe::initialize_runtime_handle(webcraft::async::unsafe::native_runtime_handle &handle)
 {
 #ifdef _WIN32
-    // TODO: double check if this works
     // iocp https://stackoverflow.com/questions/53651391/which-handle-to-pass-to-createiocompletionport-if-using-iocp-for-basic-signalin
     WSAData wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) // Initialize Winsock
@@ -232,7 +233,6 @@ void webcraft::async::unsafe::initialize_runtime_handle(webcraft::async::unsafe:
 void webcraft::async::unsafe::destroy_runtime_handle(webcraft::async::unsafe::native_runtime_handle &handle)
 {
 #ifdef _WIN32
-    // TODO: double check if this works
     CloseHandle(handle); // Close the IOCP handle
     WSACleanup();        // Cleanup Winsock
 #elif defined(__linux__)
