@@ -75,7 +75,7 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
                     handle.get(),
                     0,                                 // bytes transferred
                     reinterpret_cast<ULONG_PTR>(this), // completion key
-                    event->get_overlapped()))          // overlapped structure
+                    this->get_overlapped()))           // overlapped structure
             {
                 throw std::runtime_error("Failed to queue task resumption: " + std::to_string(GetLastError()));
             }

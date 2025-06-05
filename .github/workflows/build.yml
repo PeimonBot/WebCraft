@@ -43,8 +43,8 @@ jobs:
             preset: linux-build
             name: WebCraft
           - os: macos-latest
-            c_compiler: gcc-15
-            cpp_compiler: g++-15
+            c_compiler: /opt/homebrew/bin/gcc-15
+            cpp_compiler: /opt/homebrew/bin/g++-15
             preset: macos-build
             name: WebCraft
           - os: macos-latest
