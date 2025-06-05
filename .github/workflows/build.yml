@@ -43,8 +43,8 @@ jobs:
             preset: linux-build
             name: WebCraft
           - os: macos-latest
-            c_compiler: /opt/homebrew/bin/gcc-15
-            cpp_compiler: /opt/homebrew/bin/g++-15
+            c_compiler: /opt/homebrew/opt/gcc/bin/gcc
+            cpp_compiler: /opt/homebrew/opt/gcc/bin/g++
             preset: macos-build
             name: WebCraft
           - os: macos-latest
@@ -109,17 +109,14 @@ jobs:
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
           -S ${{ github.workspace }}
         else
-          brew install gcc@15
+          brew install gcc
           echo "C Compiler: gcc-15"
           echo "C++ Compiler: g++-15"
-          echo "CC=$(brew --prefix gcc@15)/bin/gcc-15" >> $GITHUB_ENV
-          echo "CXX=$(brew --prefix gcc@15)/bin/g++-15" >> $GITHUB_ENV
-          echo "PATH=/opt/homebrew/bin:$PATH" >> $GITHUB_ENV
+          echo "CC=$(brew --prefix gcc)/bin/gcc" >> $GITHUB_ENV
+          echo "CXX=$(brew --prefix gcc)/bin/g++" >> $GITHUB_ENV
           cmake \
           --preset=${{ matrix.preset }} \
           -B ${{ steps.strings.outputs.build-output-dir }} \
-          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -S ${{ github.workspace }}
         fi
