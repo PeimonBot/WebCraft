@@ -83,17 +83,7 @@ jobs:
     - name: Setup Homebrew for MacOS
       if: ${{ matrix.os == 'macos-latest' }}
       id: setup_homebrew
-      uses: Homebrew/actions/setup-homebrew@master
-    
-    - name: Install GCC for MacOS
-      if: ${{ matrix.os == 'macos-latest' && matrix.c_compiler == 'gcc' }}
-      run: |
-        brew install gcc@15
-        echo "C Compiler: gcc-15"
-        echo "C++ Compiler: g++-15"
-        echo "CC=$(brew --prefix gcc@15)/bin/gcc-15" >> $GITHUB_ENV
-        echo "CXX=$(brew --prefix gcc@15)/bin/g++-15" >> $GITHUB_ENV
-        echo "PATH=/opt/homebrew/bin:$PATH" >> $GITHUB_ENV
+      uses: Homebrew/actions/setup-homebrew@master    
 
     - name: Configure CMake not for MacOS
       if: ${{ ! (matrix.os == 'macos-latest' && matrix.c_compiler == 'clang') }}
@@ -109,14 +99,30 @@ jobs:
         -S ${{ github.workspace }}
     
     - name: Configure CMake for MacOS
-      if: ${{ matrix.os == 'macos-latest' && matrix.c_compiler == 'clang' }}
-      run: >
-        cmake
-        --preset=${{ matrix.preset }}
-        -B ${{ steps.strings.outputs.build-output-dir }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -S ${{ github.workspace }}
+      if: ${{ matrix.os == 'macos-latest' }}
+      run: |
+        if [[ ${{ matrix.c_compiler }} == 'clang' ]]; then
+          cmake \
+          --preset=${{ matrix.preset }} \
+          -B ${{ steps.strings.outputs.build-output-dir }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -S ${{ github.workspace }}
+        else
+          brew install gcc@15
+          echo "C Compiler: gcc-15"
+          echo "C++ Compiler: g++-15"
+          echo "CC=$(brew --prefix gcc@15)/bin/gcc-15" >> $GITHUB_ENV
+          echo "CXX=$(brew --prefix gcc@15)/bin/g++-15" >> $GITHUB_ENV
+          echo "PATH=/opt/homebrew/bin:$PATH" >> $GITHUB_ENV
+          cmake \
+          --preset=${{ matrix.preset }} \
+          -B ${{ steps.strings.outputs.build-output-dir }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -S ${{ github.workspace }}
+        fi
 
     - name: Build not for MacOS
       if: ${{ ! (matrix.os == 'macos-latest' && matrix.c_compiler == 'clang') }}
