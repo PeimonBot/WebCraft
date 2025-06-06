@@ -106,7 +106,8 @@
 		"__verbose_abort": "cpp",
 		"execution": "cpp",
 		"__config": "cpp",
-		"ranges": "cpp"
+		"ranges": "cpp",
+		"version": "cpp"
 	},
 	"C_Cpp.errorSquiggles": "enabled"
 }

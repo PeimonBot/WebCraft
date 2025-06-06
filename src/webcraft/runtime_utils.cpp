@@ -1,6 +1,7 @@
 #include <webcraft/async/runtime.hpp>
 #include <webcraft/async/executors.hpp>
 #include <webcraft/async/timer_service.hpp>
+#include <thread>
 
 // basic executor implementation, which is a simple executor that yields control back to the runtime
 class basic_executor : public webcraft::async::executor
@@ -13,9 +14,44 @@ public:
     {
     }
 
-    webcraft::async::task<void> schedule(webcraft::async::scheduling_priority priority = webcraft::async::scheduling_priority::LOW) override
+    webcraft::async::task<void> schedule(webcraft::async::scheduling_priority priority) override
     {
         return runtime.yield();
+    }
+};
+
+// thread per task executor, highly inefficient but shows the idea of how we can combine both concurrency and parallelism
+class thread_per_task : public webcraft::async::executor
+{
+public:
+    thread_per_task() {}
+
+    webcraft::async::task<void> schedule(webcraft::async::scheduling_priority priority) override
+    {
+        struct thread_per_task_awaitable
+        {
+            bool await_ready() { return false; }
+            void await_suspend(std::coroutine_handle<> h)
+            {
+                std::jthread thread([h]()
+                                    { h.resume(); });
+            }
+            void await_resume() {}
+        };
+
+        co_await thread_per_task_awaitable{};
+        co_return;
+    }
+};
+
+class fixed_size_tpl : public webcraft::async::executor
+{
+public:
+    fixed_size_tpl(size_t threads) {}
+
+    webcraft::async::task<void> schedule(webcraft::async::scheduling_priority priority) override
+    {
+        
     }
 };
 
