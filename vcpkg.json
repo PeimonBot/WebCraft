@@ -10,6 +10,7 @@
     {
       "name": "winsock2",
       "platform": "windows"
-    }
+    },
+    "taskflow"
   ]
 }

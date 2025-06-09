@@ -6,6 +6,7 @@
 #include <webcraft/concurrency/queue.hpp>
 #include <random>
 #include <iostream>
+#include <taskflow/taskflow.hpp>
 
 // basic executor implementation, which is a simple executor that yields control back to the runtime
 class basic_executor : public webcraft::async::executor
@@ -321,13 +322,34 @@ struct work_stealing_thread_pool : public thread_pool
     }
 };
 
+struct taskflow_executor : public webcraft::async::executor
+{
+    tf::Executor executor;
+
+    webcraft::async::task<void> schedule(webcraft::async::scheduling_priority priority) override
+    {
+        struct task_flow_awaitable
+        {
+            taskflow_executor &executor;
+
+            bool await_ready() { return false; }
+
+            void await_suspend(std::coroutine_handle<> h)
+            {
+                executor.executor.silent_async([h]()
+                                               { h.resume(); });
+            }
+
+            void await_resume() {}
+        };
+
+        co_await task_flow_awaitable{*this};
+    }
+};
+
 webcraft::async::executor_service::executor_service(async_runtime &runtime, executor_service_params &params) : runtime(runtime)
 {
-    auto tp = std::make_unique<fixed_size_thread_pool>();
-    tp->start();
-
-    // TODO: implement the executor service strategy based on the params
-    this->strategy = std::move(tp);
+    this->strategy = std::make_unique<taskflow_executor>();
 }
 
 // TODO: implement these
