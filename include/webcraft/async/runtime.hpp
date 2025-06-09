@@ -143,8 +143,16 @@ namespace webcraft::async
         /// @brief Shuts down the async runtime and stops the loop and waits for all tasks to finish.
         void shutdown()
         {
+            if (ev.is_set())
+            {
+                return;
+            }
             this->ev.set();
-            queue_task_resumption(std::noop_coroutine());
+
+            for (int i = 0; i < 10; i++)
+            {
+                queue_task_resumption(std::noop_coroutine());
+            }
         }
 #pragma endregion
 

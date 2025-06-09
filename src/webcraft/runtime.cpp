@@ -61,6 +61,10 @@ webcraft::async::async_runtime::~async_runtime()
 {
 }
 
+#ifdef __linux__
+static std::mutex runtime_mutex;
+#endif
+
 void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle<> h)
 {
     struct yield_event : public runtime_event
@@ -82,6 +86,8 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
 
 #elif defined(__linux__)
 
+            std::lock_guard lk(runtime_mutex); // Ensure thread safety for io_uring operations
+
             auto *sqe = io_uring_get_sqe(handle.get_ptr());
             if (sqe == nullptr)
             {
@@ -90,7 +96,10 @@ void webcraft::async::async_runtime::queue_task_resumption(std::coroutine_handle
 
             io_uring_sqe_set_data(sqe, this);
             io_uring_prep_nop(sqe); // Prepare a NOP operation to signal the completion of the task
-
+            if (io_uring_submit(handle.get_ptr()) < 0)
+            {
+                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::to_string(-errno));
+            }
 #elif defined(__APPLE__)
 
             ptr = (uintptr_t)h.address();
@@ -181,10 +190,15 @@ void webcraft::async::async_runtime::run(webcraft::async::task<void> &&t)
 
 #elif defined(__linux__)
         // io_uring_submit_sqe
-        io_uring_submit_and_wait(this->handle.get_ptr(), 1); // TODO: look into splitting this into io_uring_submit & io_uring_wait_cqe
-        io_uring_cqe *cqe;
-        int head;
-        int processed = 0;
+        io_uring_cqe *cqe = nullptr;
+        int rc = io_uring_wait_cqe(this->handle.get_ptr(), &cqe);
+        if (rc == -EINTR)
+            continue; // interrupted by signal → retry
+        if (rc < 0)
+            throw std::system_error(-rc, std::generic_category(), "io_uring_wait_cqe");
+
+        unsigned head;
+        unsigned processed = 0;
 
         io_uring_for_each_cqe(this->handle.get_ptr(), head, cqe)
         {
