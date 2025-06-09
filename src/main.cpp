@@ -1,4 +1,3 @@
-#include <thread>
 #include <chrono>
 #include <iostream>
 #include <webcraft/async/runtime.hpp>
@@ -28,6 +27,8 @@ task<void> example_task()
     auto &dispatcher = runtime.get_executor_service();
     auto &timer = runtime.get_timer_service();
 
+    std::cout << "Thread id: " << std::this_thread::get_id() << std::endl;
+
     for (int i = 0; i < 5; i++)
     {
         count = co_await value_of(i);
@@ -35,6 +36,7 @@ task<void> example_task()
 
         std::cout << "Count: " << count << std::endl;
         co_await dispatcher.schedule();
+        std::cout << "Thread id: " << std::this_thread::get_id() << std::endl;
     }
 
     co_await 1s;
