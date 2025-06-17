@@ -4,6 +4,7 @@
 #include <webcraft/concepts.hpp>
 #include <webcraft/async/awaitable.hpp>
 #include <webcraft/async/runtime.hpp>
+#include <webcraft/async/when_all.hpp>
 #include <ranges>
 
 namespace webcraft::async
@@ -139,12 +140,12 @@ namespace webcraft::async
             };
 
             // schedule and join the tasks
-            co_await runtime.when_all(tasks | std::ranges::transform(
-                                                  [&](auto &&task_fn)
-                                                  {
-                                                      fn_awaiter fn{*this};
-                                                      return fn();
-                                                  }));
+            co_await when_all(tasks | std::ranges::transform(
+                                          [&](auto &&task_fn)
+                                          {
+                                              fn_awaiter fn{*this};
+                                              return fn();
+                                          }));
         }
 
         template <std::ranges::range range>
@@ -158,20 +159,20 @@ namespace webcraft::async
             std::vector<std::optional<T>> vec;
 
             // Assign each task a return destination, schedule them all and join them
-            co_await runtime.when_all(tasks | std::ranges::transform(
-                                                  [&](task<T> t)
-                                                  {
-                                                      vec.push_back({std::nullopt});
-                                                      size_t index = vec.size() - 1;
+            co_await when_all(tasks | std::ranges::transform(
+                                          [&](task<T> t)
+                                          {
+                                              vec.push_back({std::nullopt});
+                                              size_t index = vec.size() - 1;
 
-                                                      auto fn = [vec, index](task<T> t) -> task<T>
-                                                      {
-                                                          vec[index] = co_await t;
-                                                      };
+                                              auto fn = [vec, index](task<T> t) -> task<T>
+                                              {
+                                                  vec[index] = co_await t;
+                                              };
 
-                                                      // schedule the tasks
-                                                      return schedule(fn(t));
-                                                  }));
+                                              // schedule the tasks
+                                              return schedule(fn(t));
+                                          }));
 
             auto pipe = vec | std::views::transform([](std::optional<T> opt)
                                                     { return opt.value(); });
