@@ -1,7 +1,6 @@
-#include <webcraft/async/config.hpp>
-#include <webcraft/async/runtime.hpp>
-#include <webcraft/async/executors.hpp>
+
 #include <async/event_signal.h>
+#include <webcraft/async/async.hpp>
 #include <iostream>
 
 static webcraft::async::async_runtime_config config = {

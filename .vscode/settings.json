@@ -107,7 +107,15 @@
 		"execution": "cpp",
 		"__config": "cpp",
 		"ranges": "cpp",
-		"version": "cpp"
+		"version": "cpp",
+		"unordered_set": "cpp",
+		"regex": "cpp",
+		"hash_map": "cpp",
+		"latch": "cpp",
+		"scoped_allocator": "cpp",
+		"shared_mutex": "cpp",
+		"span": "cpp",
+		"valarray": "cpp"
 	},
 	"C_Cpp.errorSquiggles": "enabled"
 }
