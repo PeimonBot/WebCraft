@@ -1,138 +1,118 @@
 #pragma once
 
 #include <coroutine>
+#include <webcraft/async/async_event.hpp>
 #include <webcraft/async/when_all.hpp>
 
 namespace webcraft::async
 {
-    namespace internal
+    namespace details
     {
-        struct async_event
+
+        struct any_result_tag
         {
-            std::vector<std::coroutine_handle<>> handles;
-
-            constexpr bool await_ready() { return false; }
-            constexpr void await_suspend(std::coroutine_handle<> h)
-            {
-                this->handles.push_back(h);
-            }
-            constexpr void await_resume() {}
-
-            void set()
-            {
-                // resumes the coroutine
-                for (auto &h : this->handles)
-                {
-                    if (!h.done())
-                    {
-                        h.resume();
-                    }
-                }
-            }
         };
+        struct any_void_tag
+        {
+        };
+
+        template <std::ranges::input_range Range, typename R = std::ranges::range_value_t<std::remove_cvref_t<Range>>>
+        auto when_any_impl(Range &&tasks, any_result_tag)
+            -> task<::async::awaitable_resume_t<R>>
+        {
+            using Task = R;
+            using T = ::async::awaitable_resume_t<Task>;
+
+            std::optional<T> result;
+            std::atomic<bool> flag{false};
+            async_event ev;
+
+            std::vector<task<void>> wrapped_tasks;
+            if constexpr (std::ranges::sized_range<Range>)
+                wrapped_tasks.reserve(std::ranges::size(tasks));
+
+            for (auto &&t : tasks)
+            {
+                struct task_wrapper
+                {
+                    task<T> t;
+                    std::atomic<bool> &flag;
+                    std::optional<T> &result;
+                    async_event &ev;
+
+                    task<void> operator()()
+                    {
+                        T value = co_await t;
+                        bool expected = false;
+                        if (flag.compare_exchange_strong(expected, true, std::memory_order_relaxed))
+                        {
+                            result = std::move(value);
+                            ev.set();
+                        }
+                    }
+                };
+
+                task_wrapper wrapper{std::move(t), flag, result, ev};
+
+                wrapped_tasks.emplace_back(wrapper());
+            }
+
+            co_await ev;
+            co_return std::move(*result); // safe due to `ev`
+        }
+
+        template <std::ranges::input_range Range>
+        task<void> when_any_impl(Range &&tasks, any_void_tag)
+        {
+            std::atomic<bool> flag{false};
+            async_event ev;
+
+            std::vector<task<void>> wrapped_tasks;
+            if constexpr (std::ranges::sized_range<Range>)
+                wrapped_tasks.reserve(std::ranges::size(tasks));
+
+            for (auto &&t : tasks)
+            {
+
+                struct task_wrapper
+                {
+                    task<void> t;
+                    std::atomic<bool> &flag;
+                    async_event &ev;
+
+                    task<void> operator()()
+                    {
+                        co_await t;
+                        bool expected = false;
+                        if (flag.compare_exchange_strong(expected, true, std::memory_order_relaxed))
+                        {
+                            ev.set();
+                        }
+                    }
+                };
+
+                task_wrapper wrapper{std::move(t), flag, ev};
+
+                wrapped_tasks.emplace_back(wrapper());
+            }
+
+            co_await ev;
+        }
     }
 
     /// @brief Executes all the tasks concurrently and returns the first one which finishes and either cancels or discards the other tasks (once first one complete, the other tasks need not complete)
     /// @tparam ...Rets the return arguments of the tasks
     /// @param tasks the tasks to execute
     /// @return the result of the first task to finish
-    template <std::ranges::input_range range>
-        requires webcraft::not_same_as<task<void>, std::ranges::range_value_t<range>> && awaitable<std::ranges::range_value_t<range>>
-    auto when_any(range tasks) -> task<::async::awaitable_resume_t<std::ranges::range_value_t<range>>>
+    template <std::ranges::input_range Range>
+    auto when_any(Range &&tasks)
     {
-        // I know conceptually how it works but the atomic operations.... idk
-        using T = ::async::awaitable_resume_t<std::ranges::range_value_t<range>>;
+        using Task = std::ranges::range_value_t<std::remove_cvref_t<Range>>;
 
-        std::optional<T> value;
-        std::atomic<bool> flag;
-
-        // Create an event which will resume the coroutine when the event is set
-        std::vector<task<void>> tasks_to_run;
-
-        if constexpr (std::ranges::sized_range<range>)
-        {
-            tasks_to_run.reserve(std::ranges::size(tasks));
-        }
-
-        struct op
-        {
-
-            task<void> operator()(task<T> &&t, std::atomic<bool> &flag, std::optional<T> &value) const
-            {
-                // This lambda will be used to store the result of the task in the slot
-                T result = co_await t;
-
-                // only set the value if the flag is not set
-                bool check = false;
-                if (flag.compare_exchange_strong(check, true, std::memory_order_relaxed))
-                {
-                    value = std::move(result);
-                }
-            }
-        }
-
-        // go through all the tasks and spawn them
-        for (auto t : tasks)
-        {
-            op fn;
-
-            // Create a wrapper task that will store the result in the slot
-            tasks_to_run.push_back(fn(std::move(t), flag, value));
-        }
-
-        // wait for the event to be set
-        co_await when_any(tasks_to_run);
-
-        // return the value
-        co_return value.value();
+        if constexpr (std::same_as<Task, task<void>>)
+            return details::when_any_impl(std::forward<Range>(tasks), details::any_void_tag{});
+        else
+            return details::when_any_impl(std::forward<Range>(tasks), details::any_result_tag{});
     }
 
-    /// @brief Executes all the tasks concurrently and returns the first one which finishes and either cancels or discards the other tasks (once first one complete, the other tasks need not complete)
-    /// @tparam ...Rets the return arguments of the tasks
-    /// @param tasks the tasks to execute
-    /// @return the result of the first task to finish
-    template <std::ranges::input_range range>
-        requires std::same_as<task<void>, std::ranges::range_value_t<range>>
-    auto when_any(range tasks) -> task<void>
-    {
-        // I know conceptually how it works but the atomic operations.... idk
-        std::atomic<bool> flag;
-
-        // create teh event
-        internal::async_event ev;
-        std::vector<task<void>> tasks_to_run;
-
-        struct op
-        {
-
-            task<void> operator()(task<void> &&t, std::atomic<bool> &flag, async_event &ev) const
-            {
-                // This lambda will be used to set the event when the task is done
-                co_await t;
-
-                // only set the event if the flag is not set
-                bool check = false;
-                if (flag.compare_exchange_strong(check, true, std::memory_order_relaxed))
-                {
-                    ev.set();
-                }
-            }
-        }
-
-        if constexpr (std::ranges::sized_range<range>)
-        {
-            tasks_to_run.reserve(std::ranges::size(tasks));
-        }
-
-        // go through all the tasks and spawn them
-        for (auto t : tasks)
-        {
-            op fn;
-
-            tasks_to_run.push_back(fn(std::move(t), flag, ev));
-        }
-
-        // wait for the event to be set
-        co_await ev;
-    }
 }

@@ -13,71 +13,83 @@
 namespace webcraft::async
 {
 
+    namespace details
+    {
+        struct task_vector_tag
+        {
+        };
+        struct task_result_tag
+        {
+        };
+
+        // Await and discard result
+        template <std::ranges::input_range Range>
+        task<void> when_all_impl(Range &&tasks, task_vector_tag)
+        {
+            for (auto &&t : tasks)
+                co_await t;
+        }
+
+        // Await and collect result
+        template <std::ranges::input_range Range, typename R = std::ranges::range_value_t<std::remove_cvref_t<Range>>>
+        auto when_all_impl(Range &&tasks, task_result_tag)
+            -> task<std::vector<::async::awaitable_resume_t<R>>>
+        {
+            using Task = R;
+            using T = ::async::awaitable_resume_t<Task>;
+
+            std::vector<std::optional<T>> results;
+            std::vector<task<void>> wrappers;
+
+            if constexpr (std::ranges::sized_range<Range>)
+            {
+                results.reserve(std::ranges::size(tasks));
+                wrappers.reserve(std::ranges::size(tasks));
+            }
+
+            for (auto &&t : tasks)
+            {
+                auto &slot = results.emplace_back(std::nullopt);
+
+                struct task_wrapper
+                {
+                    task<T> t;
+                    std::optional<T> &slot;
+
+                    task<void> operator()()
+                    {
+                        slot = co_await t;
+                    }
+                };
+
+                task_wrapper wrapper{std::move(t), slot};
+
+                wrappers.emplace_back(wrapper());
+            }
+
+            co_await when_all_impl(std::move(wrappers), task_vector_tag{});
+
+            return auto(results | std::views::transform([](const auto &opt) -> T
+                                                        {
+                if (opt.has_value())
+                    return *opt;
+                else
+                    throw std::runtime_error("Task result is not available"); }));
+        }
+    }
+
     /// @brief Executes all the tasks concurrently and returns the result of all tasks in the submitted order
     /// @tparam range the range of the view
     /// @param tasks the tasks to execute
     /// @return the result of all tasks in the submitted order
-    template <std::ranges::input_range range>
-        requires webcraft::not_same_as<task<void>, std::ranges::range_value_t<range>> && awaitable<std::ranges::range_value_t<range>>
-    auto when_all(range &&tasks) -> task<std::vector<::async::awaitable_resume_t<std::ranges::range_value_t<range>>>>
+    template <std::ranges::input_range Range>
+    auto when_all(Range &&tasks)
     {
-        using Task = std::ranges::range_value_t<range>;
-        using T = ::async::awaitable_resume_t<Task>;
+        using Task = std::ranges::range_value_t<std::remove_cvref_t<Range>>;
 
-        std::vector<std::optional<T>> results;
-        std::vector<task<void>> wrappers;
-
-        if constexpr (std::ranges::sized_range<range>)
-        {
-            results.reserve(std::ranges::size(tasks));
-            wrappers.reserve(std::ranges::size(tasks));
-        }
-
-        for (auto &&task : tasks)
-        {
-            auto &slot = results.emplace_back(std::nullopt);
-
-            struct fn_wrapper
-            {
-
-                webcraft::async::task<void> operator()(Task &&t, std::optional<T> &slot) const
-                {
-                    // This lambda will be used to store the result of the task in the slot
-                    slot = co_await t;
-                }
-            };
-
-            fn_wrapper fn;
-            // Create a wrapper task that will store the result in the slot
-            wrappers.emplace_back(fn(std::forward<Task>(task), slot));
-        }
-
-        co_await when_all(wrappers);
-
-        auto pipeline = results | std::views::transform([](const std::optional<T> &opt)
-                                                        {
-                if (opt.has_value())
-                    return opt.value();
-                throw std::runtime_error("Task did not return a value"); });
-
-        std::vector<T> out;
-        if constexpr (std::ranges::sized_range<range>)
-        {
-            out.reserve(std::ranges::size(pipeline));
-        }
-        std::ranges::copy(pipeline, std::back_inserter(out));
-        co_return out;
-    }
-
-    /// @brief Executes all the tasks concurrently
-    /// @tparam range the range of the view
-    /// @param tasks the tasks to execute
-    /// @return an awaitable
-    template <std::ranges::input_range range>
-        requires std::same_as<task<void>, std::ranges::range_value_t<range>>
-    task<void> when_all(range tasks)
-    {
-        for (auto &&handle : tasks)
-            co_await handle;
+        if constexpr (std::same_as<Task, task<void>>)
+            return details::when_all_impl(std::forward<Range>(tasks), details::task_vector_tag{});
+        else
+            return details::when_all_impl(std::forward<Range>(tasks), details::task_result_tag{});
     }
 }
