@@ -9,7 +9,6 @@
 #include <async/awaitable_resume_t.h>
 #include <async/event_signal.h>
 #include <ranges>
-#include <webcraft/async/config.hpp>
 #include <webcraft/async/platform.hpp>
 
 namespace webcraft::async
@@ -32,11 +31,9 @@ namespace webcraft::async
     private:
 #pragma region "friend classes"
         friend class io::io_service;
-        friend class executor_service;
         friend class timer_service;
 
         std::unique_ptr<io::io_service> io_svc;
-        std::unique_ptr<executor_service> executor_svc;
         std::unique_ptr<timer_service> timer_svc;
         ::async::event_signal ev;
 #pragma endregion
@@ -54,7 +51,7 @@ namespace webcraft::async
 #pragma endregion
 
 #pragma region "constructors"
-        async_runtime(async_runtime_config &config);
+        async_runtime();
         async_runtime(const async_runtime &) = delete;
         async_runtime(async_runtime &&) = delete;
         async_runtime &operator=(const async_runtime &) = delete;
@@ -184,10 +181,6 @@ namespace webcraft::async
         /// @brief Gets the io_service for the runtime.
         /// @return the IO service
         io::io_service &get_io_service();
-
-        /// @brief Gets the executor_service for the runtime. Helps run tasks in parallel
-        /// @return the executor service
-        executor_service &get_executor_service();
 
         /// @brief Gets the timer_service for the runtime.
         /// @return the timer service

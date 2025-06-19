@@ -3,40 +3,15 @@
 #include <webcraft/async/async.hpp>
 #include <iostream>
 
-static webcraft::async::async_runtime_config config = {
-    .max_worker_threads = 2 * std::thread::hardware_concurrency(),
-    .min_worker_threads = std::thread::hardware_concurrency(),
-    .idle_timeout = 30s,
-    .worker_strategy = webcraft::async::worker_strategy_type::PRIORITY};
-
-/// Macro to generate helper setter methods for the cofig
-#define set_async_runtime_config_field(type, field)           \
-    void webcraft::async::runtime_config::set_##field(type t) \
-    {                                                         \
-        config.field = t;                                     \
-    }
-
-set_async_runtime_config_field(size_t, max_worker_threads);
-set_async_runtime_config_field(size_t, min_worker_threads);
-set_async_runtime_config_field(std::chrono::milliseconds, idle_timeout);
-set_async_runtime_config_field(webcraft::async::worker_strategy_type, worker_strategy);
-
 webcraft::async::async_runtime &webcraft::async::async_runtime::get_instance()
 {
     // lazily initialize the instance (allow for config setup before you get the first instance)
-    static async_runtime runtime(config);
+    static async_runtime runtime;
     return runtime;
 }
 
-webcraft::async::async_runtime::async_runtime(async_runtime_config &config)
+webcraft::async::async_runtime::async_runtime()
 {
-    webcraft::async::executor_service_params params = {
-        .minWorkers = config.min_worker_threads,
-        .maxWorkers = config.max_worker_threads,
-        .idleTimeout = config.idle_timeout,
-        .strategy = config.worker_strategy};
-
-    this->executor_svc.reset(new webcraft::async::executor_service(*this, params));
     this->timer_svc.reset(new webcraft::async::timer_service(*this));
     this->io_svc.reset(new webcraft::async::io::io_service(*this));
 }
@@ -44,11 +19,6 @@ webcraft::async::async_runtime::async_runtime(async_runtime_config &config)
 webcraft::async::io::io_service &webcraft::async::async_runtime::get_io_service()
 {
     return *(this->io_svc);
-}
-
-webcraft::async::executor_service &webcraft::async::async_runtime::get_executor_service()
-{
-    return *(this->executor_svc);
 }
 
 webcraft::async::timer_service &webcraft::async::async_runtime::get_timer_service()

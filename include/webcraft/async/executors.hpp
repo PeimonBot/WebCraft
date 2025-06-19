@@ -5,182 +5,180 @@
 #include <webcraft/async/awaitable.hpp>
 #include <webcraft/async/runtime.hpp>
 #include <webcraft/async/when_all.hpp>
+#include <async/task_completion_source.h>
+#include <functional>
 #include <ranges>
+#include <future>
 
 namespace webcraft::async
 {
-    /// @brief The priority of the task to be scheduled
-    enum class scheduling_priority
-    {
-        LOW,
-        HIGH
-    };
-
-    /// @brief the parameters to initialize the executor service
-    struct executor_service_params
-    {
-        size_t minWorkers;
-        size_t maxWorkers;
-        std::chrono::milliseconds idleTimeout;
-        worker_strategy_type strategy;
-    };
-
     /// @brief the executor service strategy
     class executor
     {
     public:
+        executor() = default;
         virtual ~executor() = default;
 
         /// Schedules the current coroutine onto the thread pool
-        virtual task<void> schedule(scheduling_priority priority = scheduling_priority::LOW) = 0;
+        virtual void schedule(std::function<void()> v) = 0;
+
+        template <typename Fn, typename... Args>
+        auto schedule(Fn &&fn, Args &&...args)
+        {
+            using T = std::invoke_result_t<Fn, Args...>;
+            ::async::task_completion_source<T> promise;
+
+            if constexpr (std::is_void_v<T>)
+            {
+
+                std::function<void()> delegate = [&promise, fn = std::forward<Fn>(fn), ... args = std::forward<Args>(args)]
+                {
+                    fn(args...);
+                    promise.set_value();
+                };
+
+                schedule(delegate);
+            }
+            else
+            {
+
+                std::function<void()> delegate = [&promise, fn = std::forward<Fn>(fn), ... args = std::forward<Args>(args)]
+                {
+                    promise.set_value(fn(args...));
+                };
+
+                schedule(delegate);
+            }
+
+            return promise.task();
+        }
+
+        inline task<void> schedule()
+        {
+
+            struct dispatch_awaiter
+            {
+                executor *ptr;
+
+                bool await_ready() { return false; }
+                void await_suspend(std::coroutine_handle<> h)
+                {
+                    ptr->schedule([h]
+                                  { h.resume(); });
+                }
+                void await_resume() {}
+            };
+
+            co_await dispatch_awaiter{this};
+        }
     };
 
     /// @brief A class that represents an executor service that can be used to run tasks asynchronously.
-    class executor_service final
+    class executor_service : public executor
     {
-    private:
-        friend class async_runtime;
-        async_runtime &runtime;
-        std::unique_ptr<executor> strategy; // strategy for the executor service
-
 #pragma region "constructors and destructors"
-    protected:
-        executor_service(async_runtime &runtime, executor_service_params &params);
-
     public:
-        ~executor_service();
+        executor_service() = default;
+        virtual ~executor_service() = default;
         executor_service(const executor_service &) = delete;
         executor_service(executor_service &&) = delete;
         executor_service &operator=(const executor_service &) = delete;
         executor_service &operator=(executor_service &&) = delete;
 #pragma endregion
 
-#pragma region "scheduling"
-
-        /// @brief Schedules the current coroutine onto the executor
-        /// @param priority the priority the coroutine should run at
-        /// @return an awaitable
-        inline task<void> schedule(scheduling_priority priority = scheduling_priority::LOW)
+#pragma region "parallel processing"
+    private:
+        template <std::invocable Callable, typename Ret = std::invoke_result_t<Callable>>
+        struct fn_wrapper
         {
-            return strategy->schedule(priority);
-        }
+            executor_service *ptr;
 
-        /// @brief Schedules the current coroutine onto the executor with a low priority
-        /// @return an awaitable
-        inline task<void> schedule_low()
-        {
-            return schedule(scheduling_priority::LOW);
-        }
-
-        /// @brief Schedules the current coroutine onto the executor with a high priority
-        /// @return an awaitable
-        inline task<void> schedule_high()
-        {
-            return schedule(scheduling_priority::HIGH);
-        }
-
-        template <typename Fn, typename... Args>
-            requires awaitable<std::invoke_result_t<Fn, Args...>>
-        auto schedule(scheduling_priority priority, Fn &&fn, Args &&...args)
-        {
-            using T = ::async::awaitable_resume_t<std::remove_cvref_t<std::invoke_result_t<Fn, Args...>>>;
-
-            auto fn_ = [this, priority](Fn &&_fn, Args &&..._args) -> task<T>
+            task<Ret> operator()(Callable &&callable)
             {
-                co_await schedule(priority);
-
-                if constexpr (std::is_void_v<T>)
+                co_await ptr->schedule();
+                if constexpr (std::is_void_v<Ret>)
                 {
-                    // If the result type is void, we can just co_await the function
-                    co_await std::invoke(std::forward<Fn>(_fn), std::forward<Args>(_args)...);
-                    co_return;
+                    callable();
                 }
                 else
                 {
-                    co_return co_await std::invoke(std::forward<Fn>(_fn), std::forward<Args>(_args)...);
+                    co_return callable();
                 }
-            };
+            }
+        };
 
-            return task<T>(fn_(std::forward<Fn>(fn), std::forward<Args>(args)...));
-        }
-
-        template <typename Fn, typename... Args>
-            requires awaitable<std::invoke_result_t<Fn, Args...>>
-        auto schedule_low(Fn &&fn, Args &&...args)
+        template <std::invocable Callable, typename Awaitable = std::invoke_result_t<Callable>, typename Ret = ::async::awaitable_resume_t<Awaitable>>
+        struct fn_awaitable_wrapper
         {
-            return schedule(scheduling_priority::LOW, std::forward<Fn>(fn), std::forward<Args>(args)...);
-        }
+            executor_service *ptr;
 
-        template <typename Fn, typename... Args>
-            requires awaitable<std::invoke_result_t<Fn, Args...>>
-        auto schedule_high(Fn &&fn, Args &&...args)
-        {
-            return schedule(scheduling_priority::HIGH, std::forward<Fn>(fn), std::forward<Args>(args)...);
-        }
-
-#pragma endregion
-
-#pragma region "parallel processing"
-        /// @brief Runs the tasks in parallel
-        /// @param tasks the tasks to run in parallel
-        /// @return an awaitable
-        template <std::ranges::range range>
-            requires std::convertible_to<std::ranges::range_value_t<range>, std::function<task<void>()>>
-        inline task<void> runParallel(range tasks)
-        {
-            struct fn_awaiter
+            task<Ret> operator()(Callable &&callable)
             {
-                executor_service &svc;
-
-                task<void> operator()(std::function<task<void>()> fn) const
+                co_await ptr->schedule();
+                if constexpr (std::is_void_v<Ret>)
                 {
-                    co_await svc.schedule();
-                    co_return co_await fn();
+                    co_await callable();
                 }
-            };
+                else
+                {
+                    co_return co_await callable();
+                }
+            }
+        };
 
-            // schedule and join the tasks
-            co_await when_all(tasks | std::ranges::transform(
-                                          [&](auto &&task_fn)
-                                          {
-                                              fn_awaiter fn{*this};
-                                              return fn();
-                                          }));
-        }
-
-        template <std::ranges::range range>
-            requires webcraft::not_same_as<task<void>, std::ranges::range_value_t<range>> && awaitable<std::ranges::range_value_t<range>>
-        auto runParallel(range tasks) -> task<std::vector<::async::awaitable_resume_t<std::ranges::range_value_t<range>>>>
+    public:
+        // TODO: generate docs for this
+        template <std::ranges::range range, typename Callable = std::ranges::range_value_t<range>>
+            requires std::invocable<Callable>
+        inline auto invoke_all(range tasks)
         {
-            using T = ::async::awaitable_resume_t<std::ranges::range_value_t<range>>;
+            using Ret = std::invoke_result_t<Callable>;
 
-            // schedule each task and immediately collect their handles
-            // join the handles and return the result
-            std::vector<std::optional<T>> vec;
-
-            // Assign each task a return destination, schedule them all and join them
-            co_await when_all(tasks | std::ranges::transform(
-                                          [&](task<T> t)
-                                          {
-                                              vec.push_back({std::nullopt});
-                                              size_t index = vec.size() - 1;
-
-                                              auto fn = [vec, index](task<T> t) -> task<T>
-                                              {
-                                                  vec[index] = co_await t;
-                                              };
-
-                                              // schedule the tasks
-                                              return schedule(fn(t));
-                                          }));
-
-            auto pipe = vec | std::views::transform([](std::optional<T> opt)
-                                                    { return opt.value(); });
-            std::vector<T> out;
-            out.reserve(std::ranges::distance(pipe));
-            std::ranges::copy(pipe, std::back_inserter(out));
-            co_return out;
+            return when_all(tasks | std::views::transform([this](Callable &&r)
+                                                          {
+                    fn_wrapper<Callable> fn{ this };
+                    return fn(std::forward<Callable>(r)); }));
         }
-#pragma endregion
+
+        // TODO: generate docs for this
+        template <std::ranges::range range, typename Callable = std::ranges::range_value_t<range>>
+            requires std::invocable<Callable> && awaitable<std::invoke_result_t<Callable>>
+        inline auto invoke_await_all(range tasks)
+        {
+            using Task = std::invoke_result_t<Callable>;
+            using Ret = ::async::awaitable_resume_t<Task>;
+
+            return when_all(tasks | std::views::transform([this](Callable &&r)
+                                                          {
+                    fn_awaitable_wrapper<Callable> fn{ this };
+                    return fn(std::forward<Callable>(r)); }));
+        }
+
+        // TODO: generate docs for this
+        template <std::ranges::range range, typename Callable = std::ranges::range_value_t<range>>
+            requires std::invocable<Callable>
+        inline auto invoke_any(range tasks)
+        {
+            using Ret = std::invoke_result_t<Callable>;
+
+            return when_any(tasks | std::views::transform([this](Callable &&r)
+                                                          {
+                    fn_wrapper<Callable> fn{ this };
+                    return fn(std::forward<Callable>(r)); }));
+        }
+
+        // TODO: generate docs for this
+        template <std::ranges::range range, typename Callable = std::ranges::range_value_t<range>>
+            requires std::invocable<Callable> && awaitable<std::invoke_result_t<Callable>>
+        inline auto invoke_await_any(range tasks)
+        {
+            using Task = std::invoke_result_t<Callable>;
+            using Ret = ::async::awaitable_resume_t<Task>;
+
+            return when_any(tasks | std::views::transform([this](Callable &&r)
+                                                          {
+                    fn_awaitable_wrapper<Callable> fn{ this };
+                    return fn(std::forward<Callable>(r)); }));
+        }
     };
 }
