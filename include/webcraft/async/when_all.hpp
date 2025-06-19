@@ -69,8 +69,8 @@ namespace webcraft::async
 
             co_await when_all_impl(std::move(wrappers), task_vector_tag{});
 
-            return auto(results | std::views::transform([](const auto &opt) -> T
-                                                        {
+            co_return auto(results | std::views::transform([](const auto &opt) -> T
+                                                           {
                 if (opt.has_value())
                     return *opt;
                 else
