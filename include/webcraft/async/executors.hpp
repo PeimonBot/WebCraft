@@ -54,7 +54,7 @@ namespace webcraft::async
             return promise.task();
         }
 
-        inline task<void> schedule()
+        task<void> schedule()
         {
 
             struct dispatch_awaiter
@@ -79,6 +79,8 @@ namespace webcraft::async
     {
 #pragma region "constructors and destructors"
     public:
+        using executor::schedule;
+
         executor_service() = default;
         virtual ~executor_service() = default;
         executor_service(const executor_service &) = delete;
@@ -186,6 +188,8 @@ namespace webcraft::async
     class thread_per_task : public executor_service
     {
     public:
+        using executor_service::schedule;
+
         thread_per_task() {}
 
         void schedule(std::function<void()> fn) override
@@ -193,4 +197,5 @@ namespace webcraft::async
             std::thread(fn).detach();
         }
     };
+
 }
