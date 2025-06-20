@@ -9,6 +9,7 @@
 #include <functional>
 #include <ranges>
 #include <thread>
+#include <deque>
 #include <future>
 
 namespace webcraft::async
@@ -198,4 +199,137 @@ namespace webcraft::async
         }
     };
 
+    class thread_pool : public executor_service
+    {
+    public:
+        using executor_service::schedule;
+
+        struct worker
+        {
+            std::jthread thr;
+
+            worker() = default;
+            virtual ~worker()
+            {
+                stop();
+            }
+
+            virtual void runLoop(std::stop_token stop_token) = 0;
+
+            void start()
+            {
+                thr = std::jthread([&](std::stop_token t)
+                                   { runLoop(t); });
+            }
+
+            void stop()
+            {
+                thr.request_stop();
+            }
+        };
+
+    protected:
+        std::vector<std::unique_ptr<worker>> workers;
+
+    public:
+        thread_pool() {}
+        ~thread_pool()
+        {
+            stop();
+        }
+
+        virtual std::vector<std::unique_ptr<worker>> createWorkers() = 0;
+
+        void start()
+        {
+            workers = createWorkers();
+            for (auto &worker : workers)
+            {
+                worker->start();
+            }
+        }
+
+        void stop()
+        {
+            for (auto &worker : workers)
+            {
+                worker->stop();
+            }
+        }
+    };
+
+    class fixed_size_thread_pool : public thread_pool
+    {
+    public:
+        using thread_pool::schedule;
+
+        struct worker : public thread_pool::worker
+        {
+            fixed_size_thread_pool &pool;
+
+            worker(fixed_size_thread_pool &pool) : pool(pool) {}
+
+            void runLoop(std::stop_token stop_token) override
+            {
+                while (!stop_token.stop_requested())
+                {
+                    std::function<void()> task;
+
+                    {
+                        std::unique_lock<std::mutex> lock(pool.mutex);
+                        pool.condition.wait(lock, [this, stop_token]
+                                            { return !pool.tasks.empty() || stop_token.stop_requested(); });
+
+                        if (stop_token.stop_requested())
+                            return;
+
+                        if (!pool.tasks.empty())
+                        {
+                            task = std::move(pool.tasks.front());
+                            pool.tasks.pop_front();
+                        }
+                    }
+
+                    if (task)
+                    {
+                        task();
+                    }
+                }
+            }
+        };
+
+        std::mutex mutex;
+        std::condition_variable condition;
+        std::deque<std::function<void()>> tasks;
+        size_t num_workers;
+
+        fixed_size_thread_pool(size_t num_workers = std::thread::hardware_concurrency()) : num_workers(num_workers)
+        {
+            workers.resize(num_workers);
+        }
+
+        ~fixed_size_thread_pool()
+        {
+            stop();
+            condition.notify_all();
+        }
+
+        std::vector<std::unique_ptr<thread_pool::worker>> createWorkers() override
+        {
+            std::vector<std::unique_ptr<thread_pool::worker>> created_workers;
+            created_workers.reserve(num_workers);
+            for (size_t i = 0; i < num_workers; ++i)
+            {
+                created_workers.emplace_back(std::make_unique<worker>(*this));
+            }
+            return created_workers;
+        }
+
+        void schedule(std::function<void()> fn) override
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            tasks.emplace_back(fn);
+            condition.notify_one();
+        }
+    };
 }
