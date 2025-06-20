@@ -115,7 +115,11 @@
 		"scoped_allocator": "cpp",
 		"shared_mutex": "cpp",
 		"span": "cpp",
-		"valarray": "cpp"
+		"valarray": "cpp",
+		"print": "cpp",
+		"queue": "cpp",
+		"stack": "cpp",
+		"text_encoding": "cpp"
 	},
 	"C_Cpp.errorSquiggles": "enabled"
 }

@@ -20,8 +20,6 @@ else()
     message(FATAL_ERROR "Unsupported platform")
 endif()
 
-find_package(Taskflow CONFIG REQUIRED)
-
 file(GLOB_RECURSE WebCraft_SOURCES CONFIGURE_DEPENDS src/webcraft/*.cpp)
 add_executable(WebCraft src/main.cpp ${WebCraft_SOURCES})
 
@@ -33,8 +31,6 @@ elseif (UNIX AND APPLE)
 else()
     message(FATAL_ERROR "Unsupported platform")
 endif()
-
-target_link_libraries(WebCraft PRIVATE Taskflow::Taskflow)
 
 target_include_directories(WebCraft PRIVATE ${CPP_ASYNC_INCLUDE_DIRS})
 target_include_directories(WebCraft PRIVATE include)
