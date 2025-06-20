@@ -25,28 +25,7 @@
 // };
 
 // // thread per task executor, highly inefficient but shows the idea of how we can combine both concurrency and parallelism
-// class thread_per_task : public webcraft::async::executor
-// {
-// public:
-//     thread_per_task() {}
 
-//     webcraft::async::task<void> schedule(webcraft::async::scheduling_priority priority) override
-//     {
-//         struct thread_per_task_awaitable
-//         {
-//             bool await_ready() { return false; }
-//             void await_suspend(std::coroutine_handle<> h)
-//             {
-//                 std::thread([h]()
-//                             { h.resume(); })
-//                     .detach();
-//             }
-//             void await_resume() {}
-//         };
-
-//         co_await thread_per_task_awaitable{};
-//     }
-// };
 
 // class thread_pool : public webcraft::async::executor
 // {

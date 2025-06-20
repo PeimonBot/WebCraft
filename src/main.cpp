@@ -24,7 +24,7 @@ task<void> example_task()
 
     int count = 0;
 
-    auto &dispatcher = runtime.get_executor_service();
+    webcraft::async::thread_per_task dispatcher;
     auto &timer = runtime.get_timer_service();
 
     std::cout << "Thread id: " << std::this_thread::get_id() << std::endl;

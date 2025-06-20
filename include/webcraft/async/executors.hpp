@@ -8,6 +8,7 @@
 #include <async/task_completion_source.h>
 #include <functional>
 #include <ranges>
+#include <thread>
 #include <future>
 
 namespace webcraft::async
@@ -179,6 +180,17 @@ namespace webcraft::async
                                                           {
                     fn_awaitable_wrapper<Callable> fn{ this };
                     return fn(std::forward<Callable>(r)); }));
+        }
+    };
+
+    class thread_per_task : public executor_service
+    {
+    public:
+        thread_per_task() {}
+
+        void schedule(std::function<void()> fn) override
+        {
+            std::thread(fn).detach();
         }
     };
 }
