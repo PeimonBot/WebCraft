@@ -19,9 +19,12 @@ elseif (UNIX AND APPLE)
     # For macOS, you might want to link against other libraries or frameworks
     # For example, if you need to use libdispatch or other system libraries
     set(WEBCRAFT_PLATFORM_LIBS "")
-    add_compile_options(-fexperimental-library)
 else()
     message(FATAL_ERROR "Unsupported platform")
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    add_compile_options(-fexperimental-library)
 endif()
 
 
