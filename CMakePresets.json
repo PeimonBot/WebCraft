@@ -20,8 +20,8 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_C_COMPILER": "/opt/homebrew/bin/gcc-15",
-                "CMAKE_CXX_COMPILER": "/opt/homebrew/bin/g++-15",
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++",
                 "CMAKE_MAKE_PROGRAM": "/opt/homebrew/bin/ninja"
             }
         },
