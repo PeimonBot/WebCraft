@@ -43,11 +43,6 @@ jobs:
             preset: linux-build
             name: WebCraft
           - os: macos-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-            preset: macos-build
-            name: WebCraft
-          - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
             preset: macos-build
@@ -61,6 +56,8 @@ jobs:
             c_compiler: cl
           - os: macos-latest
             c_compiler: cl
+          - os: macos-latest
+            c_compiler: gcc
 
     steps:
     - uses: actions/checkout@v4
@@ -85,6 +82,21 @@ jobs:
       id: setup_homebrew
       uses: Homebrew/actions/setup-homebrew@master    
 
+    - name: Upgrade Clang
+      if: ${{ matrix.c_compiler == 'clang' }}
+      run: |
+        if [[ ${{ matrix.os }} == 'macos-latest' ]]; then
+          brew install llvm
+          echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
+          echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
+          echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
+        else
+          wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 17
+        fi
+        echo "C Compiler: ${{ matrix.c_compiler }}"
+        echo "C++ Compiler: ${{ matrix.cpp_compiler }}"
+        echo $(${{ matrix.c_compiler }} --version)
+
     - name: Configure CMake not for MacOS
       if: ${{ matrix.os != 'macos-latest' }}
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -102,6 +114,7 @@ jobs:
       if: ${{ matrix.os == 'macos-latest' }}
       run: |
         if [[ ${{ matrix.c_compiler }} == 'clang' ]]; then
+          clang++ --version
           cmake \
           --preset=${{ matrix.preset }} \
           -B ${{ steps.strings.outputs.build-output-dir }} \
@@ -131,12 +144,12 @@ jobs:
       if: ${{ matrix.os == 'macos-latest' }}
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
 
-    - name: Run the executable
+    # - name: Run the executable
       # Run the executable that was built. The executable name is assumed to be 'my_executable' in this example.
-      run: ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.name }}
+      # run: ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.name }}
 
-    # - name: Test
-    #   working-directory: ${{ steps.strings.outputs.build-output-dir }}
-    #   # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-    #   # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-    #   run: ctest --build-config ${{ matrix.build_type }}
+    - name: Test
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+      run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }}
