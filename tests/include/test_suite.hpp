@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include <random>
 #include <cstdint>
+#include <chrono>
 
 #ifdef TEST_SUITE_NAME
 
