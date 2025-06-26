@@ -43,21 +43,6 @@ void post_nop_event(struct io_uring *ring, uint64_t payload)
     EXPECT_GE(ret, 0) << "Failed to submit SQE to io_uring: " << ret;
 }
 
-void wait_for_event(struct io_uring *ring, uint64_t payload)
-{
-    struct io_uring_cqe *cqe;
-    int ret = io_uring_wait_cqe(ring, &cqe);
-    EXPECT_EQ(ret, 0) << "Failed to wait for completion event:" << ret;
-
-    // Process the completion event
-    EXPECT_NE(cqe, nullptr) << "Completion event is null";
-    EXPECT_GE(cqe->res, 0) << "Completion event result is negative: " << cqe->res;
-
-    EXPECT_EQ(cqe->user_data, payload) << "Payload mismatch in completion event. Expected: " << payload << ", Got: " << cqe->user_data;
-
-    io_uring_cqe_seen(ring, cqe);
-}
-
 auto wait_and_get_event(struct io_uring *ring)
 {
     struct io_uring_cqe *cqe;
@@ -69,6 +54,13 @@ auto wait_and_get_event(struct io_uring *ring)
     auto user_data = cqe->user_data;
     io_uring_cqe_seen(ring, cqe);
     return user_data;
+}
+
+void wait_for_event(struct io_uring *ring, uint64_t payload)
+{
+    auto user_data = wait_and_get_event(ring);
+
+    EXPECT_EQ(user_data, payload) << "Payload mismatch in completion event. Expected: " << payload << ", Got: " << user_data;
 }
 
 // Test cases for posting and waiting for events with no payload
@@ -179,6 +171,9 @@ TEST_CASE(io_uring_wait_multiple_events)
     {
         EXPECT_TRUE(signals[i].is_set()) << "Callback " << i << " was not called";
     }
+
+    // Cleanup
+    destroy_io_uring(&ring);
 }
 
 void post_timer_event(struct io_uring *ring, std::chrono::steady_clock::duration duration, uint64_t payload)
