@@ -7,6 +7,7 @@
 #include <Windows.h>
 #include <WinSock2.h>
 #include <async/event_signal.h>
+#include "windows_timer_manager.hpp"
 
 TEST_CASE(SampleTest)
 {
@@ -22,7 +23,8 @@ HANDLE initialize_iocp()
 
     // Create an IO Completion Port (IOCP)
     auto iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-    EXPECT_NE(*iocp, NULL) << "Failed to create IOCP";
+    HANDLE null_handle = NULL;
+    EXPECT_NE(iocp, null_handle) << "Failed to create IOCP";
     return iocp;
 }
 
@@ -200,4 +202,46 @@ TEST_CASE(iocp_wait_multiple_events)
     destroy_iocp(iocp);
 }
 
+void post_timer_event(HANDLE iocp, timer_manager &context, std::chrono::steady_clock::duration duration, uint64_t payload)
+{
+    context.post_timer_event(duration, [iocp, payload]()
+                             {
+        // This callback will be called when the timer expires
+        post_nop_event(iocp, payload); });
+}
+
+void wait_for_timeout_event(HANDLE iocp, uint64_t payload)
+{
+    std::cout << "Waiting for timer event with payload: " << payload << std::endl;
+    wait_for_event(iocp, payload);
+    std::cout << "Timer event completed with payload: " << payload << std::endl;
+}
+
+TEST_CASE(iocp_test_timer)
+{
+    constexpr int payload = 0;
+    std::cout << "Testing IOCP timer functionality..." << std::endl;
+
+    // Initialize the IOCP
+    HANDLE iocp = initialize_iocp();
+
+    auto sleep_time = std::chrono::seconds(5);
+    std::cout << "Posting timer event with sleep time: " << sleep_time.count() << " seconds" << std::endl;
+
+    {
+        timer_manager manager(iocp);
+
+        post_timer_event(iocp, manager, sleep_time, payload);
+
+        auto start = std::chrono::steady_clock::now();
+        wait_for_timeout_event(iocp, payload);
+        auto end = std::chrono::steady_clock::now();
+
+        auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+        EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+    }
+
+    destroy_iocp(iocp);
+}
 #endif

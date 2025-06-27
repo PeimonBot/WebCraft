@@ -119,7 +119,8 @@
 		"print": "cpp",
 		"queue": "cpp",
 		"stack": "cpp",
-		"text_encoding": "cpp"
+		"text_encoding": "cpp",
+		"resumable": "cpp"
 	},
 	"C_Cpp.errorSquiggles": "disabled"
 }
