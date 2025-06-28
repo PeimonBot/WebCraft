@@ -45,7 +45,7 @@ void post_nop_event(int queue, uint64_t payload)
     int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
     EXPECT_EQ(result, 0) << "Failed to register event to kqueue:" << result;
 
-    EV_SET(&event, id, EVFILT_USER, 0, NOTE_TRIGGER, payload, nullptr);
+    EV_SET(&event, id, EVFILT_USER, 0, NOTE_TRIGGER, 0, new uint64_t(payload));
     result = kevent(queue, &event, 1, nullptr, 0, nullptr);
     EXPECT_GE(result, 0) << "Failed to trigger event in kqueue:" << result;
 }
@@ -56,10 +56,12 @@ auto wait_and_get_event(int queue)
     int result = kevent(queue, nullptr, 0, &event, 1, nullptr);
     EXPECT_GE(result, 0) << "Failed to wait for event from kqueue:" << result;
 
-    uint64_t data = event.data;
+    auto *ptr_data = reinterpret_cast<uint64_t *>(event.udata);
+    auto data = *ptr_data;
+    delete ptr_data;
 
     // remove yield event listener
-    EV_SET(&event, event.ident, EVFILT_USER, EV_DELETE, 0, 0, nullptr);
+    EV_SET(&event, event.ident, event.filter, EV_DELETE, 0, 0, nullptr);
     result = kevent(queue, &event, 1, nullptr, 0, nullptr);
     EXPECT_GE(result, 0) << "Failed to remove event to kqueue:" << result;
 
@@ -179,6 +181,41 @@ TEST_CASE(kqueue_wait_multiple_events)
     }
 
     // Cleanup
+    destroy_kqueue(queue);
+}
+
+void post_timer_event(int queue, std::chrono::steady_clock::duration duration, uint64_t payload)
+{
+    uint64_t id = generate_random_uint64();
+    struct kevent event;
+    EV_SET(&event, id, EVFILT_TIMER, EV_ADD | EV_ENABLE, NOTE_NSECONDS, std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count(), new uint64_t(payload));
+    int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+    EXPECT_GE(result, 0) << "Failed to spawn timer event to kqueue:" << result;
+}
+
+void wait_for_timeout_event(int queue, uint64_t payload)
+{
+    wait_for_event(queue, payload);
+}
+
+TEST_CASE(kqueue_test_timer)
+{
+    constexpr int payload = 0;
+
+    int queue = initialize_kqueue();
+
+    auto sleep_time = std::chrono::seconds(5);
+
+    post_timer_event(queue, sleep_time, payload);
+
+    auto start = std::chrono::steady_clock::now();
+    wait_for_timeout_event(queue, payload);
+    auto end = std::chrono::steady_clock::now();
+
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+
     destroy_kqueue(queue);
 }
 
