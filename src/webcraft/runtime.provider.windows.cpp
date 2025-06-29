@@ -46,7 +46,6 @@ public:
 class io_uring_runtime_provider : public runtime_provider
 {
 private:
-    struct io_uring ring;
     std::atomic<bool> setup;
     std::atomic<bool> cleanup;
 
