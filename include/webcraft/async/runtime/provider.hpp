@@ -13,12 +13,6 @@
 
 namespace webcraft::async::runtime::detail
 {
-    enum class native_runtime_event_type
-    {
-        YIELD,
-        TIMER
-    };
-
     /// @brief the native runtime event on the producer side, this will be whats done in the coroutine awaitables for example:
     ///
     /// ```
@@ -48,7 +42,8 @@ namespace webcraft::async::runtime::detail
     private:
         std::function<void()> callback;
         int result = 0;
-        std::atomic<bool> fired;
+        std::atomic<bool> fired{false};
+        std::atomic<bool> canceled{false};
 
     public:
         /// @brief constructs the native runtime event, this is where the event details are created/initialized.
@@ -66,7 +61,7 @@ namespace webcraft::async::runtime::detail
         /// For io_uring, this means submitting the request to the io_uring queue.
         /// For Windows, this means posting the Overlapped structure to the IOCP.
         /// For kqueue, this means submitting the kevent to the kqueue.
-        void start_async() = 0;
+        virtual void start_async() = 0;
         /// @brief Gets the result of the async operation, this is where the result of the event is retrieved.
         /// @return the result
         constexpr int get_result() const
@@ -79,7 +74,14 @@ namespace webcraft::async::runtime::detail
         virtual void set_result(int res)
         {
             result = res;
-            fired.store(true);
+            if (res == -ECANCELED)
+            {
+                canceled.store(true);
+            }
+            else
+            {
+                fired.store(true);
+            }
         }
 
         /// @brief Resumes the event, this is where the event is executed. Should be called on the consumption side after getting event success status.
@@ -99,6 +101,13 @@ namespace webcraft::async::runtime::detail
         [[nodiscard]] constexpr bool has_fired() const
         {
             return fired.load();
+        }
+
+        /// @brief Checks if event has been canceled, this is used to check if the event has been canceled.
+        /// @return has been canceled
+        [[nodiscard]] constexpr bool is_canceled() const
+        {
+            return canceled.load();
         }
     };
 
@@ -198,16 +207,16 @@ namespace webcraft::async::runtime::detail
             {
                 runtime_provider *provider;
                 std::unique_ptr<native_runtime_event> event;
-                std::shared_ptr<std::coroutine_handle<>> handle;
+                std::optional<std::coroutine_handle<>> handle;
 
                 yield_awaiter(runtime_provider *provider) : provider(provider)
                 {
                     event = provider->create_nop_event(
-                        [handle]
+                        [this]
                         {
-                            if (handle && !handle->done())
+                            if (handle && !handle.value().done())
                             {
-                                handle->resume(); // Resume the coroutine when the event is executed
+                                handle.value().resume(); // Resume the coroutine when the event is executed
                             }
                         });
                 }
@@ -219,15 +228,14 @@ namespace webcraft::async::runtime::detail
 
                 void await_suspend(std::coroutine_handle<> h)
                 {
-                    *handle = h;
+                    handle = h;
                     event->start_async(); // Start the async operation
                 }
 
-                void await_resume() const noexcept
+                void await_resume() noexcept
                 {
                     // No result to resume, just yield control
                     event.reset();
-                    handle.reset();
                 }
             };
 
@@ -244,27 +252,26 @@ namespace webcraft::async::runtime::detail
             struct timer_awaiter
             {
                 runtime_provider *provider;
-                std::unique_ptr<std::stop_callback<void()>> cancelation_callback;
+                std::unique_ptr<std::stop_callback<std::function<void()>>> cancelation_callback;
                 std::unique_ptr<native_runtime_event> event;
-                std::shared_ptr<std::coroutine_handle<>> handle;
+                std::optional<std::coroutine_handle<>> handle;
 
                 timer_awaiter(runtime_provider *provider, std::stop_token token, std::chrono::steady_clock::duration dur) : provider(provider)
                 {
                     event = provider->create_timer_event(dur,
-                                                         [handle]
+                                                         [this]
                                                          {
-                                                             if (handle && !handle->done())
+                                                             if (handle && !handle.value().done())
                                                              {
-                                                                 handle->resume(); // Resume the coroutine when the event is executed
+                                                                 handle.value().resume(); // Resume the coroutine when the event is executed
                                                              }
                                                          });
-                    cancelation_callback = std::make_unique<std::stop_callback<void()>>(
+                    cancelation_callback = std::make_unique<std::stop_callback<std::function<void()>>>(
                         token, [this]()
                         {
-                                if (!event->has_fired())
+                                if (!event->has_fired() && !event->is_canceled())
                                 {
                                     event->cancel(); // Cancel the timer event
-                                    event.reset();
                                 } });
                 }
 
@@ -275,15 +282,14 @@ namespace webcraft::async::runtime::detail
 
                 void await_suspend(std::coroutine_handle<> h)
                 {
-                    *handle = h;
+                    handle = h;
                     event->start_async(); // Start the async operation
                 }
 
-                void await_resume() const noexcept
+                void await_resume() noexcept
                 {
                     cancelation_callback.reset();
                     event.reset();
-                    handle.reset();
                 }
             };
 
@@ -307,5 +313,5 @@ namespace webcraft::async::runtime::detail
         NATIVE
     };
 
-    using runtime_provider_type = provider_type::NATIVE;
+    constexpr auto runtime_provider_type = provider_type::NATIVE;
 }

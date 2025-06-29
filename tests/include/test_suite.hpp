@@ -10,7 +10,7 @@
 
 #endif
 
-uint64_t generate_random_uint64()
+inline uint64_t generate_random_uint64()
 {
     static std::random_device rd;     // Seed source (hardware entropy)
     static std::mt19937_64 gen(rd()); // 64-bit Mersenne Twister engine

@@ -53,7 +53,7 @@ namespace webcraft::async::runtime
 
         auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
         {
-            co_await detail::sleep_for(duration, token);
+            co_await sleep_for(duration, token);
 
             if (!token.stop_requested())
             {
@@ -87,7 +87,7 @@ namespace webcraft::async::runtime
             while (!token.stop_requested())
             {
 
-                co_await detail::sleep_for(duration, token);
+                co_await sleep_for(duration, token);
 
                 if (!token.stop_requested())
                 {
@@ -102,7 +102,7 @@ namespace webcraft::async::runtime
                     }
                 }
             }
-        }
+        };
 
         func();
     }
