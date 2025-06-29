@@ -98,14 +98,14 @@ namespace webcraft::async::runtime::detail
 
         /// @brief Checks if event has fired, this is used to check if the event has been executed.
         /// @return has fired
-        [[nodiscard]] constexpr bool has_fired() const
+        [[nodiscard]] bool has_fired() const
         {
             return fired.load();
         }
 
         /// @brief Checks if event has been canceled, this is used to check if the event has been canceled.
         /// @return has been canceled
-        [[nodiscard]] constexpr bool is_canceled() const
+        [[nodiscard]] bool is_canceled() const
         {
             return canceled.load();
         }
