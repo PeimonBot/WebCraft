@@ -1,7 +1,6 @@
 #ifdef _WIN32
 
 #include <webcraft/async/runtime/provider.hpp>
-#include <liburing.h>
 #include <mutex>
 
 using namespace webcraft::async::runtime::detail;
