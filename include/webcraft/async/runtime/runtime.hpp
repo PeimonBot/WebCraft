@@ -1,95 +1,10 @@
 #pragma once
 
-#include <memory>
-#include <concepts>
-#include <coroutine>
-#include <chrono>
-#include <async/task.h>
-#include <async/awaitable_resume_t.h>
-#include <async/event_signal.h>
-#include <async/task_completion_source.h>
-#include <webcraft/async/awaitable.hpp>
+#include <webcraft/async/runtime/provider.hpp>
+#include <stop_token>
 
 namespace webcraft::async::runtime
 {
-
-    namespace detail
-    {
-        
-    }
-
-    /// @brief Provider for the runtime
-    class RuntimeProvider
-    {
-    protected:
-        ::async::event_signal shutdown_signal;
-
-        virtual void run_io_loop() = 0;
-
-    public:
-        virtual ~RuntimeProvider() = default;
-
-        /// @brief Runs an asynchronous function
-        /// @param callable the asynchronous function
-        /// @return the return type of the awaitable returned by the invocable
-        auto run(std::invocable auto callable)
-            requires webcraft::async::awaitable<std::invoke_result_t<decltype(callable)>>
-        {
-            using CallableType = decltype(callable);
-            using ReturnType = ::async::awaitable_resume_t<std::invoke_result_t<CallableType>>;
-            std::shared_ptr<ReturnType> value;
-
-            struct runner
-            {
-                ::async::event_signal &shutdown_signal;
-                std::shared_ptr<ReturnType> ptr;
-                CallableType &callable;
-
-                ::async::task<void> run()
-                {
-                    if constexpr (std::is_void_v<ReturnType>)
-                    {
-                        co_await callable();
-                    }
-                    else
-                    {
-                        *ptr = co_await callable();
-                    }
-                    shutdown_signal.set();
-                }
-            };
-
-            runner rn{shutdown_signal, value, callable};
-            auto task = rn.run();
-
-            run_io_loop();
-
-            if constexpr (!std::is_void_v<ReturnType>)
-            {
-                return *value;
-            }
-        }
-
-        /// @brief Yields control back to the runtime
-        /// @return the task
-        virtual ::async::task<void> yield() = 0;
-
-        /// @brief Sleeps for duration (unless canceled then it will resume)
-        /// @param duration the duration to sleep for
-        /// @param token the token to cancel the sleep
-        /// @return the awaitable
-        virtual ::async::task<void> sleep_for(std::chrono::steady_clock::duration duration, std::stop_token token = {}) = 0;
-
-        /// @brief Shuts down the runtime
-        /// @return the awaitable
-        ::async::task<void> shutdown()
-        {
-            shutdown_signal.set();
-            return yield();
-        }
-    };
-
-    std::shared_ptr<RuntimeProvider> get_runtime_provider();
 
     /// @brief runs the asynchronous function (callable) synchronously
     /// @tparam ...Args the arguments for the callable object
@@ -101,7 +16,7 @@ namespace webcraft::async::runtime
     {
         using ReturnType = std::invoke_result_t<decltype(callable), Args...>;
 
-        auto provider = get_runtime_provider();
+        auto provider = detail::get_runtime_provider();
 
         return provider->run([&]()
                              { return callable(args...); });
@@ -111,7 +26,7 @@ namespace webcraft::async::runtime
     /// @return the awaitable for this function
     ::async::task<void> yield()
     {
-        auto provider = get_runtime_provider();
+        auto provider = detail::get_runtime_provider();
         return provider->yield();
     }
 
@@ -122,7 +37,7 @@ namespace webcraft::async::runtime
     template <class Rep, class Duration>
     ::async::task<void> sleep_for(std::chrono::duration<Rep, Duration> duration, std::stop_token token = {})
     {
-        auto provider = get_runtime_provider();
+        auto provider = detail::get_runtime_provider();
         return provider->sleep_for(std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), token);
     }
 
@@ -138,7 +53,7 @@ namespace webcraft::async::runtime
 
         auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
         {
-            co_await sleep_for(duration, token);
+            co_await detail::sleep_for(duration, token);
 
             if (!token.stop_requested())
             {
@@ -172,7 +87,7 @@ namespace webcraft::async::runtime
             while (!token.stop_requested())
             {
 
-                co_await sleep_for(duration, token);
+                co_await detail::sleep_for(duration, token);
 
                 if (!token.stop_requested())
                 {
@@ -196,7 +111,7 @@ namespace webcraft::async::runtime
     /// @return the awaitable for this function
     ::async::task<void> shutdown()
     {
-        auto provider = get_runtime_provider();
+        auto provider = detail::get_runtime_provider();
         return provider->shutdown();
     }
 }
