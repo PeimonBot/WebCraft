@@ -39,10 +39,6 @@ public:
             throw std::runtime_error("Failed to submit SQE to io_uring: " + std::to_string(ret));
         }
     }
-
-    void cancel() override
-    {
-    }
 };
 
 class timer_event : public native_runtime_event
@@ -97,6 +93,8 @@ public:
         {
             throw std::runtime_error("Failed to submit SQE for cancel event: " + std::to_string(ret));
         }
+
+        native_runtime_event::cancel(); // Mark the event as canceled
     }
 };
 

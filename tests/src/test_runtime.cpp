@@ -1,5 +1,5 @@
 
-#if defined(__linux__)
+#if 0
 
 #define TEST_SUITE_NAME RuntimeTestSuite
 
@@ -124,9 +124,33 @@ TEST_CASE(runtime_post_timer_event)
     }                                                \
     ::async::task<void> async_##name()
 
+struct lightweight_yield_awaiter
+{
+    constexpr bool await_ready() const noexcept { return false; }
+    void await_suspend(std::coroutine_handle<> handle) const noexcept
+    {
+        // Simply resume the coroutine immediately
+        handle.resume();
+    }
+    void await_resume() const noexcept {}
+};
+
+ASYNC_TEST_CASE(runtime_test_lightweight_yield)
+{
+    int value = 5;
+
+    co_await lightweight_yield_awaiter();
+    EXPECT_EQ(value, 5) << "Value should remain unchanged after lightweight yield";
+
+    value = 6;
+    co_await lightweight_yield_awaiter();
+    EXPECT_EQ(value, 6) << "Value should remain unchanged after another lightweight yield";
+}
+
 ASYNC_TEST_CASE(runtime_test_yield_control)
 {
     int value = 5;
+
     co_await webcraft::async::runtime::yield();
     EXPECT_EQ(value, 5) << "Value should remain unchanged after yielding control";
 

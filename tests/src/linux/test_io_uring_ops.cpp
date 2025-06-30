@@ -230,4 +230,44 @@ TEST_CASE(io_uring_test_timer)
     destroy_io_uring(&ring);
 }
 
+::async::task<void> test_coroutine(struct io_uring *ring)
+{
+    struct yield_awaiter
+    {
+        struct io_uring *ring;
+
+        constexpr void await_resume() const noexcept {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) const noexcept
+        {
+            // Post the overlapped event to the io_uring
+            post_nop_event(ring, reinterpret_cast<uint64_t>(handle.address()));
+        }
+    };
+
+    int value = 5;
+    co_await yield_awaiter{ring};
+    EXPECT_EQ(value, 5) << "Value should remain unchanged in the coroutine";
+
+    value = 6;
+    co_await yield_awaiter{ring};
+    EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
+}
+
+TEST_CASE(runtime_test_coroutine)
+{
+    struct io_uring ring;
+    initialize_io_uring(&ring);
+
+    test_coroutine(&ring);
+
+    auto payload = wait_and_get_event(&ring);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    payload = wait_and_get_event(&ring);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    destroy_io_uring(&ring);
+}
+
 #endif

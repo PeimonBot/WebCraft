@@ -11,103 +11,93 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-struct data_entry
+namespace webcraft::async::runtime::detail
 {
-    std::chrono::steady_clock::time_point time_point;
-    std::function<void()> callback;
-    ;
 
-    bool operator>(const data_entry &other) const
+    class timer_manager;
+
+    struct data_entry
     {
-        return time_point > other.time_point;
-    }
-};
+        std::function<void()> callback;
+        timer_manager *manager;
 
-void CALLBACK TimerCallback(PTP_CALLBACK_INSTANCE, PVOID context, PTP_TIMER);
+        data_entry(std::function<void()> cb, timer_manager *mgr)
+            : callback(std::move(cb)), manager(mgr) {}
+    };
 
-class timer_manager
-{
-private:
-    std::priority_queue<data_entry,
-                        std::vector<data_entry>,
-                        std::greater<>>
-        timers;
-
-    HANDLE iocp;
-    PTP_TIMER thread_pool_timer;
-
-    friend void CALLBACK TimerCallback(PTP_CALLBACK_INSTANCE, PVOID context, PTP_TIMER);
-
-private:
-    void process_timers()
+    class timer_manager
     {
-        auto now = std::chrono::steady_clock::now();
-        while (!timers.empty())
+
+    private:
+        void set_timer(PTP_TIMER timer, std::chrono::steady_clock::duration duration)
         {
-            if (timers.top().time_point <= now)
+            auto duration_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(duration) / 100;
+
+            LARGE_INTEGER li;
+            li.QuadPart = -static_cast<LONGLONG>(duration_nanos.count()); // Convert to negative for relative time
+
+            FILETIME ft;
+            ft.dwLowDateTime = static_cast<DWORD>(li.LowPart);
+            ft.dwHighDateTime = static_cast<DWORD>(li.HighPart);
+
+            SetThreadpoolTimer(timer, &ft, 0, 0);
+        }
+
+        void create_timer(PTP_TIMER &timer, std::function<void()> callback)
+        {
+            timer = CreateThreadpoolTimer([](PTP_CALLBACK_INSTANCE, PVOID context, PTP_TIMER timer)
+                                          { 
+                                            data_entry* entry = static_cast<data_entry*>(context);
+                                             entry->manager->process_timer(std::move(entry->callback), timer); },
+                                          new data_entry(std::move(callback), this), nullptr);
+            if (timer == nullptr)
             {
-                auto entry = timers.top();
-                timers.pop();
-                entry.callback();
+                throw std::runtime_error("Failed to create thread pool timer");
             }
-            else
+        }
+
+        void close_timer(PTP_TIMER &timer)
+        {
+            SetThreadpoolTimer(timer, nullptr, 0, 0);
+            WaitForThreadpoolTimerCallbacks(timer, TRUE);
+            CloseThreadpoolTimer(timer);
+        }
+
+        void process_timer(std::function<void()> callback, PTP_TIMER timer)
+        {
+            callback();
+            close_timer(timer);
+        }
+
+    public:
+        timer_manager()
+        {
+        }
+
+        ~timer_manager()
+        {
+        }
+
+        PTP_TIMER post_timer_event(std::chrono::steady_clock::duration duration, std::function<void()> callback)
+        {
+            auto time_point = std::chrono::steady_clock::now() + duration;
+            PTP_TIMER timer;
+
+            create_timer(timer, std::move(callback));
+            set_timer(timer, duration);
+
+            return timer;
+        }
+
+        void cancel_timer(PTP_TIMER &timer)
+        {
+            if (timer)
             {
-                break; // No more timers to process
+                close_timer(timer);
+                timer = nullptr;
             }
         }
+    };
 
-        if (!timers.empty())
-        {
-            auto next_time_point = timers.top().time_point;
-            auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(next_time_point - now);
-            set_timer(duration);
-        }
-    }
-
-    void set_timer(std::chrono::steady_clock::duration duration)
-    {
-        FILETIME ft;
-        auto duration_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(duration) / 100;
-        ft.dwLowDateTime = static_cast<DWORD>(duration_nanos.count() & 0xFFFFFFFF);
-        ft.dwHighDateTime = static_cast<DWORD>(duration_nanos.count() >> 32);
-
-        SetThreadpoolTimer(thread_pool_timer, &ft, 0, 0);
-    }
-
-public:
-    timer_manager(HANDLE iocp_handle)
-        : iocp(iocp_handle), thread_pool_timer(nullptr)
-    {
-        thread_pool_timer = CreateThreadpoolTimer(TimerCallback, this, nullptr);
-        printf("Created thread pool timer: %p\n", thread_pool_timer);
-
-        if (thread_pool_timer == nullptr)
-        {
-            throw std::runtime_error("Failed to create thread pool timer");
-        }
-    }
-
-    ~timer_manager()
-    {
-        SetThreadpoolTimer(thread_pool_timer, nullptr, 0, 0);
-        WaitForThreadpoolTimerCallbacks(thread_pool_timer, TRUE);
-        CloseThreadpoolTimer(thread_pool_timer);
-    }
-
-    void post_timer_event(std::chrono::steady_clock::duration duration, std::function<void()> callback)
-    {
-        auto time_point = std::chrono::steady_clock::now() + duration;
-
-        set_timer(duration);
-        timers.push({time_point, callback});
-        std::cout << "Posted timer event for duration: " << duration.count() << " nanoseconds" << std::endl;
-    }
-};
-
-void CALLBACK TimerCallback(PTP_CALLBACK_INSTANCE, PVOID context, PTP_TIMER)
-{
-    auto *manager = static_cast<timer_manager *>(context);
-    manager->process_timers();
 }
-
 #endif

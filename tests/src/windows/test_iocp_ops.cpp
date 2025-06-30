@@ -7,7 +7,8 @@
 #include <Windows.h>
 #include <WinSock2.h>
 #include <async/event_signal.h>
-#include "windows_timer_manager.hpp"
+#include <webcraft/async/runtime/windows/windows_timer_manager.hpp>
+#include <async/task.h>
 
 TEST_CASE(SampleTest)
 {
@@ -202,7 +203,7 @@ TEST_CASE(iocp_wait_multiple_events)
     destroy_iocp(iocp);
 }
 
-void post_timer_event(HANDLE iocp, timer_manager &context, std::chrono::steady_clock::duration duration, uint64_t payload)
+void post_timer_event(HANDLE iocp, webcraft::async::runtime::detail::timer_manager &context, std::chrono::steady_clock::duration duration, uint64_t payload)
 {
     context.post_timer_event(duration, [iocp, payload]()
                              {
@@ -222,25 +223,62 @@ TEST_CASE(iocp_test_timer)
     constexpr int payload = 0;
     std::cout << "Testing IOCP timer functionality..." << std::endl;
 
+    webcraft::async::runtime::detail::timer_manager manager;
     // Initialize the IOCP
     HANDLE iocp = initialize_iocp();
 
     auto sleep_time = std::chrono::seconds(5);
     std::cout << "Posting timer event with sleep time: " << sleep_time.count() << " seconds" << std::endl;
 
+    post_timer_event(iocp, manager, sleep_time, payload);
+
+    auto start = std::chrono::steady_clock::now();
+    wait_for_timeout_event(iocp, payload);
+    auto end = std::chrono::steady_clock::now();
+
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+
+    destroy_iocp(iocp);
+}
+
+::async::task<void> test_coroutine(HANDLE iocp)
+{
+    struct yield_awaiter
     {
-        timer_manager manager(iocp);
+        HANDLE iocp;
 
-        post_timer_event(iocp, manager, sleep_time, payload);
+        constexpr void await_resume() const noexcept {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) const noexcept
+        {
+            // Post the overlapped event to the IOCP
+            post_nop_event(iocp, reinterpret_cast<uint64_t>(handle.address()));
+        }
+    };
 
-        auto start = std::chrono::steady_clock::now();
-        wait_for_timeout_event(iocp, payload);
-        auto end = std::chrono::steady_clock::now();
+    int value = 5;
+    co_await yield_awaiter{iocp};
+    EXPECT_EQ(value, 5) << "Value should remain unchanged in the coroutine";
 
-        auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    value = 6;
+    co_await yield_awaiter{iocp};
+    EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
+}
 
-        EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
-    }
+TEST_CASE(runtime_test_coroutine)
+{
+
+    HANDLE iocp = initialize_iocp();
+
+    test_coroutine(iocp);
+
+    auto payload = wait_and_get_event(iocp);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    payload = wait_and_get_event(iocp);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
 
     destroy_iocp(iocp);
 }

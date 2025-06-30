@@ -10,6 +10,7 @@
 #include <async/event_signal.h>
 #include <webcraft/async/awaitable.hpp>
 #include <concepts>
+#include <exception>
 
 namespace webcraft::async::runtime::detail
 {
@@ -74,11 +75,7 @@ namespace webcraft::async::runtime::detail
         virtual void set_result(int res)
         {
             result = res;
-            if (res == -ECANCELED)
-            {
-                canceled.store(true);
-            }
-            else
+            if (!canceled.load())
             {
                 fired.store(true);
             }
@@ -94,7 +91,10 @@ namespace webcraft::async::runtime::detail
         }
 
         /// @brief Cancels the event, this is where the event is canceled. Can be called anywhere.
-        virtual void cancel() = 0;
+        virtual void cancel()
+        {
+            canceled.store(true);
+        }
 
         /// @brief Checks if event has fired, this is used to check if the event has been executed.
         /// @return has fired
@@ -161,6 +161,7 @@ namespace webcraft::async::runtime::detail
             using CallableType = decltype(callable);
             using ReturnType = ::async::awaitable_resume_t<std::invoke_result_t<CallableType>>;
             std::shared_ptr<ReturnType> value;
+            std::exception_ptr exception_ptr = nullptr;
 
             // Create the runner that will execute the callable and set the value
             struct runner
@@ -168,28 +169,42 @@ namespace webcraft::async::runtime::detail
                 ::async::event_signal &shutdown_signal;
                 std::shared_ptr<ReturnType> ptr;
                 CallableType &callable;
+                std::exception_ptr &exception_ptr;
 
                 // The run function that will be executed in the coroutine
                 ::async::task<void> run()
                 {
-                    if constexpr (std::is_void_v<ReturnType>)
+                    try
                     {
-                        co_await callable();
+                        if constexpr (std::is_void_v<ReturnType>)
+                        {
+                            co_await callable();
+                        }
+                        else
+                        {
+                            *ptr = co_await callable();
+                        }
                     }
-                    else
+                    catch (...)
                     {
-                        *ptr = co_await callable();
+                        exception_ptr = std::current_exception(); // Capture the exception
                     }
                     shutdown_signal.set();
                 }
             };
 
             // Run the callable in a coroutine
-            runner rn{shutdown_signal, value, callable};
+            runner rn{shutdown_signal, value, callable, exception_ptr};
+
             auto task = rn.run();
 
             // Run the IO loop to process events and execute the task
             run_io_loop();
+
+            if (exception_ptr)
+            {
+                std::rethrow_exception(exception_ptr); // If an exception was thrown, rethrow it
+            }
 
             // Wait for the task to complete
             if constexpr (!std::is_void_v<ReturnType>)
@@ -207,18 +222,9 @@ namespace webcraft::async::runtime::detail
             {
                 runtime_provider *provider;
                 std::unique_ptr<native_runtime_event> event;
-                std::optional<std::coroutine_handle<>> handle;
 
                 yield_awaiter(runtime_provider *provider) : provider(provider)
                 {
-                    event = provider->create_nop_event(
-                        [this]
-                        {
-                            if (handle && !handle.value().done())
-                            {
-                                handle.value().resume(); // Resume the coroutine when the event is executed
-                            }
-                        });
                 }
 
                 constexpr bool await_ready() const noexcept
@@ -226,13 +232,27 @@ namespace webcraft::async::runtime::detail
                     return false; // Always yield control back to the runtime
                 }
 
-                void await_suspend(std::coroutine_handle<> h)
+                bool await_suspend(std::coroutine_handle<> h)
                 {
-                    handle = h;
+                    auto handle = h;
+                    event = provider->create_nop_event(
+                        [handle]() mutable
+                        {
+                            if (handle && !handle.done())
+                            {
+                                handle.resume(); // Resume the coroutine when the event is executed
+                            }
+                        });
+
+                    if (!event)
+                    {
+                        throw std::runtime_error("Failed to create NOP event in yield awaiter");
+                    }
                     event->start_async(); // Start the async operation
+                    return true;
                 }
 
-                void await_resume() noexcept
+                void await_resume()
                 {
                     // No result to resume, just yield control
                     event.reset();

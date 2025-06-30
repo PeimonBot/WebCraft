@@ -219,4 +219,44 @@ TEST_CASE(kqueue_test_timer)
     destroy_kqueue(queue);
 }
 
+::async::task<void> test_coroutine(int queue)
+{
+    struct yield_awaiter
+    {
+        int queue;
+
+        constexpr void await_resume() const noexcept {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) const noexcept
+        {
+            // Post the overlapped event to the IOCP
+            post_nop_event(queue, reinterpret_cast<uint64_t>(handle.address()));
+        }
+    };
+
+    int value = 5;
+    co_await yield_awaiter{queue};
+    EXPECT_EQ(value, 5) << "Value should remain unchanged in the coroutine";
+
+    value = 6;
+    co_await yield_awaiter{queue};
+    EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
+}
+
+TEST_CASE(runtime_test_coroutine)
+{
+
+    int queue = initialize_kqueue();
+
+    test_coroutine(queue);
+
+    auto payload = wait_and_get_event(queue);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    payload = wait_and_get_event(queue);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    destroy_kqueue(queue);
+}
+
 #endif
