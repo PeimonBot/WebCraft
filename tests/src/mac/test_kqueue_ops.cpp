@@ -4,6 +4,7 @@
 #include "test_suite.hpp"
 #include <sys/event.h>
 #include <async/event_signal.h>
+#include <async/task.h>
 
 TEST_CASE(SampleTest)
 {

@@ -4,6 +4,7 @@
 #include "test_suite.hpp"
 #include <liburing.h>
 #include <async/event_signal.h>
+#include <async/task.h>
 
 TEST_CASE(SampleTest)
 {
