@@ -301,7 +301,7 @@ TEST_CASE(runtime_yield_test_coroutine)
     co_await timer_awaiter{ring, sleep_time};
 
     end = std::chrono::steady_clock::now();
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
+    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 }
 
