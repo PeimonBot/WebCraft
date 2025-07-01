@@ -308,7 +308,7 @@ TEST_CASE(runtime_test_timer_coroutine)
     struct io_uring ring;
     initialize_io_uring(&ring);
 
-    test_timer_coroutine(iocp);
+    test_timer_coroutine(&ring);
 
     auto payload = wait_and_get_event(&ring);
     std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
