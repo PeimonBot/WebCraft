@@ -306,7 +306,7 @@ TEST_CASE(runtime_test_timer_coroutine)
     payload = wait_and_get_event(queue);
     std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
 
-    destroy_queue(queue);
+    destroy_kqueue(queue);
 }
 
 #endif
