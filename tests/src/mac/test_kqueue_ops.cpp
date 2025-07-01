@@ -296,7 +296,6 @@ TEST_CASE(runtime_test_timer_coroutine)
 {
 
     int queue = initialize_kqueue();
-    webcraft::async::runtime::detail::timer_manager manager;
 
     test_timer_coroutine(queue);
 
