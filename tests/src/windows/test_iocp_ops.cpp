@@ -6,9 +6,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <WinSock2.h>
-#include <async/event_signal.h>
 #include <webcraft/async/runtime/windows/windows_timer_manager.hpp>
-#include <async/task.h>
 
 TEST_CASE(SampleTest)
 {
@@ -243,7 +241,7 @@ TEST_CASE(iocp_test_timer)
     destroy_iocp(iocp);
 }
 
-::async::task<void> test_coroutine(HANDLE iocp)
+::async::task<void> test_yield_coroutine(HANDLE iocp)
 {
     struct yield_awaiter
     {
@@ -267,12 +265,12 @@ TEST_CASE(iocp_test_timer)
     EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
 }
 
-TEST_CASE(runtime_test_coroutine)
+TEST_CASE(runtime_test_yield_coroutine)
 {
 
     HANDLE iocp = initialize_iocp();
 
-    test_coroutine(iocp);
+    test_yield_coroutine(iocp);
 
     auto payload = wait_and_get_event(iocp);
     std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
@@ -282,4 +280,57 @@ TEST_CASE(runtime_test_coroutine)
 
     destroy_iocp(iocp);
 }
+
+::async::task<void> test_timer_coroutine(HANDLE iocp, webcraft::async::runtime::detail::timer_manager &manager)
+{
+    struct timer_awaiter
+    {
+        HANDLE iocp;
+        std::chrono::steady_clock::duration duration;
+        webcraft::async::runtime::detail::timer_manager &manager;
+
+        constexpr void await_resume() const noexcept {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) const noexcept
+        {
+            // Post the overlapped event to the IOCP
+            post_timer_event(iocp, manager, duration, reinterpret_cast<uint64_t>(handle.address()));
+        }
+    };
+
+    constexpr auto sleep_time = std::chrono::seconds(5);
+
+    auto start = std::chrono::steady_clock::now();
+    co_await timer_awaiter{iocp, sleep_time, manager};
+    auto end = std::chrono::steady_clock::now();
+
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+
+    start = std::chrono::steady_clock::now();
+    co_await timer_awaiter{iocp, sleep_time, manager};
+
+    end = std::chrono::steady_clock::now();
+    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+}
+
+TEST_CASE(runtime_test_timer_coroutine)
+{
+
+    HANDLE iocp = initialize_iocp();
+    webcraft::async::runtime::detail::timer_manager manager;
+
+    test_timer_coroutine(iocp, manager);
+
+    auto payload = wait_and_get_event(iocp);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    payload = wait_and_get_event(iocp);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    destroy_iocp(iocp);
+}
+
 #endif

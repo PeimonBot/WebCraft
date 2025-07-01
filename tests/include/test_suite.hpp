@@ -3,6 +3,8 @@
 #include <random>
 #include <cstdint>
 #include <chrono>
+#include <async/task.h>
+#include <async/event_signal.h>
 
 #ifdef TEST_SUITE_NAME
 
