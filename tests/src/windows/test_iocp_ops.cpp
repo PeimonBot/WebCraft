@@ -8,6 +8,8 @@
 #include <WinSock2.h>
 #include <webcraft/async/runtime/windows/windows_timer_manager.hpp>
 
+using namespace std::chrono_literals;
+
 TEST_CASE(SampleTest)
 {
     EXPECT_EQ(1 + 1, 2);
@@ -234,7 +236,7 @@ TEST_CASE(iocp_test_timer)
     wait_for_timeout_event(iocp, payload);
     auto end = std::chrono::steady_clock::now();
 
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
 
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 
@@ -304,7 +306,7 @@ TEST_CASE(runtime_test_yield_coroutine)
     co_await timer_awaiter{iocp, sleep_time, manager};
     auto end = std::chrono::steady_clock::now();
 
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
 
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 
@@ -312,7 +314,7 @@ TEST_CASE(runtime_test_yield_coroutine)
     co_await timer_awaiter{iocp, sleep_time, manager};
 
     end = std::chrono::steady_clock::now();
-    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 }
 

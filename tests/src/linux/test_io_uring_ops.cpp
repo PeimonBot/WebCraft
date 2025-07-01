@@ -4,8 +4,6 @@
 #include "test_suite.hpp"
 #include <liburing.h>
 
-using namespace std::chrono_literals;
-
 TEST_CASE(SampleTest)
 {
     EXPECT_EQ(1 + 1, 2);
@@ -224,7 +222,7 @@ TEST_CASE(io_uring_test_timer)
     wait_for_timeout_event(&ring, payload);
     auto end = std::chrono::steady_clock::now();
 
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 
@@ -293,7 +291,7 @@ TEST_CASE(runtime_yield_test_coroutine)
     co_await timer_awaiter{ring, sleep_time};
     auto end = std::chrono::steady_clock::now();
 
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 
@@ -301,7 +299,7 @@ TEST_CASE(runtime_yield_test_coroutine)
     co_await timer_awaiter{ring, sleep_time};
 
     end = std::chrono::steady_clock::now();
-    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
+    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 }
 
