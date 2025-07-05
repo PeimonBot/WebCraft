@@ -56,7 +56,7 @@ namespace webcraft::async::runtime::detail
             }
         }
 
-        void close_timer(PTP_TIMER &timer)
+        void close_timer(const PTP_TIMER &timer)
         {
             SetThreadpoolTimer(timer, nullptr, 0, 0);
             WaitForThreadpoolTimerCallbacks(timer, TRUE);
@@ -89,12 +89,11 @@ namespace webcraft::async::runtime::detail
             return timer;
         }
 
-        void cancel_timer(PTP_TIMER &timer)
+        void cancel_timer(const PTP_TIMER &timer)
         {
             if (timer)
             {
                 close_timer(timer);
-                timer = nullptr;
             }
         }
     };

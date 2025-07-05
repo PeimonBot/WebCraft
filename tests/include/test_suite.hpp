@@ -4,7 +4,12 @@
 #include <cstdint>
 #include <chrono>
 #include <async/task.h>
+#include <async/awaitable_get.h>
 #include <async/event_signal.h>
+#include <optional>
+#include <atomic>
+#include <thread>
+#include <memory>
 
 #ifdef TEST_SUITE_NAME
 

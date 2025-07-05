@@ -27,7 +27,7 @@ namespace webcraft::async::runtime
     ::async::task<void> yield()
     {
         auto provider = detail::get_runtime_provider();
-        return provider->yield();
+        co_await provider->yield();
     }
 
     /// @brief sleeps for the duration specified (unless canceled then it will resume)
@@ -35,7 +35,7 @@ namespace webcraft::async::runtime
     /// @param token token used to cancel the timer and resume immedietly
     /// @return the awaitable for the function
     template <class Rep, class Duration>
-    ::async::task<void> sleep_for(std::chrono::duration<Rep, Duration> duration, std::stop_token token = {})
+    ::async::task<bool> sleep_for(std::chrono::duration<Rep, Duration> duration, std::stop_token token = {})
     {
         auto provider = detail::get_runtime_provider();
         return provider->sleep_for(std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), token);
