@@ -34,78 +34,78 @@ namespace webcraft::async::runtime
     /// @param duration the duration to be slept for
     /// @param token token used to cancel the timer and resume immedietly
     /// @return the awaitable for the function
-    template <class Rep, class Duration>
-    ::async::task<bool> sleep_for(std::chrono::duration<Rep, Duration> duration, std::stop_token token = {})
-    {
-        auto provider = detail::get_runtime_provider();
-        return provider->sleep_for(std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), token);
-    }
+    // template <class Rep, class Duration>
+    // ::async::task<bool> sleep_for(std::chrono::duration<Rep, Duration> duration, std::stop_token token = {})
+    // {
+    //     auto provider = detail::get_runtime_provider();
+    //     return provider->sleep_for(std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), token);
+    // }
 
     /// @brief Sets the timeout for the duration specified and asynchronously invokes the function once timeout has expired (unless its canceled by the stop token)
     /// @tparam function the type of the function
     /// @param duration the duration to wait for
     /// @param fn the function to invoke after the duration has elapsed
     /// @param token the token to cancel the timeout
-    template <std::invocable function, class Rep, class Duration>
-    void set_timeout(std::chrono::duration<Rep, Duration> duration, function fn, std::stop_token token = {})
-    {
-        using ReturnType = std::invoke_result_t<function>;
+    // template <std::invocable function, class Rep, class Duration>
+    // void set_timeout(std::chrono::duration<Rep, Duration> duration, function fn, std::stop_token token = {})
+    // {
+    //     using ReturnType = std::invoke_result_t<function>;
 
-        auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
-        {
-            co_await sleep_for(duration, token);
+    //     auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
+    //     {
+    //         co_await sleep_for(duration, token);
 
-            if (!token.stop_requested())
-            {
+    //         if (!token.stop_requested())
+    //         {
 
-                if constexpr (awaitable<ReturnType>)
-                {
-                    co_await fn();
-                }
-                else
-                {
-                    fn();
-                }
-            }
-        };
+    //             if constexpr (awaitable<ReturnType>)
+    //             {
+    //                 co_await fn();
+    //             }
+    //             else
+    //             {
+    //                 fn();
+    //             }
+    //         }
+    //     };
 
-        func();
-    }
+    //     func();
+    // }
 
-    /// @brief Invokes the asynchronous function every interval specified by the duration amount
-    /// @tparam function the type of the function
-    /// @param duration the duration of each interval
-    /// @param fn the function to invoke every interval
-    /// @param token the token to stop executing
-    template <std::invocable function, class Rep, class Duration>
-    void set_interval(std::chrono::duration<Rep, Duration> duration, function fn, std::stop_token token = {})
-    {
-        using ReturnType = std::invoke_result_t<function>;
+    // /// @brief Invokes the asynchronous function every interval specified by the duration amount
+    // /// @tparam function the type of the function
+    // /// @param duration the duration of each interval
+    // /// @param fn the function to invoke every interval
+    // /// @param token the token to stop executing
+    // template <std::invocable function, class Rep, class Duration>
+    // void set_interval(std::chrono::duration<Rep, Duration> duration, function fn, std::stop_token token = {})
+    // {
+    //     using ReturnType = std::invoke_result_t<function>;
 
-        auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
-        {
-            while (!token.stop_requested())
-            {
+    //     auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
+    //     {
+    //         while (!token.stop_requested())
+    //         {
 
-                co_await sleep_for(duration, token);
+    //             co_await sleep_for(duration, token);
 
-                if (!token.stop_requested())
-                {
+    //             if (!token.stop_requested())
+    //             {
 
-                    if constexpr (awaitable<ReturnType>)
-                    {
-                        co_await fn();
-                    }
-                    else
-                    {
-                        fn();
-                    }
-                }
-            }
-        };
+    //                 if constexpr (awaitable<ReturnType>)
+    //                 {
+    //                     co_await fn();
+    //                 }
+    //                 else
+    //                 {
+    //                     fn();
+    //                 }
+    //             }
+    //         }
+    //     };
 
-        func();
-    }
+    //     func();
+    // }
 
     /// @brief shuts down the runtime
     /// @return the awaitable for this function

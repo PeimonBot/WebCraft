@@ -48,7 +48,7 @@ namespace webcraft::async::runtime::detail
         //     try_start();
         // }
 
-        // virtual void try_resume() = 0;
+        virtual void try_resume() = 0;
         // void try_resume()
         // {
         //     // throw std::runtime_error("await_suspend not implemented in base class");
@@ -71,9 +71,8 @@ namespace webcraft::async::runtime::detail
         // int get_result() const
         // {
         //     return result;
-        }
+        // }
     };
-
 
     // class cancellable_runtime_event : public runtime_event, public std::enable_shared_from_this<cancellable_runtime_event>
     // {

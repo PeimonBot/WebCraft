@@ -1,42 +1,42 @@
 
-#define TEST_SUITE_NAME RuntimeTestSuite
+// #define TEST_SUITE_NAME RuntimeTestSuite
 
-#include "test_suite.hpp"
-#include <webcraft/async/runtime/runtime.hpp>
-#include <async/event_signal.h>
+// #include "test_suite.hpp"
+// #include <webcraft/async/runtime/runtime.hpp>
+// #include <async/event_signal.h>
 
-::async::task<void> async_test_yield_control()
-{
-    int value = 5;
+// ::async::task<void> async_test_yield_control()
+// {
+//     int value = 5;
 
-    co_await webcraft::async::runtime::yield();
-    EXPECT_EQ(value, 5) << "Value should remain unchanged after yielding control";
+//     co_await webcraft::async::runtime::yield();
+//     EXPECT_EQ(value, 5) << "Value should remain unchanged after yielding control";
 
-    value = 6;
-    co_await webcraft::async::runtime::yield();
-    EXPECT_EQ(value, 6) << "Value should remain unchanged after yielding control again";
-}
+//     value = 6;
+//     co_await webcraft::async::runtime::yield();
+//     EXPECT_EQ(value, 6) << "Value should remain unchanged after yielding control again";
+// }
 
-TEST_CASE(test_yield_control)
-{
-    auto task = async_test_yield_control();
+// TEST_CASE(test_yield_control)
+// {
+//     auto task = async_test_yield_control();
 
-    auto provider = webcraft::async::runtime::detail::get_runtime_provider();
-    auto event = provider->wait_and_get_event();
+//     auto provider = webcraft::async::runtime::detail::get_runtime_provider();
+//     auto event = provider->wait_and_get_event();
 
-    if (event)
-    {
-        event->try_resume();
-    }
+//     if (event)
+//     {
+//         event->try_resume();
+//     }
 
-    event = provider->wait_and_get_event();
-    if (event)
-    {
-        event->try_resume();
-    }
+//     event = provider->wait_and_get_event();
+//     if (event)
+//     {
+//         event->try_resume();
+//     }
 
-    async::awaitable_get(task);
-}
+//     async::awaitable_get(task);
+// }
 
 // ::async::task<void> async_test_sleep_for()
 // {

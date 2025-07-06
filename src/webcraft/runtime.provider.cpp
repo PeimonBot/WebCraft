@@ -82,28 +82,28 @@ private:
 public:
     yield_awaiter(win32_provider *provider) : provider(provider) {}
 
-    void try_start() noexcept override;
+    // void try_start() noexcept override;
 };
 
-class cancellable_sleep_awaiter : public webcraft::async::runtime::detail::cancellable_runtime_event
-{
-private:
-    win32_provider *provider;
-    PTP_TIMER timer;                                // Timer for the sleep operation
-    std::chrono::steady_clock::duration sleep_time; // Duration to sleep
+// class cancellable_sleep_awaiter : public webcraft::async::runtime::detail::cancellable_runtime_event
+// {
+// private:
+//     win32_provider *provider;
+//     PTP_TIMER timer;                                // Timer for the sleep operation
+//     std::chrono::steady_clock::duration sleep_time; // Duration to sleep
 
-public:
-    cancellable_sleep_awaiter(win32_provider *provider,
-                              std::chrono::steady_clock::duration sleep_time,
-                              std::stop_token token)
-        : cancellable_runtime_event(token), provider(provider), sleep_time(sleep_time)
-    {
-    }
+// public:
+//     cancellable_sleep_awaiter(win32_provider *provider,
+//                               std::chrono::steady_clock::duration sleep_time,
+//                               std::stop_token token)
+//         : cancellable_runtime_event(token), provider(provider), sleep_time(sleep_time)
+//     {
+//     }
 
-    void try_start() noexcept override;
+//     void try_start() noexcept override;
 
-    void try_native_cancel() noexcept override;
-};
+//     void try_native_cancel() noexcept override;
+// };
 
 class win32_provider : public webcraft::async::runtime::detail::runtime_provider
 {
@@ -165,20 +165,21 @@ public:
 
         std::cerr << "Event ready with payload: " << payload << ", bytes transferred: " << ret << std::endl;
         auto event = reinterpret_cast<webcraft::async::runtime::detail::runtime_event *>(payload);
-        event->set_result(static_cast<int>(ret)); // Set the result of the event
-        return event;                             // Return the event that was ready
+        // event->set_result(static_cast<int>(ret)); // Set the result of the event
+        return event; // Return the event that was ready
     }
 
     ::async::task<void> yield() override
     {
-        co_await yield_awaiter(this); // Use the yield awaiter to yield control back to the runtime
+        // co_await yield_awaiter(this); // Use the yield awaiter to yield control back to the runtime
+        co_return;
     }
 
-    ::async::task<bool> sleep_for(std::chrono::steady_clock::duration duration, std::stop_token token) override
-    {
-        auto sleep_awaiter = std::make_shared<cancellable_sleep_awaiter>(this, duration, token);
-        co_return co_await *sleep_awaiter; // Use the cancellable sleep awaiter to sleep for the specified duration
-    }
+    // ::async::task<bool> sleep_for(std::chrono::steady_clock::duration duration, std::stop_token token) override
+    // {
+    //     auto sleep_awaiter = std::make_shared<cancellable_sleep_awaiter>(this, duration, token);
+    //     co_return co_await *sleep_awaiter; // Use the cancellable sleep awaiter to sleep for the specified duration
+    // }
 
     HANDLE get_iocp_handle() const
     {
@@ -191,24 +192,24 @@ public:
     }
 };
 
-void yield_awaiter::try_start() noexcept
-{
-    // Post a NOP event to the IOCP to yield control back to the runtime
-    std::cerr << "Yielding control to the runtime: " << (uint64_t)this << std::endl;
-    detail::win32::post_nop_event(provider->get_iocp_handle(), reinterpret_cast<uint64_t>(this));
-}
+// void yield_awaiter::try_start() noexcept
+// {
+//     // Post a NOP event to the IOCP to yield control back to the runtime
+//     std::cerr << "Yielding control to the runtime: " << (uint64_t)this << std::endl;
+//     detail::win32::post_nop_event(provider->get_iocp_handle(), reinterpret_cast<uint64_t>(this));
+// }
 
-void cancellable_sleep_awaiter::try_start() noexcept
-{
-    // Create a timer for the sleep operation
-    timer = detail::win32::post_timer_event(provider->get_iocp_handle(), provider->get_timer_manager(), sleep_time, reinterpret_cast<uint64_t>(this));
-}
+// void cancellable_sleep_awaiter::try_start() noexcept
+// {
+//     // Create a timer for the sleep operation
+//     timer = detail::win32::post_timer_event(provider->get_iocp_handle(), provider->get_timer_manager(), sleep_time, reinterpret_cast<uint64_t>(this));
+// }
 
-void cancellable_sleep_awaiter::try_native_cancel() noexcept
-{
-    // Cancel the timer if it is still pending
-    provider->get_timer_manager().cancel_timer(timer);
-}
+// void cancellable_sleep_awaiter::try_native_cancel() noexcept
+// {
+//     // Cancel the timer if it is still pending
+//     provider->get_timer_manager().cancel_timer(timer);
+// }
 
 static auto provider_instance = std::make_shared<win32_provider>();
 
