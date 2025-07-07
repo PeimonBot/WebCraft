@@ -286,8 +286,6 @@ struct resumeable
     value = 6;
     co_await yield_awaiter(iocp);
     EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
-
-    co_await yield_awaiter(iocp); // Yield control back to the runtime
 }
 
 TEST_CASE(runtime_test_yield_coroutine)
@@ -304,12 +302,6 @@ TEST_CASE(runtime_test_yield_coroutine)
 
     payload = wait_and_get_event(iocp);
     // std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
-    resumeable_event = reinterpret_cast<resumeable *>(payload);
-    resumeable_event->try_resume(); // Resume the coroutine
-
-    payload = wait_and_get_event(iocp);
-    // auto coro = std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload));
-    // coro.resume();
     resumeable_event = reinterpret_cast<resumeable *>(payload);
     resumeable_event->try_resume(); // Resume the coroutine
 

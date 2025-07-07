@@ -1,117 +1,134 @@
 #pragma once
 
-#include <webcraft/async/runtime/provider.hpp>
-#include <stop_token>
+#include <coroutine>
+#include <concepts>
+#include <async/task.h>
+#include <exception>
+#include <memory>
+#include <iostream>
+
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <WinSock2.h>
 
 namespace webcraft::async::runtime
 {
-
-    /// @brief runs the asynchronous function (callable) synchronously
-    /// @tparam ...Args the arguments for the callable object
-    /// @param callable the callable object which returns an awaitable type
-    /// @return the resumed type of the awaitable type returned by the callable object
-    template <typename... Args>
-    auto run(std::invocable<Args...> auto callable, Args &&...args)
-        requires webcraft::async::awaitable<std::invoke_result_t<decltype(callable), Args...>>
+    namespace win32
     {
-        using ReturnType = std::invoke_result_t<decltype(callable), Args...>;
+        HANDLE initialize_iocp()
+        {
+            // Initialize Winsock
+            WSADATA wsaData;
+            int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
 
-        auto provider = detail::get_runtime_provider();
+            if (result != 0)
+                throw std::runtime_error("Failed to initialize Winsock: " + std::to_string(result));
 
-        return provider->run([&]()
-                             { return callable(args...); });
+            // Create an IO Completion Port (IOCP)
+            auto iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
+            if (iocp == NULL)
+                throw std::runtime_error("Failed to create IOCP");
+
+            return iocp;
+        }
+
+        void destroy_iocp(HANDLE iocp)
+        {
+            auto check = CloseHandle(iocp);
+
+            if (!check)
+                throw std::runtime_error("Failed to close IOCP handle");
+
+            // Cleanup Winsock
+            int result = WSACleanup();
+            if (result != 0)
+                throw std::runtime_error("Failed to cleanup Winsock: " + std::to_string(result));
+        }
+
+        struct overlapped_event : public OVERLAPPED
+        {
+            uint64_t payload;
+        };
+
+        void post_nop_event(HANDLE iocp, uint64_t payload)
+        {
+            // Post a NOP operation to the IOCP
+            overlapped_event *overlapped = new overlapped_event();
+            memset(overlapped, 0, sizeof(OVERLAPPED));
+            overlapped->payload = payload;
+
+            BOOL result = PostQueuedCompletionStatus(iocp, 0, payload, overlapped);
+            if (!result)
+                throw std::runtime_error("Failed to post NOP event to IOCP");
+        }
+
+        auto wait_and_get_event(HANDLE iocp)
+        {
+            DWORD bytesTransferred;
+            ULONG_PTR completionKey;
+            OVERLAPPED *overlapped;
+
+            BOOL result = GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, INFINITE);
+            if (!result)
+                throw std::runtime_error("Failed to get completion status from IOCP");
+
+            // Process the completion event
+            if (overlapped == nullptr)
+                throw std::runtime_error("Completion event is null");
+            auto event = static_cast<overlapped_event *>(overlapped);
+            uint64_t user_data = event->payload;
+
+            delete event; // Clean up the overlapped structure
+            return user_data;
+        }
     }
+
+    struct callback
+    {
+        virtual void execute() = 0;
+    };
+
+    struct runtime_provider
+    {
+        HANDLE iocp;
+
+        runtime_provider()
+        {
+            iocp = win32::initialize_iocp();
+        }
+
+        ~runtime_provider()
+        {
+            win32::destroy_iocp(iocp);
+        }
+    };
+
+    static auto provider = std::make_shared<runtime_provider>();
 
     /// @brief yields control to the runtime. will be requeued and executed again.
     /// @return the awaitable for this function
     ::async::task<void> yield()
     {
-        auto provider = detail::get_runtime_provider();
-        co_await provider->yield();
+        struct yield_awaiter
+        {
+            HANDLE iocp;
+
+            yield_awaiter(HANDLE iocp) : iocp(iocp) {}
+
+            constexpr void await_resume() const {}
+            constexpr bool await_ready() const noexcept { return false; }
+            void await_suspend(std::coroutine_handle<> handle) noexcept
+            {
+                win32::post_nop_event(iocp, reinterpret_cast<uint64_t>(handle.address()));
+            }
+        };
+
+        co_await yield_awaiter(provider->iocp);
     }
 
-    /// @brief sleeps for the duration specified (unless canceled then it will resume)
-    /// @param duration the duration to be slept for
-    /// @param token token used to cancel the timer and resume immedietly
-    /// @return the awaitable for the function
-    // template <class Rep, class Duration>
-    // ::async::task<bool> sleep_for(std::chrono::duration<Rep, Duration> duration, std::stop_token token = {})
-    // {
-    //     auto provider = detail::get_runtime_provider();
-    //     return provider->sleep_for(std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), token);
-    // }
-
-    /// @brief Sets the timeout for the duration specified and asynchronously invokes the function once timeout has expired (unless its canceled by the stop token)
-    /// @tparam function the type of the function
-    /// @param duration the duration to wait for
-    /// @param fn the function to invoke after the duration has elapsed
-    /// @param token the token to cancel the timeout
-    // template <std::invocable function, class Rep, class Duration>
-    // void set_timeout(std::chrono::duration<Rep, Duration> duration, function fn, std::stop_token token = {})
-    // {
-    //     using ReturnType = std::invoke_result_t<function>;
-
-    //     auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
-    //     {
-    //         co_await sleep_for(duration, token);
-
-    //         if (!token.stop_requested())
-    //         {
-
-    //             if constexpr (awaitable<ReturnType>)
-    //             {
-    //                 co_await fn();
-    //             }
-    //             else
-    //             {
-    //                 fn();
-    //             }
-    //         }
-    //     };
-
-    //     func();
-    // }
-
-    // /// @brief Invokes the asynchronous function every interval specified by the duration amount
-    // /// @tparam function the type of the function
-    // /// @param duration the duration of each interval
-    // /// @param fn the function to invoke every interval
-    // /// @param token the token to stop executing
-    // template <std::invocable function, class Rep, class Duration>
-    // void set_interval(std::chrono::duration<Rep, Duration> duration, function fn, std::stop_token token = {})
-    // {
-    //     using ReturnType = std::invoke_result_t<function>;
-
-    //     auto func = [duration, fn = std::move(fn), token]() -> ::async::task<void>
-    //     {
-    //         while (!token.stop_requested())
-    //         {
-
-    //             co_await sleep_for(duration, token);
-
-    //             if (!token.stop_requested())
-    //             {
-
-    //                 if constexpr (awaitable<ReturnType>)
-    //                 {
-    //                     co_await fn();
-    //                 }
-    //                 else
-    //                 {
-    //                     fn();
-    //                 }
-    //             }
-    //         }
-    //     };
-
-    //     func();
-    // }
-
-    /// @brief shuts down the runtime
-    /// @return the awaitable for this function
-    ::async::task<void> shutdown()
+    auto wait_and_get_event()
     {
-        auto provider = detail::get_runtime_provider();
-        return provider->shutdown();
+        return win32::wait_and_get_event(provider->iocp);
     }
 }

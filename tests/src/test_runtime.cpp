@@ -1,42 +1,99 @@
 
-// #define TEST_SUITE_NAME RuntimeTestSuite
+#define TEST_SUITE_NAME RuntimeTestSuite
 
-// #include "test_suite.hpp"
-// #include <webcraft/async/runtime/runtime.hpp>
-// #include <async/event_signal.h>
+#include "test_suite.hpp"
+#include <async/event_signal.h>
+#include <webcraft/async/runtime/runtime.hpp>
+#include <thread>
+#include <chrono>
 
-// ::async::task<void> async_test_yield_control()
-// {
-//     int value = 5;
+using namespace std::chrono_literals;
 
-//     co_await webcraft::async::runtime::yield();
-//     EXPECT_EQ(value, 5) << "Value should remain unchanged after yielding control";
+::async::task<void> lightweight_yield()
+{
+    struct lightweight_yield_awaiter
+    {
+        constexpr void await_resume() const noexcept {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> h) const noexcept
+        {
+            std::this_thread::sleep_for(200ms);
+            h.resume();
+        }
+    };
 
-//     value = 6;
-//     co_await webcraft::async::runtime::yield();
-//     EXPECT_EQ(value, 6) << "Value should remain unchanged after yielding control again";
-// }
+    co_await lightweight_yield_awaiter{};
+}
 
-// TEST_CASE(test_yield_control)
-// {
-//     auto task = async_test_yield_control();
+::async::task<void> async_lightweight_yield_control()
+{
 
-//     auto provider = webcraft::async::runtime::detail::get_runtime_provider();
-//     auto event = provider->wait_and_get_event();
+    int value = 5;
 
-//     if (event)
-//     {
-//         event->try_resume();
-//     }
+    co_await lightweight_yield();
+    std::cout << "Hello " << std::endl;
+    EXPECT_EQ(value, 5) << "Value should remain unchanged after yielding control";
 
-//     event = provider->wait_and_get_event();
-//     if (event)
-//     {
-//         event->try_resume();
-//     }
+    value = 6;
+    co_await lightweight_yield();
+    EXPECT_EQ(value, 6) << "Value should remain unchanged after yielding control again";
+}
 
-//     async::awaitable_get(task);
-// }
+TEST_CASE(test_lightweight_yield_control)
+{
+
+    auto task = async_lightweight_yield_control();
+
+    async::awaitable_get(task);
+}
+
+::async::task<void> yield(HANDLE iocp)
+{
+
+    struct yield_awaiter : public std::enable_share
+    {
+        HANDLE iocp;
+
+        yield_awaiter(HANDLE iocp) : iocp(iocp) {}
+
+        constexpr void await_resume() const {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) noexcept
+        {
+            webcraft::async::runtime::win32::post_nop_event(iocp, reinterpret_cast<uint64_t>(handle.address()));
+        }
+    };
+
+    co_await yield_awaiter{iocp};
+
+}
+
+::async::task<void> async_test_yield_control()
+{
+
+    int value = 5;
+
+    const auto iocp = webcraft::async::runtime::provider->iocp;
+    co_await yield(iocp);
+    EXPECT_EQ(value, 5) << "Value should remain unchanged after yielding control";
+
+    value = 6;
+    co_await yield(iocp);
+    EXPECT_EQ(value, 6) << "Value should remain unchanged after yielding control again";
+}
+
+TEST_CASE(test_yield_control)
+{
+    auto task = async_test_yield_control();
+
+    auto payload = webcraft::async::runtime::wait_and_get_event();
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    payload = webcraft::async::runtime::wait_and_get_event();
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    async::awaitable_get(task);
+}
 
 // ::async::task<void> async_test_sleep_for()
 // {
