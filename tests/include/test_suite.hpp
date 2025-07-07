@@ -1,0 +1,27 @@
+#pragma once
+#include <gtest/gtest.h>
+#include <random>
+#include <cstdint>
+#include <chrono>
+#include <async/task.h>
+#include <async/awaitable_get.h>
+#include <async/event_signal.h>
+#include <optional>
+#include <atomic>
+#include <thread>
+#include <memory>
+
+#ifdef TEST_SUITE_NAME
+
+#define TEST_CASE(name) TEST(TEST_SUITE_NAME, name)
+
+#endif
+
+inline uint64_t generate_random_uint64()
+{
+    static std::random_device rd;     // Seed source (hardware entropy)
+    static std::mt19937_64 gen(rd()); // 64-bit Mersenne Twister engine
+    static std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+
+    return dist(gen);
+}

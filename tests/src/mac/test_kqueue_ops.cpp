@@ -1,0 +1,311 @@
+#ifdef __APPLE__
+
+#define TEST_SUITE_NAME KqueueTestSuite
+#include "test_suite.hpp"
+#include <sys/event.h>
+
+TEST_CASE(SampleTest)
+{
+    EXPECT_EQ(1 + 1, 2);
+}
+
+int initialize_kqueue()
+{
+    // create the queue
+    int queue = kqueue();
+    EXPECT_NE(queue, -1) << "Failed to initialize kqueue:" << queue;
+
+    return queue;
+}
+
+void destroy_kqueue(int queue)
+{
+    // close the queue
+    int result = close(queue);
+    EXPECT_GE(result, 0) << "Failed to close kqueue:" << result;
+}
+
+// Test case to initialize and clean up kqueue
+TEST_CASE(kqueue_setup_and_cleanup)
+{
+    int queue = initialize_kqueue();
+
+    // Cleanup
+    destroy_kqueue(queue);
+}
+
+void post_nop_event(int queue, uint64_t payload)
+{
+    uint64_t id = generate_random_uint64();
+
+    // listen to the yield event
+    struct kevent event;
+    EV_SET(&event, id, EVFILT_USER, EV_ADD | EV_ENABLE, 0, 0, nullptr);
+    int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+    EXPECT_EQ(result, 0) << "Failed to register event to kqueue:" << result;
+
+    EV_SET(&event, id, EVFILT_USER, 0, NOTE_TRIGGER, 0, new uint64_t(payload));
+    result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+    EXPECT_GE(result, 0) << "Failed to trigger event in kqueue:" << result;
+}
+
+auto wait_and_get_event(int queue)
+{
+    struct kevent event;
+    int result = kevent(queue, nullptr, 0, &event, 1, nullptr);
+    EXPECT_GE(result, 0) << "Failed to wait for event from kqueue:" << result;
+
+    auto *ptr_data = reinterpret_cast<uint64_t *>(event.udata);
+    auto data = *ptr_data;
+    delete ptr_data;
+
+    // remove yield event listener
+    EV_SET(&event, event.ident, event.filter, EV_DELETE, 0, 0, nullptr);
+    result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+    EXPECT_GE(result, 0) << "Failed to remove event to kqueue:" << result;
+
+    return data;
+}
+
+void wait_for_event(int queue, uint64_t payload)
+{
+    auto user_data = wait_and_get_event(queue);
+
+    EXPECT_EQ(user_data, payload) << "Payload mismatch in completion event. Expected: " << payload << ", Got: " << user_data;
+}
+
+// Test cases for posting and waiting for events with no payload
+TEST_CASE(kqueue_post_and_wait_for_event_no_payload)
+{
+    int queue = initialize_kqueue();
+
+    // Post an event
+    post_nop_event(queue, 0);
+
+    // Wait for the event to complete
+    wait_for_event(queue, 0);
+
+    // Cleanup
+    destroy_kqueue(queue);
+}
+
+// Test case for posting and waiting for an event with a specific payload
+TEST_CASE(kqueue_post_and_wait_for_event_random_payload)
+{
+    int queue = initialize_kqueue();
+
+    uint64_t random_payload = generate_random_uint64();
+
+    // Post an event
+    post_nop_event(queue, random_payload);
+
+    // Wait for the event to complete
+    wait_for_event(queue, random_payload);
+
+    // Cleanup
+    destroy_kqueue(queue);
+}
+
+// Test case for posting a callback and executing it when the event is completed
+TEST_CASE(kqueue_post_and_test_callback)
+{
+    int queue = initialize_kqueue();
+
+    async::event_signal callback_called;
+
+    struct callback_event
+    {
+        async::event_signal *callback_flag;
+
+        void operator()()
+        {
+            callback_flag->set(); // Set the callback flag to true
+        }
+    };
+
+    callback_event cb_event{&callback_called};
+
+    post_nop_event(queue, reinterpret_cast<uint64_t>(&cb_event));
+
+    callback_event *ptr = reinterpret_cast<callback_event *>(wait_and_get_event(queue));
+
+    (*ptr)(); // Call the callback
+
+    EXPECT_TRUE(callback_called.is_set()) << "Callback was not called";
+
+    // Cleanup
+    destroy_kqueue(queue);
+}
+
+// Test case for waiting for multiple events
+TEST_CASE(kqueue_wait_multiple_events)
+{
+    // Define the number of events to wait for
+    constexpr int num_events = 5;
+
+    // initialize the structures
+    async::event_signal signals[num_events];
+    int queue = initialize_kqueue();
+
+    // the callback event structure
+    struct callback_event
+    {
+        async::event_signal *callback_flag;
+
+        void operator()()
+        {
+            callback_flag->set(); // Set the callback flag to true
+        }
+    };
+
+    // spawn and post multiple callback events
+    for (int i = 0; i < num_events; ++i)
+    {
+        callback_event *cb_event = new callback_event{&signals[i]};
+        post_nop_event(queue, reinterpret_cast<uint64_t>(cb_event));
+    }
+
+    // Wait for all events to complete and call the callbacks
+    for (int i = 0; i < num_events; ++i)
+    {
+        callback_event *ptr = reinterpret_cast<callback_event *>(wait_and_get_event(queue));
+        (*ptr)();   // Call the callback
+        delete ptr; // Clean up the callback event
+    }
+
+    // Check if all signals were set
+    for (int i = 0; i < num_events; ++i)
+    {
+        EXPECT_TRUE(signals[i].is_set()) << "Callback " << i << " was not called";
+    }
+
+    // Cleanup
+    destroy_kqueue(queue);
+}
+
+void post_timer_event(int queue, std::chrono::steady_clock::duration duration, uint64_t payload)
+{
+    uint64_t id = generate_random_uint64();
+    struct kevent event;
+    EV_SET(&event, id, EVFILT_TIMER, EV_ADD | EV_ENABLE, NOTE_NSECONDS, std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count(), new uint64_t(payload));
+    int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+    EXPECT_GE(result, 0) << "Failed to spawn timer event to kqueue:" << result;
+}
+
+void wait_for_timeout_event(int queue, uint64_t payload)
+{
+    wait_for_event(queue, payload);
+}
+
+TEST_CASE(kqueue_test_timer)
+{
+    constexpr int payload = 0;
+
+    int queue = initialize_kqueue();
+
+    auto sleep_time = std::chrono::seconds(5);
+
+    post_timer_event(queue, sleep_time, payload);
+
+    auto start = std::chrono::steady_clock::now();
+    wait_for_timeout_event(queue, payload);
+    auto end = std::chrono::steady_clock::now();
+
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+
+    destroy_kqueue(queue);
+}
+
+::async::task<void> test_coroutine(int queue)
+{
+    struct yield_awaiter
+    {
+        int queue;
+
+        constexpr void await_resume() const noexcept {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) const noexcept
+        {
+            // Post the overlapped event to the IOCP
+            post_nop_event(queue, reinterpret_cast<uint64_t>(handle.address()));
+        }
+    };
+
+    int value = 5;
+    co_await yield_awaiter{queue};
+    EXPECT_EQ(value, 5) << "Value should remain unchanged in the coroutine";
+
+    value = 6;
+    co_await yield_awaiter{queue};
+    EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
+}
+
+TEST_CASE(runtime_test_coroutine)
+{
+
+    int queue = initialize_kqueue();
+
+    test_coroutine(queue);
+
+    auto payload = wait_and_get_event(queue);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    payload = wait_and_get_event(queue);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    destroy_kqueue(queue);
+}
+
+::async::task<void> test_timer_coroutine(int queue)
+{
+    struct timer_awaiter
+    {
+        int queue;
+        std::chrono::steady_clock::duration duration;
+
+        constexpr void await_resume() const noexcept {}
+        constexpr bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) const noexcept
+        {
+            // Post the overlapped event to the IOCP
+            post_timer_event(queue, duration, reinterpret_cast<uint64_t>(handle.address()));
+        }
+    };
+
+    constexpr auto sleep_time = std::chrono::seconds(5);
+
+    auto start = std::chrono::steady_clock::now();
+    co_await timer_awaiter{queue, sleep_time};
+    auto end = std::chrono::steady_clock::now();
+
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+
+    start = std::chrono::steady_clock::now();
+    co_await timer_awaiter{queue, sleep_time};
+
+    end = std::chrono::steady_clock::now();
+    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+}
+
+TEST_CASE(runtime_test_timer_coroutine)
+{
+
+    int queue = initialize_kqueue();
+
+    test_timer_coroutine(queue);
+
+    auto payload = wait_and_get_event(queue);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    payload = wait_and_get_event(queue);
+    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
+
+    destroy_kqueue(queue);
+}
+
+#endif

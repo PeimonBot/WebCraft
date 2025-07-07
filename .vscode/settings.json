@@ -119,7 +119,11 @@
 		"print": "cpp",
 		"queue": "cpp",
 		"stack": "cpp",
-		"text_encoding": "cpp"
+		"text_encoding": "cpp",
+		"resumable": "cpp"
 	},
-	"C_Cpp.errorSquiggles": "enabled"
+	"C_Cpp.errorSquiggles": "disabled",
+	"C_Cpp.default.cppStandard": "gnu++23",
+	"C_Cpp.default.cStandard": "gnu17",
+	"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }
