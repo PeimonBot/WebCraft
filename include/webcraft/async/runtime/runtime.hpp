@@ -2,10 +2,11 @@
 
 #include <coroutine>
 #include <concepts>
-#include <async/task.h>
 #include <exception>
 #include <memory>
 #include <iostream>
+#include <stdexec/execution.hpp>
+#include <stop_token>
 
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
@@ -84,51 +85,73 @@ namespace webcraft::async::runtime
         }
     }
 
-    struct callback
+    // Generic runtime event
+    class runtime_event
     {
-        virtual void execute() = 0;
-    };
+    private:
+        int result;
 
-    struct runtime_provider
-    {
-        HANDLE iocp;
+    public:
+        virtual void execute_callback() = 0;
 
-        runtime_provider()
+        int get_result() const
         {
-            iocp = win32::initialize_iocp();
+            return result;
         }
 
-        ~runtime_provider()
+        void set_result(int res)
         {
-            win32::destroy_iocp(iocp);
+            result = res;
         }
     };
 
-    static auto provider = std::make_shared<runtime_provider>();
-
-    /// @brief yields control to the runtime. will be requeued and executed again.
-    /// @return the awaitable for this function
-    ::async::task<void> yield()
+    class runtime_scheduler
     {
-        struct yield_awaiter
+    private:
+        std::stop_source stop_source;
+
+    public:
+        runtime_scheduler() {}
+        ~runtime_scheduler()
         {
-            HANDLE iocp;
+            finish();
+        }
 
-            yield_awaiter(HANDLE iocp) : iocp(iocp) {}
-
-            constexpr void await_resume() const {}
-            constexpr bool await_ready() const noexcept { return false; }
-            void await_suspend(std::coroutine_handle<> handle) noexcept
+        void run_until_stopped()
+        {
+            while (!stop_source.stop_requested())
             {
-                win32::post_nop_event(iocp, reinterpret_cast<uint64_t>(handle.address()));
+                try
+                {
+                    // Wait for an event to be posted
+                    auto ptr = win32::wait_and_get_event(win32::initialize_iocp());
+                    // Process the event
+                    auto *event = reinterpret_cast<runtime_event *>(ptr);
+                    if (event)
+                    {
+                        event->execute_callback();
+                        delete event; // Clean up the event after processing
+                    }
+                    else
+                    {
+                        std::cerr << "Received null event pointer." << std::endl;
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    std::cerr << "Error: " << e.what() << std::endl;
+                }
             }
-        };
+        }
 
-        co_await yield_awaiter(provider->iocp);
-    }
+        void start(stdexec::sender auto &&s)
+        {
+            // Connect it some how, post it idk
+        }
 
-    auto wait_and_get_event()
-    {
-        return win32::wait_and_get_event(provider->iocp);
-    }
+        void finish()
+        {
+            stop_source.request_stop();
+        }
+    };
 }
