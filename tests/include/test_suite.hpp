@@ -3,9 +3,6 @@
 #include <random>
 #include <cstdint>
 #include <chrono>
-#include <async/task.h>
-#include <async/awaitable_get.h>
-#include <async/event_signal.h>
 #include <optional>
 #include <atomic>
 #include <thread>

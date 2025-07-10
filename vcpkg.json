@@ -2,7 +2,7 @@
   "name": "webcraft",
   "version": "0.1.0",
   "dependencies": [
-    "cpp-async",
+    "stdexec",
     {
       "name": "liburing",
       "platform": "linux"

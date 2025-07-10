@@ -4,11 +4,6 @@ project(WebCraft VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_path(CPP_ASYNC_INCLUDE_DIRS "async/task.h")
-if (NOT CPP_ASYNC_INCLUDE_DIRS)
-    set(CPP_ASYNC_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}build/vcpkg_installed/arm64-osx/include")
-endif()
-
 if (WIN32)
     set(WEBCRAFT_PLATFORM_LIBS wsock32 ws2_32)
 elseif (UNIX AND NOT APPLE)
@@ -27,12 +22,14 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Ap
     add_compile_options(-fexperimental-library)
 endif()
 
+find_package(stdexec CONFIG REQUIRED)
 
 file(GLOB_RECURSE WebCraft_SOURCES CONFIGURE_DEPENDS src/webcraft/*.cpp)
 add_library(WebCraft STATIC ${WebCraft_SOURCES})
 
-target_include_directories(WebCraft PUBLIC ${CPP_ASYNC_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(WebCraft PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(WebCraft PUBLIC ${WEBCRAFT_PLATFORM_LIBS})
+target_link_libraries(WebCraft PUBLIC STDEXEC::stdexec)
 
 enable_testing()
 add_subdirectory(tests)

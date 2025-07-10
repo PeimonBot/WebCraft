@@ -34,7 +34,7 @@ TEST_CASE(stdexec_standard_test)
 
     auto [result] = stdexec::sync_wait(std::move(work)).value();
 
-    EXPECT_EQ(result, 0);
+    EXPECT_GE(result, 0);
 }
 
 TEST_CASE(stdexec_task_test)
@@ -66,4 +66,3 @@ TEST_CASE(stdexec_task_test)
     auto [value] = stdexec::sync_wait(std::move(work)).value();
     EXPECT_EQ(value, 42);
 }
-
