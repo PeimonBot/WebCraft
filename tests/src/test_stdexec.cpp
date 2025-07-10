@@ -9,7 +9,6 @@
 #include <thread>
 #include <utility>
 #include <exec/task.hpp>
-#include <stdexec/__detail/__connect_awaitable.hpp>
 
 using namespace std::literals;
 

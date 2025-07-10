@@ -8,6 +8,7 @@
 #include <stdexec/execution.hpp>
 #include <stop_token>
 
+#include <exec/inline_scheduler.hpp>
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -146,8 +147,6 @@ namespace webcraft::async::runtime
 
         void start(stdexec::sender auto &&s)
         {
-            // Connect it some how, post it idk
-            
 
         }
 
