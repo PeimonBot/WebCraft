@@ -2,7 +2,7 @@
 
 #ifdef __linux__
 
-#ifndef __has_include("liburing.h")
+#if __has_include("liburing.h")
 #error "liburing.h not found. Perhaps you did not install it properly?"
 #else
 
@@ -51,4 +51,5 @@ namespace webcraft::async::runtime
                   "native_runtime_handle<runtime_context> is not io_uring*");
 }
 
+#endif
 #endif

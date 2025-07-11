@@ -120,7 +120,8 @@
 		"queue": "cpp",
 		"stack": "cpp",
 		"text_encoding": "cpp",
-		"resumable": "cpp"
+		"resumable": "cpp",
+		"__tree": "cpp"
 	},
 	"C_Cpp.errorSquiggles": "disabled",
 	"C_Cpp.default.cppStandard": "gnu++23",

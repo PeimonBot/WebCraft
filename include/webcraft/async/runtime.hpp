@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexec/execution.hpp>
 #include <stop_token>
+#include <string>
 
 #include <exec/inline_scheduler.hpp>
 #include <exec/timed_scheduler.hpp>
@@ -22,6 +23,8 @@ namespace webcraft::async::runtime
     public:
         virtual void execute_callback() = 0;
 
+        virtual ~runtime_event() = default;
+
         int get_result() const
         {
             return result;
@@ -36,11 +39,11 @@ namespace webcraft::async::runtime
     /// @brief Concept for runtime context traits.
     template <typename T>
     concept runtime_context_trait = requires(T context) {
-        { context.get_scheduler() };
+        { context.get_scheduler() } -> exec::timed_scheduler;
         { context.get_native_handle() };
-        { context.run() } -> void;
-        { context.finish() } -> void;
-    } && exec::timed_scheduler<decltype(std::declval<T>().get_scheduler())>;
+        { context.run() } -> std::same_as<void>;
+        { context.finish() } -> std::same_as<void>;
+    };
 
     /// @brief
     /// @tparam T
@@ -54,14 +57,6 @@ namespace webcraft::async::runtime
     {
         namespace internal
         {
-            struct file_handle
-            {
-
-                file_handle() = default;
-                virtual ~file_handle() = default;
-
-                static std::unique_ptr<file_handle> create(const char *path, file_mode mode);
-            };
 
             enum class file_mode
             {
@@ -69,6 +64,15 @@ namespace webcraft::async::runtime
                 write,
                 append,
                 read_write
+            };
+
+            struct file_handle
+            {
+
+                file_handle() = default;
+                virtual ~file_handle() = default;
+
+                static std::unique_ptr<file_handle> create(const char *path, file_mode mode);
             };
 
             stdexec::sender auto read_file_async(file_handle *handle, void *buffer, size_t size) noexcept;
@@ -103,3 +107,7 @@ namespace webcraft::async::runtime
         }
     }
 }
+
+#include "runtime.linux.hpp"
+#include "runtime.win32.hpp"
+#include "runtime.macos.hpp"
