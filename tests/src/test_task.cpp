@@ -197,3 +197,28 @@ TEST_CASE(TestTaskCompletesAsynchronously)
 
     EXPECT_TRUE(ev.is_set()) << "Event should be set after sync_wait completes";
 }
+
+TEST_CASE(TestTaskWithContinuation)
+{
+    auto async_fn = [&]() -> task<int>
+    {
+        co_return 42;
+    };
+
+    auto task = async_fn() | then([](int value)
+                                  { return value + 1; });
+
+    auto result = sync_wait(task);
+    EXPECT_EQ(result, 43) << "sync_wait should return 42 after the event is set";
+
+    event_signal signal;
+
+    auto task2 = async_fn() | then([&signal](auto value)
+                                   { signal.set(); }) |
+                 then([]
+                      { return 100; });
+
+    auto result2 = sync_wait(task2);
+    EXPECT_EQ(result2, 100) << "sync_wait should return 100 after the continuation is executed";
+    EXPECT_TRUE(signal.is_set()) << "Signal should be set after the continuation is executed";
+}
