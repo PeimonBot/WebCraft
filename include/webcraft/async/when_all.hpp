@@ -5,9 +5,7 @@
 #include <memory>
 #include <atomic>
 
-#include <async/awaitable_resume_t.h>
-
-#include <webcraft/async/awaitable.hpp>
+#include <webcraft/async/task.hpp>
 #include <webcraft/concepts.hpp>
 
 namespace webcraft::async
@@ -33,10 +31,10 @@ namespace webcraft::async
         // Await and collect result
         template <std::ranges::input_range Range, typename R = std::ranges::range_value_t<std::remove_cvref_t<Range>>>
         auto when_all_impl(Range &&tasks, task_result_tag)
-            -> task<std::vector<::async::awaitable_resume_t<R>>>
+            -> task<std::vector<awaitable_resume_t<R>>>
         {
             using Task = R;
-            using T = ::async::awaitable_resume_t<Task>;
+            using T = awaitable_resume_t<Task>;
 
             std::vector<std::optional<T>> results;
             std::vector<task<void>> wrappers;

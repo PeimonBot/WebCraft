@@ -18,10 +18,10 @@ namespace webcraft::async
 
         template <std::ranges::input_range Range, typename R = std::ranges::range_value_t<std::remove_cvref_t<Range>>>
         auto when_any_impl(Range &&tasks, any_result_tag)
-            -> task<::async::awaitable_resume_t<R>>
+            -> task<awaitable_resume_t<R>>
         {
             using Task = R;
-            using T = ::async::awaitable_resume_t<Task>;
+            using T = awaitable_resume_t<Task>;
 
             std::optional<T> result;
             std::atomic<bool> flag{false};

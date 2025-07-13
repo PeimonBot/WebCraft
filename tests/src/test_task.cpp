@@ -3,9 +3,8 @@
 #define TEST_SUITE_NAME TaskTestSuite
 
 #include "test_suite.hpp"
-#include <webcraft/async/task.hpp>
 #include <string>
-#include <webcraft/async/async_event.hpp>
+#include <webcraft/async/async.hpp>
 
 using namespace webcraft::async;
 
