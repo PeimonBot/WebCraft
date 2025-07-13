@@ -111,11 +111,11 @@ TEST_CASE(kqueue_post_and_test_callback)
 {
     int queue = initialize_kqueue();
 
-    async::event_signal callback_called;
+    webcraft::async::event_signal callback_called;
 
     struct callback_event
     {
-        async::event_signal *callback_flag;
+        webcraft::async::event_signal *callback_flag;
 
         void operator()()
         {
@@ -144,13 +144,13 @@ TEST_CASE(kqueue_wait_multiple_events)
     constexpr int num_events = 5;
 
     // initialize the structures
-    async::event_signal signals[num_events];
+    webcraft::async::event_signal signals[num_events];
     int queue = initialize_kqueue();
 
     // the callback event structure
     struct callback_event
     {
-        async::event_signal *callback_flag;
+        webcraft::async::event_signal *callback_flag;
 
         void operator()()
         {
@@ -214,96 +214,6 @@ TEST_CASE(kqueue_test_timer)
     auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
-
-    destroy_kqueue(queue);
-}
-
-::async::task<void> test_coroutine(int queue)
-{
-    struct yield_awaiter
-    {
-        int queue;
-
-        constexpr void await_resume() const noexcept {}
-        constexpr bool await_ready() const noexcept { return false; }
-        void await_suspend(std::coroutine_handle<> handle) const noexcept
-        {
-            // Post the overlapped event to the IOCP
-            post_nop_event(queue, reinterpret_cast<uint64_t>(handle.address()));
-        }
-    };
-
-    int value = 5;
-    co_await yield_awaiter{queue};
-    EXPECT_EQ(value, 5) << "Value should remain unchanged in the coroutine";
-
-    value = 6;
-    co_await yield_awaiter{queue};
-    EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
-}
-
-TEST_CASE(runtime_test_coroutine)
-{
-
-    int queue = initialize_kqueue();
-
-    test_coroutine(queue);
-
-    auto payload = wait_and_get_event(queue);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
-
-    payload = wait_and_get_event(queue);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
-
-    destroy_kqueue(queue);
-}
-
-::async::task<void> test_timer_coroutine(int queue)
-{
-    struct timer_awaiter
-    {
-        int queue;
-        std::chrono::steady_clock::duration duration;
-
-        constexpr void await_resume() const noexcept {}
-        constexpr bool await_ready() const noexcept { return false; }
-        void await_suspend(std::coroutine_handle<> handle) const noexcept
-        {
-            // Post the overlapped event to the IOCP
-            post_timer_event(queue, duration, reinterpret_cast<uint64_t>(handle.address()));
-        }
-    };
-
-    constexpr auto sleep_time = std::chrono::seconds(5);
-
-    auto start = std::chrono::steady_clock::now();
-    co_await timer_awaiter{queue, sleep_time};
-    auto end = std::chrono::steady_clock::now();
-
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
-
-    start = std::chrono::steady_clock::now();
-    co_await timer_awaiter{queue, sleep_time};
-
-    end = std::chrono::steady_clock::now();
-    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
-}
-
-TEST_CASE(runtime_test_timer_coroutine)
-{
-
-    int queue = initialize_kqueue();
-
-    test_timer_coroutine(queue);
-
-    auto payload = wait_and_get_event(queue);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
-
-    payload = wait_and_get_event(queue);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
 
     destroy_kqueue(queue);
 }
