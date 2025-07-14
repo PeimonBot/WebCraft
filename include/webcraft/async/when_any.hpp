@@ -6,113 +6,125 @@
 
 namespace webcraft::async
 {
-    namespace details
+    template <awaitable_t Awaitable>
+        requires std::same_as<awaitable_resume_t<Awaitable>, void>
+    task<void> wait_and_trigger(Awaitable &&awaitable, async_event &evt, std::atomic<std::size_t> &winner, std::size_t index)
     {
-
-        struct any_result_tag
+        co_await awaitable;
+        std::size_t expected = -1;
+        if (winner.compare_exchange_strong(expected, index, std::memory_order_acq_rel))
         {
-        };
-        struct any_void_tag
-        {
-        };
-
-        template <std::ranges::input_range Range, typename R = std::ranges::range_value_t<std::remove_cvref_t<Range>>>
-        auto when_any_impl(Range &&tasks, any_result_tag)
-            -> task<awaitable_resume_t<R>>
-        {
-            using Task = R;
-            using T = awaitable_resume_t<Task>;
-
-            std::optional<T> result;
-            std::atomic<bool> flag{false};
-            async_event ev;
-
-            std::vector<task<void>> wrapped_tasks;
-            if constexpr (std::ranges::sized_range<Range>)
-                wrapped_tasks.reserve(std::ranges::size(tasks));
-
-            for (auto &&t : tasks)
-            {
-                struct task_wrapper
-                {
-                    task<T> t;
-                    std::atomic<bool> &flag;
-                    std::optional<T> &result;
-                    async_event &ev;
-
-                    task<void> operator()()
-                    {
-                        T value = co_await t;
-                        bool expected = false;
-                        if (flag.compare_exchange_strong(expected, true, std::memory_order_relaxed))
-                        {
-                            result = std::move(value);
-                            ev.set();
-                        }
-                    }
-                };
-
-                task_wrapper wrapper{std::move(t), flag, result, ev};
-
-                wrapped_tasks.emplace_back(wrapper());
-            }
-
-            co_await ev;
-            co_return std::move(*result); // safe due to `ev`
+            evt.set(); // Notify the event
         }
-
-        template <std::ranges::input_range Range>
-        task<void> when_any_impl(Range &&tasks, any_void_tag)
-        {
-            std::atomic<bool> flag{false};
-            async_event ev;
-
-            std::vector<task<void>> wrapped_tasks;
-            if constexpr (std::ranges::sized_range<Range>)
-                wrapped_tasks.reserve(std::ranges::size(tasks));
-
-            for (auto &&t : tasks)
-            {
-
-                struct task_wrapper
-                {
-                    task<void> t;
-                    std::atomic<bool> &flag;
-                    async_event &ev;
-
-                    task<void> operator()()
-                    {
-                        co_await t;
-                        bool expected = false;
-                        if (flag.compare_exchange_strong(expected, true, std::memory_order_relaxed))
-                        {
-                            ev.set();
-                        }
-                    }
-                };
-
-                task_wrapper wrapper{std::move(t), flag, ev};
-
-                wrapped_tasks.emplace_back(wrapper());
-            }
-
-            co_await ev;
-        }
+        co_return;
     }
 
-    /// @brief Executes all the tasks concurrently and returns the first one which finishes and either cancels or discards the other tasks (once first one complete, the other tasks need not complete)
-    /// @tparam ...Rets the return arguments of the tasks
-    /// @param tasks the tasks to execute
-    /// @return the result of the first task to finish
-    template <std::ranges::input_range Range>
-    auto when_any(Range &&tasks)
+    template <std::ranges::input_range Range,
+              typename T = std::ranges::range_value_t<Range>,
+              typename Result = awaitable_resume_t<T>>
+        requires awaitable_t<T> && std::same_as<Result, void>
+    task<void> when_any(Range &&tasks)
     {
-        using Task = std::ranges::range_value_t<std::remove_cvref_t<Range>>;
+        async_event event;
+        std::atomic<std::size_t> winner = -1;
 
-        if constexpr (std::same_as<Task, task<void>>)
-            return details::when_any_impl(std::forward<Range>(tasks), details::any_void_tag{});
-        else
-            return details::when_any_impl(std::forward<Range>(tasks), details::any_result_tag{});
+        std::vector<task<void>> wait_tasks;
+
+        size_t index = 0;
+        for (auto &&task : tasks)
+        {
+            wait_tasks.emplace_back(wait_and_trigger(std::forward<decltype(task)>(task), event, winner, index++));
+        }
+
+        co_await event;
     }
 
+    template <awaitable_t Awaitable, typename Result = awaitable_resume_t<Awaitable>>
+        requires(!std::same_as<Result, void>)
+    task<void> wait_and_trigger(Awaitable &&awaitable, async_event &evt, std::atomic<std::size_t> &winner, std::optional<Result> &opt, std::size_t index)
+    {
+        auto value = co_await awaitable;
+        std::size_t expected = -1;
+        if (winner.compare_exchange_strong(expected, index, std::memory_order_acq_rel))
+        {
+            opt = std::forward<Result>(value);
+            evt.set(); // Notify the event
+        }
+        co_return;
+    }
+
+    template <std::ranges::input_range Range,
+              typename T = std::ranges::range_value_t<Range>,
+              typename Result = awaitable_resume_t<T>>
+        requires awaitable_t<T> && (!std::same_as<Result, void>)
+    task<Result> when_any(Range &&tasks)
+    {
+        async_event event;
+        std::atomic<std::size_t> winner = -1;
+
+        std::vector<task<void>> wait_tasks;
+        std::optional<Result> result;
+
+        size_t index = 0;
+        for (auto &&task : tasks)
+        {
+            wait_tasks.emplace_back(wait_and_trigger(std::forward<decltype(task)>(task), event, winner, result, index++));
+        }
+
+        co_await event;
+
+        if (winner.load(std::memory_order_acquire) != -1)
+        {
+            co_return result.value();
+        }
+
+        throw std::runtime_error("No task completed successfully");
+    }
+
+    template <typename... Tasks>
+        requires(awaitable_t<Tasks> && ...)
+    task<std::variant<normalized_result_t<Tasks>...>> when_any(std::tuple<Tasks...> tasks)
+    {
+        using result_variant_t = std::variant<normalized_result_t<Tasks>...>;
+
+        auto evt = std::make_shared<async_event>();
+        auto result = std::make_shared<std::optional<result_variant_t>>();
+        auto done = std::make_shared<std::atomic<bool>>(false);
+
+        auto await_one = [evt, result, done]<std::size_t I>(auto &&t) -> task<void>
+        {
+            using Res = normalized_result_t<std::tuple_element_t<I, std::tuple<Tasks...>>>;
+
+            if constexpr (std::same_as<Res, std::monostate>)
+            {
+                co_await t;
+                if (!done->exchange(true))
+                {
+                    *result = result_variant_t{std::in_place_index<I>, std::monostate{}};
+                    evt->set();
+                }
+            }
+            else
+            {
+                auto r = co_await t;
+                if (!done->exchange(true))
+                {
+                    *result = result_variant_t{std::in_place_index<I>, std::move(r)};
+                    evt->set();
+                }
+            }
+
+            co_return;
+        };
+
+        // Launch all sub-tasks
+        std::vector<task<void>> tasks_vector;
+        [&]<std::size_t... Is>(std::index_sequence<Is...>)
+        {
+            (tasks_vector.emplace_back(await_one.template operator()<Is>(std::get<Is>(tasks))), ...);
+        }(std::make_index_sequence<sizeof...(Tasks)>{});
+
+        co_await *evt;
+        co_return std::move(result->value());
+    }
 }

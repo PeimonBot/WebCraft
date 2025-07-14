@@ -22,7 +22,7 @@ struct awaitable_with_co_await
 };
 
 static_assert(awaitable_t<awaitable_with_co_await>, "awaitable_with_co_await should be considered awaitable");
-static_assert(std::same_as<::awaitable_resume_t<awaitable_with_co_await>, void>, "awaitable_with_co_await should resume to void");
+static_assert(std::same_as<awaitable_resume_t<awaitable_with_co_await>, void>, "awaitable_with_co_await should resume to void");
 
 struct awaitable_with_awaitable_elements
 {
@@ -32,7 +32,7 @@ struct awaitable_with_awaitable_elements
 };
 
 static_assert(awaitable_t<awaitable_with_awaitable_elements>, "awaitable_with_awaitable_elements should be considered awaitable");
-static_assert(std::same_as<::awaitable_resume_t<awaitable_with_awaitable_elements>, void>, "awaitable_with_co_await should resume to void");
+static_assert(std::same_as<awaitable_resume_t<awaitable_with_awaitable_elements>, void>, "awaitable_with_co_await should resume to void");
 
 struct awaitable_outside
 {
@@ -44,7 +44,7 @@ auto operator co_await(awaitable_outside) noexcept
 }
 
 static_assert(awaitable_t<awaitable_outside>, "awaitable_outside should be considered awaitable");
-static_assert(std::same_as<::awaitable_resume_t<awaitable_outside>, void>, "awaitable_with_co_await should resume to void");
+static_assert(std::same_as<awaitable_resume_t<awaitable_outside>, void>, "awaitable_with_co_await should resume to void");
 
 // ensuring that awaitable with a resume type is correctly identified
 struct awaitable_with_resume_type_int
@@ -55,7 +55,7 @@ struct awaitable_with_resume_type_int
 };
 
 static_assert(awaitable_t<awaitable_with_resume_type_int>, "awaitable_with_resume_type_int should be considered awaitable");
-static_assert(std::same_as<::awaitable_resume_t<awaitable_with_resume_type_int>, int>, "awaitable_with_resume_type_int should resume to int");
+static_assert(std::same_as<awaitable_resume_t<awaitable_with_resume_type_int>, int>, "awaitable_with_resume_type_int should resume to int");
 
 // ensuring that task is awaitable
 static_assert(awaitable_t<task<int>>, "task<int> should be considered awaitable");
@@ -367,4 +367,112 @@ TEST_CASE(TestTaskWhenAllHeterogenous)
 
     EXPECT_GE(duration, timeout_3) << "when_all should wait for the longest task to complete";
     EXPECT_LE(duration, timeout_3 + std::chrono::milliseconds(100)) << "when_all should not wait too long";
+}
+
+TEST_CASE(TestTaskWhenAnyVoid)
+{
+    constexpr std::chrono::milliseconds timeout_1(500);
+    constexpr std::chrono::milliseconds timeout_2(300);
+
+    event_signal signal1, signal2;
+
+    auto task1 = [&]() -> task<void>
+    {
+        co_await resume_on_thread_with_timeout{timeout_1};
+        signal1.set();
+        co_return;
+    };
+
+    auto task2 = [&]() -> task<void>
+    {
+        co_await resume_on_thread_with_timeout{timeout_2};
+        signal2.set();
+        co_return;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+    std::vector<task<void>> tasks;
+    tasks.emplace_back(task1());
+    tasks.emplace_back(task2());
+
+    sync_wait(when_any(tasks));
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_TRUE(signal2.is_set()) << "At least one signal should be set after when_any completes";
+    EXPECT_TRUE(!signal1.is_set()) << "Only the first task should complete, as it is the shortest";
+    EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
+    EXPECT_LE(duration, timeout_2 + std::chrono::milliseconds(100)) << "when_any should not wait too long";
+}
+
+TEST_CASE(TestTaskWhenAnyReturnType)
+{
+    constexpr std::chrono::milliseconds timeout_1(500);
+    constexpr std::chrono::milliseconds timeout_2(300);
+
+    auto task1 = [&]() -> task<int>
+    {
+        co_await resume_on_thread_with_timeout{timeout_1};
+        co_return 5;
+    };
+
+    auto task2 = [&]() -> task<int>
+    {
+        co_await resume_on_thread_with_timeout{timeout_2};
+        co_return 3;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+    std::vector<task<int>> tasks;
+    tasks.emplace_back(task1());
+    tasks.emplace_back(task2());
+
+    auto result = sync_wait(when_any(tasks));
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_EQ(result, 3) << "when_any should return the result of the first completed task";
+    EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
+    EXPECT_LE(duration, timeout_2 + std::chrono::milliseconds(100)) << "when_any should not wait too long";
+}
+
+TEST_CASE(TestTaskWhenAnyHeterogeneous)
+{
+    constexpr std::chrono::milliseconds timeout_1(500);
+    constexpr std::chrono::milliseconds timeout_2(300);
+    constexpr std::chrono::milliseconds timeout_3(800);
+
+    event_signal signal;
+
+    auto task1 = [&]() -> task<int>
+    {
+        co_await resume_on_thread_with_timeout{timeout_1};
+        co_return 1;
+    };
+
+    auto task2 = [&]() -> task<std::string>
+    {
+        co_await resume_on_thread_with_timeout{timeout_2};
+        co_return "two";
+    };
+
+    auto task3 = [&]() -> task<void>
+    {
+        co_await resume_on_thread_with_timeout{timeout_3};
+        signal.set();
+        co_return;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+
+    auto result = sync_wait(when_any(std::make_tuple(task1(), task2(), task3())));
+
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_TRUE(std::holds_alternative<std::string>(result)) << "Result should be either int or string";
+    EXPECT_EQ(std::get<std::string>(result), "two") << "Second result should be 'two'";
+
+    EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
+    EXPECT_LE(duration, timeout_2 + std::chrono::milliseconds(100)) << "when_any should not wait too long";
 }
