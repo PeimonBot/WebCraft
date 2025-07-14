@@ -107,6 +107,9 @@ namespace webcraft::async
                 coro.destroy();
         }
 
+        task(const task &) = delete;
+        task &operator=(const task &) = delete;
+
         bool await_ready() const noexcept
         {
             return !coro || coro.done();
@@ -155,6 +158,9 @@ namespace webcraft::async
             if (coro)
                 coro.destroy();
         }
+
+        task(const task &) = delete;
+        task &operator=(const task &) = delete;
 
         bool await_ready() const noexcept
         {

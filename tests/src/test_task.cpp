@@ -222,3 +222,149 @@ TEST_CASE(TestTaskWithContinuation)
     EXPECT_EQ(result2, 100) << "sync_wait should return 100 after the continuation is executed";
     EXPECT_TRUE(signal.is_set()) << "Signal should be set after the continuation is executed";
 }
+
+TEST_CASE(TestTaskEagerness)
+{
+    event_signal signal;
+
+    auto async_fn = [&]() -> task<void>
+    {
+        signal.set();
+        co_return;
+    };
+
+    auto _ = async_fn();
+
+    EXPECT_TRUE(signal.is_set()) << "Signal should be set immediately after task creation";
+}
+
+struct resume_on_thread_with_timeout
+{
+    std::chrono::milliseconds timeout;
+
+    bool await_ready() const noexcept { return false; }
+
+    void await_suspend(std::coroutine_handle<> h) const noexcept
+    {
+        std::thread([h, this]()
+                    {
+            std::this_thread::sleep_for(timeout);
+            h.resume(); })
+            .detach();
+    }
+
+    void await_resume() const noexcept {}
+};
+
+TEST_CASE(TestTaskWhenAllVoid)
+{
+    constexpr std::chrono::milliseconds timeout_1(500);
+    constexpr std::chrono::milliseconds timeout_2(300);
+
+    event_signal signal1, signal2;
+
+    auto task1 = [&]() -> task<void>
+    {
+        co_await resume_on_thread_with_timeout{timeout_1};
+        signal1.set();
+        co_return;
+    };
+
+    auto task2 = [&]() -> task<void>
+    {
+        co_await resume_on_thread_with_timeout{timeout_2};
+        signal2.set();
+        co_return;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+    std::vector<task<void>> tasks;
+    tasks.emplace_back(task1());
+    tasks.emplace_back(task2());
+
+    sync_wait(when_all(tasks));
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_TRUE(signal1.is_set()) << "First signal should be set after when_all completes";
+    EXPECT_TRUE(signal2.is_set()) << "Second signal should be set after when_all completes";
+    EXPECT_GE(duration, timeout_1) << "when_all should wait for the longest task to complete";
+    EXPECT_LE(duration, timeout_1 + std::chrono::milliseconds(100)) << "when_all should not wait too long";
+}
+
+TEST_CASE(TestTaskWhenAllHomogenous)
+{
+    constexpr std::chrono::milliseconds timeout_1(500);
+    constexpr std::chrono::milliseconds timeout_2(300);
+
+    auto task1 = [&]() -> task<int>
+    {
+        co_await resume_on_thread_with_timeout{timeout_1};
+
+        co_return 1;
+    };
+
+    auto task2 = [&]() -> task<int>
+    {
+        co_await resume_on_thread_with_timeout{timeout_2};
+        co_return 2;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+
+    std::vector<task<int>> tasks;
+    tasks.emplace_back(task1());
+    tasks.emplace_back(task2());
+    auto results = sync_wait(when_all(tasks));
+
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_EQ(results.size(), 2) << "when_all should return a vector of results";
+    EXPECT_EQ(results[0], 1) << "First result should be 1";
+    EXPECT_EQ(results[1], 2) << "Second result should be 2";
+
+    EXPECT_GE(duration, timeout_1) << "when_all should wait for the longest task to complete";
+    EXPECT_LE(duration, timeout_1 + std::chrono::milliseconds(100)) << "when_all should not wait too long";
+}
+
+TEST_CASE(TestTaskWhenAllHeterogenous)
+{
+    constexpr std::chrono::milliseconds timeout_1(500);
+    constexpr std::chrono::milliseconds timeout_2(300);
+    constexpr std::chrono::milliseconds timeout_3(800);
+    event_signal signal;
+
+    auto task1 = [&]() -> task<int>
+    {
+        co_await resume_on_thread_with_timeout{timeout_1};
+        co_return 1;
+    };
+
+    auto task2 = [&]() -> task<std::string>
+    {
+        co_await resume_on_thread_with_timeout{timeout_2};
+        co_return "two";
+    };
+
+    auto task3 = [&]() -> task<void>
+    {
+        co_await resume_on_thread_with_timeout{timeout_3};
+        signal.set();
+        co_return;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+
+    auto results = sync_wait(when_all(std::make_tuple(task1(), task2(), task3())));
+
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    EXPECT_EQ(std::get<0>(results), 1) << "First result should be 1";
+    EXPECT_EQ(std::get<1>(results), "two") << "Second result should be 'two'";
+    EXPECT_TRUE(signal.is_set()) << "Signal should be set after the third task completes";
+
+    EXPECT_GE(duration, timeout_3) << "when_all should wait for the longest task to complete";
+    EXPECT_LE(duration, timeout_3 + std::chrono::milliseconds(100)) << "when_all should not wait too long";
+}
