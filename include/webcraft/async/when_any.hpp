@@ -123,7 +123,8 @@ namespace webcraft::async
                 if constexpr (std::is_void_v<Result>)
                 {
                     co_await t;
-                    if (winner.exchange(true, std::memory_order_acq_rel))
+                    bool expected = false;
+                    if (winner.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
                     {
                         opt = std::monostate{}; // If already won, set to monostate
                         co_return;              // If already won, do nothing
