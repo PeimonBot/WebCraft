@@ -8,8 +8,11 @@ namespace webcraft::async
 
     struct async_event
     {
+    private:
         std::vector<std::coroutine_handle<>> handles;
+        std::atomic<bool> flag{false};
 
+    public:
         constexpr bool await_ready() { return false; }
         constexpr void await_suspend(std::coroutine_handle<> h)
         {
@@ -19,6 +22,8 @@ namespace webcraft::async
 
         void set()
         {
+            if (flag.exchange(true, std::memory_order_release))
+                return;
             // resumes the coroutine
             for (auto &h : this->handles)
             {
@@ -27,6 +32,11 @@ namespace webcraft::async
                     h.resume();
                 }
             }
+        }
+
+        bool is_set() const
+        {
+            return flag.load(std::memory_order_acquire);
         }
     };
 }

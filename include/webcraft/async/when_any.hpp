@@ -6,113 +6,185 @@
 
 namespace webcraft::async
 {
-    namespace details
+    namespace detail
     {
 
-        struct any_result_tag
+        class self_deleting_task
         {
-        };
-        struct any_void_tag
-        {
-        };
-
-        template <std::ranges::input_range Range, typename R = std::ranges::range_value_t<std::remove_cvref_t<Range>>>
-        auto when_any_impl(Range &&tasks, any_result_tag)
-            -> task<::async::awaitable_resume_t<R>>
-        {
-            using Task = R;
-            using T = ::async::awaitable_resume_t<Task>;
-
-            std::optional<T> result;
-            std::atomic<bool> flag{false};
-            async_event ev;
-
-            std::vector<task<void>> wrapped_tasks;
-            if constexpr (std::ranges::sized_range<Range>)
-                wrapped_tasks.reserve(std::ranges::size(tasks));
-
-            for (auto &&t : tasks)
+        public:
+            class promise_type
             {
-                struct task_wrapper
+            public:
+                self_deleting_task get_return_object()
                 {
-                    task<T> t;
-                    std::atomic<bool> &flag;
-                    std::optional<T> &result;
-                    async_event &ev;
+                    return self_deleting_task{this};
+                }
 
-                    task<void> operator()()
-                    {
-                        T value = co_await t;
-                        bool expected = false;
-                        if (flag.compare_exchange_strong(expected, true, std::memory_order_relaxed))
-                        {
-                            result = std::move(value);
-                            ev.set();
-                        }
-                    }
-                };
+                std::suspend_always initial_suspend() noexcept { return {}; }
+                std::suspend_never final_suspend() noexcept { return {}; }
 
-                task_wrapper wrapper{std::move(t), flag, result, ev};
+                void return_void() noexcept {}
+                void unhandled_exception() noexcept {}
+            };
 
-                wrapped_tasks.emplace_back(wrapper());
+            self_deleting_task(promise_type *p) : m_promise(p) {}
+
+            auto promise() const noexcept
+            {
+                return *m_promise;
             }
 
-            co_await ev;
-            co_return std::move(*result); // safe due to `ev`
-        }
-
-        template <std::ranges::input_range Range>
-        task<void> when_any_impl(Range &&tasks, any_void_tag)
-        {
-            std::atomic<bool> flag{false};
-            async_event ev;
-
-            std::vector<task<void>> wrapped_tasks;
-            if constexpr (std::ranges::sized_range<Range>)
-                wrapped_tasks.reserve(std::ranges::size(tasks));
-
-            for (auto &&t : tasks)
+            bool resume()
             {
-
-                struct task_wrapper
+                auto h = std::coroutine_handle<promise_type>::from_promise(*m_promise);
+                if (!h.done())
                 {
-                    task<void> t;
-                    std::atomic<bool> &flag;
-                    async_event &ev;
-
-                    task<void> operator()()
-                    {
-                        co_await t;
-                        bool expected = false;
-                        if (flag.compare_exchange_strong(expected, true, std::memory_order_relaxed))
-                        {
-                            ev.set();
-                        }
-                    }
-                };
-
-                task_wrapper wrapper{std::move(t), flag, ev};
-
-                wrapped_tasks.emplace_back(wrapper());
+                    h.resume();
+                }
+                return !h.done();
             }
 
-            co_await ev;
+        private:
+            promise_type *m_promise = nullptr;
+        };
+
+        template <awaitable_t Awaitable>
+            requires std::same_as<awaitable_resume_t<Awaitable>, void>
+        task<void> wait_and_trigger(Awaitable &&awaitable, async_event &evt, std::atomic<bool> &winner)
+        {
+            co_await awaitable;
+            bool expected = false;
+            if (winner.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                evt.set(); // Notify the event
+            }
+            co_return;
         }
+
+        template <std::ranges::input_range Range,
+                  typename T = std::ranges::range_value_t<Range>,
+                  typename Result = awaitable_resume_t<T>>
+            requires awaitable_t<T> && std::same_as<Result, void>
+        self_deleting_task when_any_controller(Range &&tasks, async_event &event)
+        {
+            std::atomic<bool> winner = false;
+            std::vector<task<void>> wait_tasks;
+
+            for (auto &&task : tasks)
+            {
+                wait_tasks.emplace_back(wait_and_trigger(std::forward<decltype(task)>(task), event, winner));
+            }
+
+            co_await when_all(wait_tasks);
+            co_return;
+        }
+
+        template <awaitable_t Awaitable, typename Result = awaitable_resume_t<Awaitable>>
+            requires(!std::same_as<Result, void>)
+        task<void> wait_and_trigger(Awaitable &&awaitable, async_event &evt, std::atomic<bool> &winner, std::optional<Result> &opt)
+        {
+            auto value = co_await awaitable;
+            bool expected = false;
+            if (winner.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                opt = std::forward<Result>(value);
+                evt.set(); // Notify the event
+            }
+            co_return;
+        }
+
+        template <std::ranges::input_range Range,
+                  typename T = std::ranges::range_value_t<Range>,
+                  typename Result = awaitable_resume_t<T>>
+            requires awaitable_t<T> && (!std::same_as<Result, void>)
+        self_deleting_task when_any_controller(Range &&tasks, async_event &event, std::optional<Result> &opt)
+        {
+            std::atomic<bool> winner = false;
+            std::vector<task<void>> wait_tasks;
+
+            for (auto &&task : tasks)
+            {
+                wait_tasks.emplace_back(wait_and_trigger(std::forward<decltype(task)>(task), event, winner, opt));
+            }
+
+            co_await when_all(wait_tasks);
+            co_return;
+        }
+
+        template <awaitable_t... Awaitable>
+        self_deleting_task when_any_controller_tuple(async_event &event, std::optional<std::variant<normalized_result_t<Awaitable>...>> &opt, Awaitable &&...t)
+        {
+            std::atomic<bool> winner = false;
+            std::vector<task<void>> wait_tasks;
+
+            auto decorator = [&](auto &&t) -> task<void>
+            {
+                using Result = awaitable_resume_t<decltype(t)>;
+                if constexpr (std::is_void_v<Result>)
+                {
+                    co_await t;
+                    bool expected = false;
+                    if (winner.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+                    {
+                        opt = std::monostate{}; // If already won, set to monostate
+                        co_return;              // If already won, do nothing
+                    }
+                }
+                else
+                {
+                    auto value = co_await t;
+                    bool expected = false;
+                    if (winner.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+                    {
+                        opt = std::forward<Result>(value);
+                        event.set(); // Notify the event
+                    }
+                }
+            };
+
+            co_await when_all(std::make_tuple(decorator(std::forward<Awaitable>(t))...));
+            co_return;
+        };
     }
 
-    /// @brief Executes all the tasks concurrently and returns the first one which finishes and either cancels or discards the other tasks (once first one complete, the other tasks need not complete)
-    /// @tparam ...Rets the return arguments of the tasks
-    /// @param tasks the tasks to execute
-    /// @return the result of the first task to finish
-    template <std::ranges::input_range Range>
-    auto when_any(Range &&tasks)
+    template <std::ranges::input_range Range,
+              typename T = std::ranges::range_value_t<Range>,
+              typename Result = awaitable_resume_t<T>>
+        requires awaitable_t<T>
+    task<Result> when_any(Range &&tasks)
     {
-        using Task = std::ranges::range_value_t<std::remove_cvref_t<Range>>;
+        async_event event;
 
-        if constexpr (std::same_as<Task, task<void>>)
-            return details::when_any_impl(std::forward<Range>(tasks), details::any_void_tag{});
+        if constexpr (std::is_void_v<Result>)
+        {
+            auto task = detail::when_any_controller(std::forward<Range>(tasks), event);
+            task.resume();
+
+            co_await event;
+            co_return;
+        }
         else
-            return details::when_any_impl(std::forward<Range>(tasks), details::any_result_tag{});
+        {
+            std::optional<Result> result;
+
+            auto task = detail::when_any_controller(std::forward<Range>(tasks), event, result);
+            task.resume();
+            co_await event;
+
+            co_return result.value();
+        }
     }
 
+    template <awaitable_t... Tasks>
+    task<std::variant<normalized_result_t<Tasks>...>> when_any(Tasks &&...tasks)
+    {
+        using result_variant_t = std::variant<normalized_result_t<Tasks>...>;
+
+        async_event event;
+        std::optional<result_variant_t> result;
+        auto task = detail::when_any_controller_tuple(event, result, std::forward<Tasks>(tasks)...);
+        task.resume();
+        co_await event;
+        co_return std::move(result.value());
+    }
 }

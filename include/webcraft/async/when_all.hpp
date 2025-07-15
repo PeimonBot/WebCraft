@@ -4,92 +4,82 @@
 #include <ranges>
 #include <memory>
 #include <atomic>
+#include <utility>
 
-#include <async/awaitable_resume_t.h>
-
-#include <webcraft/async/awaitable.hpp>
+#include <webcraft/async/task.hpp>
 #include <webcraft/concepts.hpp>
+#include <webcraft/ranges.hpp>
+#include <variant>
 
 namespace webcraft::async
 {
-
-    namespace details
+    template <std::ranges::input_range Range,
+              typename T = std::ranges::range_value_t<Range>,
+              typename Result = awaitable_resume_t<T>>
+        requires awaitable_t<T> && (!std::is_void_v<Result>)
+    task<std::vector<Result>> when_all(Range &&tasks)
     {
-        struct task_vector_tag
-        {
-        };
-        struct task_result_tag
-        {
-        };
+        std::vector<Result> results;
+        results.reserve(std::ranges::size(tasks));
 
-        // Await and discard result
-        template <std::ranges::input_range Range>
-        task<void> when_all_impl(Range &&tasks, task_vector_tag)
+        for (auto &&t : tasks)
         {
-            for (auto &&t : tasks)
-                co_await t;
+            results.push_back(co_await t);
         }
 
-        // Await and collect result
-        template <std::ranges::input_range Range, typename R = std::ranges::range_value_t<std::remove_cvref_t<Range>>>
-        auto when_all_impl(Range &&tasks, task_result_tag)
-            -> task<std::vector<::async::awaitable_resume_t<R>>>
-        {
-            using Task = R;
-            using T = ::async::awaitable_resume_t<Task>;
-
-            std::vector<std::optional<T>> results;
-            std::vector<task<void>> wrappers;
-
-            if constexpr (std::ranges::sized_range<Range>)
-            {
-                results.reserve(std::ranges::size(tasks));
-                wrappers.reserve(std::ranges::size(tasks));
-            }
-
-            for (auto &&t : tasks)
-            {
-                auto &slot = results.emplace_back(std::nullopt);
-
-                struct task_wrapper
-                {
-                    task<T> t;
-                    std::optional<T> &slot;
-
-                    task<void> operator()()
-                    {
-                        slot = co_await t;
-                    }
-                };
-
-                task_wrapper wrapper{std::move(t), slot};
-
-                wrappers.emplace_back(wrapper());
-            }
-
-            co_await when_all_impl(std::move(wrappers), task_vector_tag{});
-
-            co_return std::vector<T>(results | std::views::transform([](const auto &opt) -> T
-                                                                     {
-                if (opt.has_value())
-                    return *opt;
-                else
-                    throw std::runtime_error("Task result is not available"); }));
-        }
+        co_return results;
     }
 
-    /// @brief Executes all the tasks concurrently and returns the result of all tasks in the submitted order
-    /// @tparam range the range of the view
-    /// @param tasks the tasks to execute
-    /// @return the result of all tasks in the submitted order
-    template <std::ranges::input_range Range>
-    auto when_all(Range &&tasks)
+    template <std::ranges::input_range Range,
+              typename T = std::ranges::range_value_t<Range>,
+              typename Result = awaitable_resume_t<T>>
+        requires awaitable_t<T> && std::is_void_v<Result>
+    task<void> when_all(Range &&tasks)
     {
-        using Task = std::ranges::range_value_t<std::remove_cvref_t<Range>>;
+        for (auto &&t : tasks)
+        {
+            co_await t;
+        }
 
-        if constexpr (std::same_as<Task, task<void>>)
-            return details::when_all_impl(std::forward<Range>(tasks), details::task_vector_tag{});
-        else
-            return details::when_all_impl(std::forward<Range>(tasks), details::task_result_tag{});
+        co_return;
+    }
+
+    template <typename T>
+    using normalized_result_t = std::conditional_t<
+        std::is_void_v<awaitable_resume_t<T>>,
+        std::monostate,
+        awaitable_resume_t<T>>;
+
+    template <typename... Tasks>
+        requires(awaitable_t<Tasks> && ...)
+    task<std::tuple<normalized_result_t<Tasks>...>> when_all(std::tuple<Tasks...> tasks)
+    {
+        auto await_one = [](auto &&t) -> task<normalized_result_t<decltype(t)>>
+        {
+            if constexpr (std::same_as<awaitable_resume_t<decltype(t)>, void>)
+            {
+                co_await t;
+                co_return std::monostate{};
+            }
+            else
+            {
+                co_return co_await t;
+            }
+        };
+
+        auto await_many = [&]<std::size_t... Is>(std::index_sequence<Is...>) -> task<std::tuple<normalized_result_t<Tasks>...>>
+        {
+            co_return std::tuple<normalized_result_t<Tasks>...>{
+                co_await await_one(std::get<Is>(tasks))...};
+        };
+
+        co_return co_await await_many(std::make_index_sequence<sizeof...(Tasks)>{});
+    }
+
+    template <typename... Tasks>
+        requires(awaitable_t<Tasks> && ...)
+    task<std::tuple<normalized_result_t<Tasks>...>> when_all(Tasks &&...tasks)
+    {
+        co_return co_await when_all(std::make_tuple(std::forward<Tasks>(tasks)...));
     }
 }

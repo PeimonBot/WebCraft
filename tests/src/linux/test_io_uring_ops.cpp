@@ -102,11 +102,11 @@ TEST_CASE(io_uring_post_and_test_callback)
     struct io_uring ring;
     initialize_io_uring(&ring);
 
-    async::event_signal callback_called;
+    webcraft::async::event_signal callback_called;
 
     struct callback_event
     {
-        async::event_signal *callback_flag;
+        webcraft::async::event_signal *callback_flag;
 
         void operator()()
         {
@@ -135,14 +135,14 @@ TEST_CASE(io_uring_wait_multiple_events)
     constexpr int num_events = 5;
 
     // initialize the structures
-    async::event_signal signals[num_events];
+    webcraft::async::event_signal signals[num_events];
     struct io_uring ring;
     initialize_io_uring(&ring);
 
     // the callback event structure
     struct callback_event
     {
-        async::event_signal *callback_flag;
+        webcraft::async::event_signal *callback_flag;
 
         void operator()()
         {
@@ -225,96 +225,6 @@ TEST_CASE(io_uring_test_timer)
     auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
-
-    destroy_io_uring(&ring);
-}
-
-::async::task<void> test_yield_coroutine(struct io_uring *ring)
-{
-    struct yield_awaiter
-    {
-        struct io_uring *ring;
-
-        constexpr void await_resume() const noexcept {}
-        constexpr bool await_ready() const noexcept { return false; }
-        void await_suspend(std::coroutine_handle<> handle) const noexcept
-        {
-            // Post the overlapped event to the io_uring
-            post_nop_event(ring, reinterpret_cast<uint64_t>(handle.address()));
-        }
-    };
-
-    int value = 5;
-    co_await yield_awaiter{ring};
-    EXPECT_EQ(value, 5) << "Value should remain unchanged in the coroutine";
-
-    value = 6;
-    co_await yield_awaiter{ring};
-    EXPECT_EQ(value, 6) << "Value should be updated in the coroutine";
-}
-
-TEST_CASE(runtime_yield_test_coroutine)
-{
-    struct io_uring ring;
-    initialize_io_uring(&ring);
-
-    test_yield_coroutine(&ring);
-
-    auto payload = wait_and_get_event(&ring);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
-
-    payload = wait_and_get_event(&ring);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
-
-    destroy_io_uring(&ring);
-}
-
-::async::task<void> test_timer_coroutine(struct io_uring *ring)
-{
-    struct timer_awaiter
-    {
-        struct io_uring *ring;
-        std::chrono::steady_clock::duration duration;
-
-        constexpr void await_resume() const noexcept {}
-        constexpr bool await_ready() const noexcept { return false; }
-        void await_suspend(std::coroutine_handle<> handle) const noexcept
-        {
-            // Post the overlapped event to the IOCP
-            post_timer_event(ring, duration, reinterpret_cast<uint64_t>(handle.address()));
-        }
-    };
-
-    constexpr auto sleep_time = std::chrono::seconds(5);
-
-    auto start = std::chrono::steady_clock::now();
-    co_await timer_awaiter{ring, sleep_time};
-    auto end = std::chrono::steady_clock::now();
-
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
-
-    start = std::chrono::steady_clock::now();
-    co_await timer_awaiter{ring, sleep_time};
-
-    end = std::chrono::steady_clock::now();
-    elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
-}
-
-TEST_CASE(runtime_test_timer_coroutine)
-{
-    struct io_uring ring;
-    initialize_io_uring(&ring);
-
-    test_timer_coroutine(&ring);
-
-    auto payload = wait_and_get_event(&ring);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
-
-    payload = wait_and_get_event(&ring);
-    std::coroutine_handle<>::from_address(reinterpret_cast<void *>(payload)).resume();
 
     destroy_io_uring(&ring);
 }
