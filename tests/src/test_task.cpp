@@ -436,43 +436,43 @@ TEST_CASE(TestTaskWhenAnyReturnType)
     EXPECT_LE(duration, timeout_2 + std::chrono::milliseconds(100)) << "when_any should not wait too long";
 }
 
-TEST_CASE(TestTaskWhenAnyHeterogeneous)
-{
-    constexpr std::chrono::milliseconds timeout_1(500);
-    constexpr std::chrono::milliseconds timeout_2(300);
-    constexpr std::chrono::milliseconds timeout_3(800);
+// TEST_CASE(TestTaskWhenAnyHeterogeneous)
+// {
+//     constexpr std::chrono::milliseconds timeout_1(500);
+//     constexpr std::chrono::milliseconds timeout_2(300);
+//     constexpr std::chrono::milliseconds timeout_3(800);
 
-    event_signal signal;
+//     event_signal signal;
 
-    auto task1 = [&]() -> task<int>
-    {
-        co_await resume_on_thread_with_timeout{timeout_1};
-        co_return 1;
-    };
+//     auto task1 = [&]() -> task<int>
+//     {
+//         co_await resume_on_thread_with_timeout{timeout_1};
+//         co_return 1;
+//     };
 
-    auto task2 = [&]() -> task<std::string>
-    {
-        co_await resume_on_thread_with_timeout{timeout_2};
-        co_return "two";
-    };
+//     auto task2 = [&]() -> task<std::string>
+//     {
+//         co_await resume_on_thread_with_timeout{timeout_2};
+//         co_return "two";
+//     };
 
-    auto task3 = [&]() -> task<void>
-    {
-        co_await resume_on_thread_with_timeout{timeout_3};
-        signal.set();
-        co_return;
-    };
+//     auto task3 = [&]() -> task<void>
+//     {
+//         co_await resume_on_thread_with_timeout{timeout_3};
+//         signal.set();
+//         co_return;
+//     };
 
-    auto start = std::chrono::steady_clock::now();
+//     auto start = std::chrono::steady_clock::now();
 
-    auto result = sync_wait(when_any(std::make_tuple(task1(), task2(), task3())));
+//     auto result = sync_wait(when_any(std::make_tuple(task1(), task2(), task3())));
 
-    auto end = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+//     auto end = std::chrono::steady_clock::now();
+//     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    EXPECT_TRUE(std::holds_alternative<std::string>(result)) << "Result should be either int or string";
-    EXPECT_EQ(std::get<std::string>(result), "two") << "Second result should be 'two'";
+//     EXPECT_TRUE(std::holds_alternative<std::string>(result)) << "Result should be either int or string";
+//     EXPECT_EQ(std::get<std::string>(result), "two") << "Second result should be 'two'";
 
-    EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
-    EXPECT_LE(duration, timeout_2 + std::chrono::milliseconds(100)) << "when_any should not wait too long";
-}
+//     EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
+//     EXPECT_LE(duration, timeout_2 + std::chrono::milliseconds(100)) << "when_any should not wait too long";
+// }

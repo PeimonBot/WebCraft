@@ -22,7 +22,8 @@ namespace webcraft::async
 
         void set()
         {
-            flag.store(true, std::memory_order_release);
+            if (flag.exchange(true, std::memory_order_release))
+                return;
             // resumes the coroutine
             for (auto &h : this->handles)
             {
