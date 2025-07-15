@@ -1,5 +1,9 @@
 #pragma once
 
+#include <atomic>
+#include <chrono>
+#include <thread>
+
 namespace webcraft::async
 {
 

@@ -110,6 +110,40 @@ namespace webcraft::async
             co_await when_all(wait_tasks);
             co_return;
         }
+
+        template <awaitable_t... Awaitable>
+        self_deleting_task when_any_controller_tuple(async_event &event, std::optional<std::variant<normalized_result_t<Awaitable>...>> &opt, Awaitable &&...t)
+        {
+            std::atomic<bool> winner = false;
+            std::vector<task<void>> wait_tasks;
+
+            auto decorator = [&](auto &&t) -> task<void>
+            {
+                using Result = awaitable_resume_t<decltype(t)>;
+                if constexpr (std::is_void_v<Result>)
+                {
+                    co_await t;
+                    if (winner.exchange(true, std::memory_order_acq_rel))
+                    {
+                        opt = std::monostate{}; // If already won, set to monostate
+                        co_return;              // If already won, do nothing
+                    }
+                }
+                else
+                {
+                    auto value = co_await t;
+                    bool expected = false;
+                    if (winner.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+                    {
+                        opt = std::forward<Result>(value);
+                        event.set(); // Notify the event
+                    }
+                }
+            };
+
+            co_await when_all(std::make_tuple(decorator(std::forward<Awaitable>(t))...));
+            co_return;
+        };
     }
 
     template <std::ranges::input_range Range,
@@ -140,50 +174,16 @@ namespace webcraft::async
         }
     }
 
-    // template <typename... Tasks>
-    //     requires(awaitable_t<Tasks> && ...)
-    // task<std::variant<normalized_result_t<Tasks>...>> when_any(std::tuple<Tasks...> tasks)
-    // {
-    //     using result_variant_t = std::variant<normalized_result_t<Tasks>...>;
+    template <awaitable_t... Tasks>
+    task<std::variant<normalized_result_t<Tasks>...>> when_any(Tasks &&...tasks)
+    {
+        using result_variant_t = std::variant<normalized_result_t<Tasks>...>;
 
-    //     auto evt = std::make_shared<async_event>();
-    //     auto result = std::make_shared<std::optional<result_variant_t>>();
-    //     auto done = std::make_shared<std::atomic<bool>>(false);
-
-    //     auto await_one = [evt, result, done]<std::size_t I>(auto &&t) -> task<void>
-    //     {
-    //         using Res = normalized_result_t<std::tuple_element_t<I, std::tuple<Tasks...>>>;
-
-    //         if constexpr (std::same_as<Res, std::monostate>)
-    //         {
-    //             co_await t;
-    //             if (!done->exchange(true))
-    //             {
-    //                 *result = result_variant_t{std::in_place_index<I>, std::monostate{}};
-    //                 evt->set();
-    //             }
-    //         }
-    //         else
-    //         {
-    //             auto r = co_await t;
-    //             if (!done->exchange(true))
-    //             {
-    //                 *result = result_variant_t{std::in_place_index<I>, std::move(r)};
-    //                 evt->set();
-    //             }
-    //         }
-
-    //         co_return;
-    //     };
-
-    //     // Launch all sub-tasks
-    //     std::vector<task<void>> tasks_vector;
-    //     [&]<std::size_t... Is>(std::index_sequence<Is...>)
-    //     {
-    //         (tasks_vector.emplace_back(await_one.template operator()<Is>(std::get<Is>(tasks))), ...);
-    //     }(std::make_index_sequence<sizeof...(Tasks)>{});
-
-    //     co_await *evt;
-    //     co_return std::move(result->value());
-    // }
+        async_event event;
+        std::optional<result_variant_t> result;
+        auto task = detail::when_any_controller_tuple(event, result, std::forward<Tasks>(tasks)...);
+        task.resume();
+        co_await event;
+        co_return std::move(result.value());
+    }
 }

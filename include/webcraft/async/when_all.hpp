@@ -16,7 +16,7 @@ namespace webcraft::async
     template <std::ranges::input_range Range,
               typename T = std::ranges::range_value_t<Range>,
               typename Result = awaitable_resume_t<T>>
-        requires awaitable_t<T> && (!std::same_as<Result, void>)
+        requires awaitable_t<T> && (!std::is_void_v<Result>)
     task<std::vector<Result>> when_all(Range &&tasks)
     {
         std::vector<Result> results;
@@ -33,7 +33,7 @@ namespace webcraft::async
     template <std::ranges::input_range Range,
               typename T = std::ranges::range_value_t<Range>,
               typename Result = awaitable_resume_t<T>>
-        requires awaitable_t<T> && std::same_as<Result, void>
+        requires awaitable_t<T> && std::is_void_v<Result>
     task<void> when_all(Range &&tasks)
     {
         for (auto &&t : tasks)
@@ -46,7 +46,7 @@ namespace webcraft::async
 
     template <typename T>
     using normalized_result_t = std::conditional_t<
-        std::same_as<awaitable_resume_t<T>, void>,
+        std::is_void_v<awaitable_resume_t<T>>,
         std::monostate,
         awaitable_resume_t<T>>;
 
@@ -74,5 +74,12 @@ namespace webcraft::async
         };
 
         co_return co_await await_many(std::make_index_sequence<sizeof...(Tasks)>{});
+    }
+
+    template <typename... Tasks>
+        requires(awaitable_t<Tasks> && ...)
+    task<std::tuple<normalized_result_t<Tasks>...>> when_all(Tasks &&...tasks)
+    {
+        co_return co_await when_all(std::make_tuple(std::forward<Tasks>(tasks)...));
     }
 }
