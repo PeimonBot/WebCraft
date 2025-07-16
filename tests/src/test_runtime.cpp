@@ -6,6 +6,7 @@
 #include <webcraft/async/async.hpp>
 
 using namespace webcraft::async;
+using namespace std::chrono_literals;
 
 TEST_CASE(TestRuntimeInitAndDestroy)
 {
@@ -33,4 +34,30 @@ TEST_CASE(TestSimpleRuntime)
     sync_wait(task_fn());
 
     std::cout << "TestSimpleRuntime completed successfully." << std::endl;
+}
+
+TEST_CASE(TestRuntimeTimerTask)
+{
+    std::cout << "Starting TestRuntimeTimerTask..." << std::endl;
+    runtime_context context;
+
+    auto timer_task = []() -> task<void>
+    {
+        constexpr auto factor = 10ms;
+        for (int i = 0; i < 3; i++)
+        {
+            auto timer_duration = factor * (i + 1);
+            auto start_time = std::chrono::steady_clock::now();
+            co_await sleep_for(timer_duration);
+            auto end_time = std::chrono::steady_clock::now();
+
+            auto elapsed_time = end_time - start_time;
+            EXPECT_GE(elapsed_time, timer_duration) << "Elapsed time should be greater than or equal to timer duration";
+            EXPECT_LE(elapsed_time, timer_duration + 10ms) << "Elapsed time should not exceed timer duration by more than 10ms";
+        }
+    };
+
+    sync_wait(timer_task());
+
+    std::cout << "TestRuntimeTimerTask completed successfully." << std::endl;
 }

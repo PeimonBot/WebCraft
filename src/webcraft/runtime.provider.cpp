@@ -36,7 +36,7 @@ void run_io_uring_loop(std::stop_token token)
 
         struct io_uring_cqe *cqe;
         int ret = io_uring_wait_cqe_timeout(&global_ring, &cqe, &ts);
-        if (ret < 0)
+        if (ret < 0 && ret != -ETIME)
         {
             if (ret == -EINTR)
                 continue; // Interrupted, retry
