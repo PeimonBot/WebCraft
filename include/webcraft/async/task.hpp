@@ -7,6 +7,8 @@
 #include "event_signal.hpp"
 #include <iostream>
 #include <ranges>
+#include <utility>
+#include <exception>
 
 namespace webcraft::async
 {
