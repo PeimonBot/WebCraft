@@ -31,7 +31,8 @@ void run_io_uring_loop(std::stop_token token)
     std::cout << "IO_uring loop started." << std::endl;
     while (!token.stop_requested())
     {
-        __kernel_timespec ts = {0, std::chrono::duration_cast<std::chrono::nanoseconds>(100ms).count()}; // No timeout
+        __kernel_timespec ts = {0, 0}; // No timeout
+        ts.tv_nsec = 1000000;          // 1ms timeout
 
         struct io_uring_cqe *cqe;
         int ret = io_uring_wait_cqe_timeout(&global_ring, &cqe, &ts);
@@ -75,8 +76,9 @@ void webcraft::async::detail::initialize_runtime() noexcept
         return; // Runtime already initialized
     }
 
-    std::lock_guard<std::mutex> lock(io_uring_mutex);
     auto ret = io_uring_queue_init(1024, &global_ring, 0);
+
+    io_uring_thread = std::make_unique<std::jthread>(run_io_uring_loop);
 
     if (ret < 0)
     {
@@ -92,8 +94,6 @@ void webcraft::async::detail::shutdown_runtime() noexcept
     {
         return; // Runtime not running, nothing to shut down
     }
-
-    std::lock_guard<std::mutex> lock(io_uring_mutex);
 
     // stop running the io_uring loop
     io_uring_thread->request_stop();
