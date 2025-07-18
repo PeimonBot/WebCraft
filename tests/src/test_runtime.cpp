@@ -61,3 +61,38 @@ TEST_CASE(TestRuntimeTimerTask)
 
     std::cout << "TestRuntimeTimerTask completed successfully." << std::endl;
 }
+
+TEST_CASE(TestRuntimeTimerCancellationTask)
+{
+    std::cout << "Starting TestRuntimeTimerCancellationTask..." << std::endl;
+    runtime_context context;
+
+    auto timer_task = []() -> task<void>
+    {
+        constexpr auto timer_time = 10ms;
+        constexpr auto cancel_time = 5ms;
+
+        std::stop_source source;
+
+        std::thread([&source, cancel_time]
+                    {
+            std::this_thread::sleep_for(cancel_time);
+            source.request_stop(); })
+            .detach();
+
+        std::stop_token token = source.get_token();
+
+        auto start_time = std::chrono::steady_clock::now();
+
+        co_await sleep_for(timer_time, token);
+        auto end_time = std::chrono::steady_clock::now();
+
+        auto elapsed_time = end_time - start_time;
+        EXPECT_GE(elapsed_time, cancel_time) << "The timer should have been cancelled after 5ms";
+        EXPECT_LE(elapsed_time, timer_time) << "The cancellation should not have happened after 10ms";
+    };
+
+    sync_wait(timer_task());
+
+    std::cout << "TestRuntimeTimerCancellationTask completed successfully." << std::endl;
+}

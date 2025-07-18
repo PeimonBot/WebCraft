@@ -4,6 +4,8 @@
 #include <chrono>
 #include <stop_token>
 #include <memory>
+#include <concepts>
+#include <string>
 
 #include <webcraft/async/task.hpp>
 #include <webcraft/async/sync_wait.hpp>
@@ -17,9 +19,111 @@ namespace webcraft::async
 
         void shutdown_runtime() noexcept;
 
-        void post_yield_event(std::function<void()> func, int *result);
+        class runtime_event
+        {
+        private:
+            std::function<void()> callback;
+            int result;
+            std::atomic<bool> finished{false};
+            bool cancelled{false};
+            std::stop_token token;
+            std::unique_ptr<std::stop_callback<std::function<void()>>> stop_callback;
 
-        void post_sleep_event(std::function<void()> func, std::chrono::steady_clock::duration duration, std::stop_token token, int *result);
+        protected:
+            /// @brief Tries to natively start the async operation
+            virtual void try_start() = 0;
+
+            /// @brief Try to natively cancel the async operation
+            virtual void try_native_cancel() = 0;
+
+        public:
+            runtime_event(std::stop_token token) : token(token)
+            {
+            }
+
+            virtual ~runtime_event() = default;
+
+            /// @brief Tries to execute the callback and gives result to consumer
+            /// @param result the result of runtime event
+            /// @param cancelled the cancellation status
+            void try_execute(int result, bool cancelled = false)
+            {
+                bool expected = false;
+                if (finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+                {
+                    this->cancelled = cancelled;
+                    this->result = result;
+                    callback();
+                }
+            }
+
+            /// @brief Starts the asynchronous operation
+            /// @param callback the callback to be executed once operation is complete
+            void start_async(std::function<void()> callback)
+            {
+                this->callback = std::move(callback);
+
+                runtime_event *ev = this;
+
+                stop_callback = std::make_unique<std::stop_callback<std::function<void()>>>(
+                    token,
+                    [ev]
+                    {
+                        ev->try_native_cancel();
+                        ev->try_execute(-1, true); // Indicate cancellation
+                    });
+
+                try_start();
+            }
+
+            bool is_cancelled() const
+            {
+                return cancelled;
+            }
+
+            int get_result() const
+            {
+                return result;
+            }
+        };
+
+        std::unique_ptr<runtime_event> post_yield_event();
+
+        std::unique_ptr<runtime_event> post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token);
+
+        template <typename T>
+        concept awaitable_event_t = awaitable_t<T> && requires(T &&t) {
+            { t.get_result() } -> std::convertible_to<int>;
+            { t.is_cancelled() } -> std::convertible_to<bool>;
+        };
+
+        inline awaitable_event_t auto as_awaitable(std::unique_ptr<runtime_event> event)
+        {
+            struct awaiter
+            {
+                std::unique_ptr<runtime_event> event;
+                bool cancelled;
+
+                bool await_ready() const noexcept { return false; }
+                void await_suspend(std::coroutine_handle<> h) noexcept
+                {
+                    event->start_async([h]
+                                       { h.resume(); });
+                }
+                void await_resume() noexcept {}
+
+                int get_result()
+                {
+                    return event->get_result();
+                }
+
+                bool is_cancelled()
+                {
+                    return event->is_cancelled();
+                }
+            };
+            return awaiter{std::move(event)};
+        }
     };
 
     /// @brief  Acts as a context for the async runtime, managing the lifecycle of async operations.
@@ -50,34 +154,7 @@ namespace webcraft::async
     /// @return A task that completes when the yield operation is done.
     inline task<void> yield()
     {
-        struct yield_awaiter
-        {
-            int result;
-            std::exception_ptr exception;
-            bool await_ready() const noexcept { return false; }
-            void await_suspend(std::coroutine_handle<> h) noexcept
-            {
-                try
-                {
-                    detail::post_yield_event([h]
-                                             { h.resume(); }, &result);
-                }
-                catch (...)
-                {
-                    exception = std::current_exception();
-                    h.resume(); // Resume the coroutine even if an exception occurs
-                }
-            }
-            void await_resume() noexcept
-            {
-                if (exception)
-                {
-                    std::rethrow_exception(exception);
-                }
-            }
-        };
-        co_await yield_awaiter{};
-        co_return;
+        co_await detail::as_awaitable(detail::post_yield_event());
     }
 
     /// @brief Sleeps for a specified duration, allowing other tasks to run during the sleep.
@@ -87,40 +164,10 @@ namespace webcraft::async
     template <typename Rep, typename Period>
     inline task<void> sleep_for(std::chrono::duration<Rep, Period> duration, std::stop_token token = get_stop_token())
     {
-        if (duration <= std::chrono::steady_clock::duration::zero())
+        if (duration <= std::chrono::steady_clock::duration::zero() || token.stop_requested())
             co_return;
 
-        struct sleep_awaiter
-        {
-            std::chrono::steady_clock::duration duration;
-            std::stop_token token;
-            int result;
-            std::exception_ptr exception;
-
-            bool await_ready() const noexcept { return false; }
-            void await_suspend(std::coroutine_handle<> h) noexcept
-            {
-                try
-                {
-                    detail::post_sleep_event([h]
-                                             { h.resume(); }, duration, token, &result);
-                }
-                catch (...)
-                {
-                    exception = std::current_exception();
-                    h.resume(); // Resume the coroutine even if an exception occurs
-                }
-            }
-            void await_resume() noexcept
-            {
-                if (exception)
-                {
-                    std::rethrow_exception(exception);
-                }
-            }
-        };
-
-        co_await sleep_awaiter{std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), token};
+        co_await detail::as_awaitable(detail::post_sleep_event(duration, token));
     }
 
     inline task<void> shutdown()

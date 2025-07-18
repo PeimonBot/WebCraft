@@ -13,12 +13,6 @@ static std::atomic<bool> is_running{false};
 
 using namespace std::chrono_literals;
 
-struct runtime_event
-{
-    std::function<void()> callback;
-    int *result;
-};
-
 void run_io_uring_loop(std::stop_token token)
 {
     // perform the following when we're done with the io_uring loop
@@ -49,16 +43,11 @@ void run_io_uring_loop(std::stop_token token)
             auto user_data = cqe->user_data;
             io_uring_cqe_seen(&global_ring, cqe);
             // Call the callback or handle the event based on user_data
-            auto *event = reinterpret_cast<runtime_event *>(user_data);
+            auto *event = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
             if (event)
             {
                 // Call the callback function
-                event->callback();
-                if (event->result)
-                {
-                    *event->result = cqe->res; // Store the result if provided
-                }
-                delete event;
+                event->try_execute(cqe->res);
             }
         }
     }
@@ -107,51 +96,90 @@ void webcraft::async::detail::shutdown_runtime() noexcept
     io_uring_thread.reset();
 }
 
-void webcraft::async::detail::post_yield_event(std::function<void()> func, int *result)
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
 {
     // Directly call the function to simulate posting a yield event
-    std::lock_guard<std::mutex> lock(io_uring_mutex);
-    runtime_event *event = new runtime_event{func, result};
-
-    struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
-    if (!sqe)
+    struct yield_event final : webcraft::async::detail::runtime_event
     {
-        delete event; // Clean up if we can't get an SQE
-        throw std::runtime_error("Failed to get SQE from io_uring");
-    }
 
-    // Prepare a NOP operation to signal the completion of the task
-    io_uring_prep_nop(sqe);
-    io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(event));
-    int ret = io_uring_submit(&global_ring);
-    if (ret < 0)
-    {
-        delete event; // Clean up if submission fails
-        throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
-    }
+    public:
+        yield_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token) {}
+
+        void try_native_cancel() override
+        {
+        }
+
+        void try_start() override
+        {
+            std::lock_guard<std::mutex> lock(io_uring_mutex);
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+            if (!sqe)
+            {
+                throw std::runtime_error("Failed to get SQE from io_uring");
+            }
+
+            // Prepare a NOP operation to signal the completion of the task
+            io_uring_prep_nop(sqe);
+            io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(this));
+            int ret = io_uring_submit(&global_ring);
+            if (ret < 0)
+            {
+                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
+            }
+        }
+    };
+
+    return std::make_unique<yield_event>();
 }
 
-void webcraft::async::detail::post_sleep_event(std::function<void()> func, std::chrono::steady_clock::duration duration, std::stop_token token, int *result)
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
 {
-    std::lock_guard<std::mutex> lock(io_uring_mutex);
-    runtime_event *event = new runtime_event{func, result};
 
-    struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
-    if (!sqe)
+    struct sleep_event final : webcraft::async::detail::runtime_event
     {
-        delete event; // Clean up if we can't get an SQE
-        throw std::runtime_error("Failed to get SQE from io_uring");
-    }
+    private:
+        std::chrono::steady_clock::duration duration;
 
-    __kernel_timespec its;
-    its.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-    its.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(duration % std::chrono::seconds(1)).count();
-    io_uring_prep_timeout(sqe, &its, 0, 0);
-    io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(event));
-    int ret = io_uring_submit(&global_ring);
-    if (ret < 0)
-    {
-        delete event; // Clean up if submission fails
-        throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
-    }
+    public:
+        sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token) : runtime_event(token), duration(duration) {}
+
+        void try_native_cancel() override
+        {
+            std::lock_guard<std::mutex> lock(io_uring_mutex);
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+            if (!sqe)
+            {
+                throw std::runtime_error("Failed to get SQE from io_uring");
+            }
+            io_uring_prep_cancel64(sqe, reinterpret_cast<uint64_t>(this), IORING_ASYNC_CANCEL_USERDATA);
+            int ret = io_uring_submit(&global_ring);
+            if (ret < 0)
+            {
+                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
+            }
+        }
+
+        void try_start() override
+        {
+            std::lock_guard<std::mutex> lock(io_uring_mutex);
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+            if (!sqe)
+            {
+                throw std::runtime_error("Failed to get SQE from io_uring");
+            }
+
+            __kernel_timespec its;
+            its.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+            its.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(duration % std::chrono::seconds(1)).count();
+            io_uring_prep_timeout(sqe, &its, 0, 0);
+            io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(this));
+            int ret = io_uring_submit(&global_ring);
+            if (ret < 0)
+            {
+                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
+            }
+        }
+    };
+
+    return std::make_unique<sleep_event>(duration, token);
 }
