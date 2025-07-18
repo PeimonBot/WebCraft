@@ -4,6 +4,8 @@
 #include "test_suite.hpp"
 #include <liburing.h>
 
+using namespace std::chrono_literals;
+
 TEST_CASE(SampleTest)
 {
     EXPECT_EQ(1 + 1, 2);
@@ -214,7 +216,7 @@ TEST_CASE(io_uring_test_timer)
     struct io_uring ring;
     initialize_io_uring(&ring);
 
-    auto sleep_time = std::chrono::seconds(5);
+    auto sleep_time = 5ms;
 
     post_timer_event(&ring, sleep_time, payload);
 

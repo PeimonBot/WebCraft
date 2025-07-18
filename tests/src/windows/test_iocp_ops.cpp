@@ -227,7 +227,7 @@ TEST_CASE(iocp_test_timer)
     // Initialize the IOCP
     HANDLE iocp = initialize_iocp();
 
-    auto sleep_time = std::chrono::seconds(5);
+    auto sleep_time = 5ms;
     std::cout << "Posting timer event with sleep time: " << sleep_time.count() << " seconds" << std::endl;
 
     post_timer_event(iocp, manager, sleep_time, payload);
@@ -236,7 +236,7 @@ TEST_CASE(iocp_test_timer)
     wait_for_timeout_event(iocp, payload);
     auto end = std::chrono::steady_clock::now();
 
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 1ms);
 
     EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
 
@@ -249,11 +249,11 @@ TEST_CASE(try_cancellation_test)
 
     webcraft::async::runtime::detail::timer_manager manager;
 
-    PTP_TIMER timer = post_timer_event(iocp, manager, std::chrono::seconds(5), 0);
+    PTP_TIMER timer = post_timer_event(iocp, manager, 5ms, 0);
 
     std::jthread cancel_thread([&manager, &timer, iocp]()
                                {
-                                   std::this_thread::sleep_for(std::chrono::seconds(2));
+                                   std::this_thread::sleep_for(2ms);
                                    manager.cancel_timer(timer); // Cancel the timer after 2 seconds
                                    post_nop_event(iocp, 1);     // Post a dummy event to signal cancellation
                                });
@@ -273,11 +273,11 @@ TEST_CASE(try_cancellation_test_with_stop_token)
     webcraft::async::runtime::detail::timer_manager manager;
 
     std::stop_source source;
-    PTP_TIMER timer = post_timer_event(iocp, manager, std::chrono::seconds(5), 0);
+    PTP_TIMER timer = post_timer_event(iocp, manager, 5ms, 0);
 
     std::jthread cancel_thread([&manager, &source]()
                                {
-                                   std::this_thread::sleep_for(std::chrono::seconds(2));
+                                   std::this_thread::sleep_for(2ms);
                                    source.request_stop(); // Request cancellation after 2 seconds
                                });
 
@@ -312,8 +312,8 @@ TEST_CASE(try_cancellation_test_with_stop_token_and_callback)
         }
     };
 
-    constexpr auto sleep_time = std::chrono::seconds(5);
-    constexpr auto cancel_time = std::chrono::seconds(2);
+    constexpr auto sleep_time = 5ms;
+    constexpr auto cancel_time = 2ms;
 
     webcraft::async::runtime::detail::timer_manager manager;
 

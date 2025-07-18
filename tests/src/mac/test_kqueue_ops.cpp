@@ -4,6 +4,8 @@
 #include "test_suite.hpp"
 #include <sys/event.h>
 
+using namespace std::chrono_literals;
+
 TEST_CASE(SampleTest)
 {
     EXPECT_EQ(1 + 1, 2);
@@ -203,7 +205,7 @@ TEST_CASE(kqueue_test_timer)
 
     int queue = initialize_kqueue();
 
-    auto sleep_time = std::chrono::seconds(5);
+    auto sleep_time = 5ms;
 
     post_timer_event(queue, sleep_time, payload);
 
