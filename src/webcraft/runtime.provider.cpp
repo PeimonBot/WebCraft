@@ -1,302 +1,504 @@
-// #include <webcraft/async/runtime/provider.hpp>
+#include <webcraft/async/runtime.hpp>
+#include <mutex>
+#include <thread>
+#include <iostream>
+#include <string>
+#include <cstring>
+#include <chrono>
 
-// #include <utility>
+using namespace std::chrono_literals;
+static std::unique_ptr<std::jthread> run_thread;
+static std::atomic<bool> is_running{false};
+constexpr auto wait_timeout = 10ms;
 
-// #ifdef _WIN32
+std::stop_token webcraft::async::get_stop_token()
+{
+    return run_thread->get_stop_token();
+}
 
-// #include <webcraft/async/runtime/windows/windows_timer_manager.hpp>
-// #define NOMINMAX
-// #define WIN32_LEAN_AND_MEAN
-// #include <Windows.h>
-// #include <WinSock2.h>
+void run_loop(std::stop_token token);
 
-// #pragma region Windows API
+bool start_runtime_async() noexcept;
 
-// namespace detail::win32
-// {
+void webcraft::async::detail::initialize_runtime() noexcept
+{
+    if (is_running.exchange(true))
+    {
+        return; // Runtime already initialized
+    }
 
-//     struct overlapped_event : public OVERLAPPED
-//     {
-//         uint64_t payload;
-//     };
+    if (!start_runtime_async())
+    {
+        return;
+    }
 
-//     void post_nop_event(HANDLE iocp, uint64_t payload)
-//     {
-//         // Post a NOP operation to the IOCP
-//         overlapped_event *overlapped = new overlapped_event();
-//         memset(overlapped, 0, sizeof(OVERLAPPED));
-//         overlapped->payload = payload;
+    run_thread = std::make_unique<std::jthread>(run_loop);
+}
 
-//         BOOL result = PostQueuedCompletionStatus(iocp, 0, payload, overlapped);
-//         // Check if the post operation was successful
-//         if (!result)
-//         {
-//             throw std::runtime_error("Failed to post NOP event to IOCP");
-//         }
-//     }
+void webcraft::async::detail::shutdown_runtime() noexcept
+{
+    if (!is_running.exchange(false))
+    {
+        return; // Runtime not running, nothing to shut down
+    }
 
-//     std::pair<uint64_t, uint64_t> wait_for_event(HANDLE iocp)
-//     {
-//         DWORD bytesTransferred;
-//         ULONG_PTR completionKey;
-//         OVERLAPPED *overlapped;
+    // stop running the io_uring loop
+    run_thread->request_stop();
 
-//         BOOL result = GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, INFINITE);
-//         if (!result)
-//         {
-//             throw std::runtime_error("Failed to get completion status from IOCP");
-//         }
+    // join the thread if still possible
+    if (run_thread && run_thread->joinable())
+    {
+        run_thread->join();
+    }
 
-//         // Process the completion event
-//         if (overlapped == nullptr)
-//         {
-//             throw std::runtime_error("Completion event is null");
-//         }
-//         auto event = static_cast<overlapped_event *>(overlapped);
-//         uint64_t user_data = event->payload;
+    run_thread.reset();
+}
 
-//         delete event; // Clean up the overlapped structure
-//         return std::make_pair(user_data, bytesTransferred);
-//     }
+#ifdef __linux__
+#include <liburing.h>
 
-//     PTP_TIMER post_timer_event(HANDLE iocp, webcraft::async::runtime::detail::timer_manager &context, std::chrono::steady_clock::duration duration, uint64_t payload)
-//     {
-//         return context.post_timer_event(duration, [iocp, payload]()
-//                                         {
-//         // This callback will be called when the timer expires
-//         post_nop_event(iocp, payload); });
-//     }
+static std::mutex io_uring_mutex;
+static io_uring global_ring;
 
-// }
-// #pragma endregion
+void run_loop(std::stop_token token)
+{
+    // perform the following when we're done with the io_uring loop
+    std::stop_callback callback(token, []()
+                                {
+        std::lock_guard<std::mutex> lock(io_uring_mutex);
+        io_uring_queue_exit(&global_ring); });
 
-// #pragma region Awaitables and providers
+    // while we're running, we will wait for events
+    std::cout << "IO_uring loop started." << std::endl;
+    while (!token.stop_requested())
+    {
+        __kernel_timespec ts = {0, 0};
+        ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(wait_timeout).count(); // 10ms timeout
 
-// class win32_provider;
+        struct io_uring_cqe *cqe;
+        int ret = io_uring_wait_cqe_timeout(&global_ring, &cqe, &ts);
+        if (ret < 0 && ret != -ETIME)
+        {
+            if (ret == -EINTR)
+                continue; // Interrupted, retry
+            break;        // Other error, exit loop
+        }
 
-// class yield_awaiter : public webcraft::async::runtime::detail::runtime_event
-// {
-// private:
-//     win32_provider *provider;
+        if (cqe)
+        {
+            // Process the completion event
+            auto user_data = cqe->user_data;
+            io_uring_cqe_seen(&global_ring, cqe);
+            // Call the callback or handle the event based on user_data
+            auto *event = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
+            if (event)
+            {
+                // Call the callback function
+                event->try_execute(cqe->res);
+            }
+        }
+    }
+}
 
-// public:
-//     yield_awaiter(win32_provider *provider) : provider(provider) {}
+bool start_runtime_async() noexcept
+{
+    auto ret = io_uring_queue_init(1024, &global_ring, 0);
 
-//     // void try_start() noexcept override;
-// };
+    if (ret < 0)
+    {
+        // Marked noexcept so can't throw exceptions, handle error gracefully
+        std::cerr << "Failed to initialize io_uring: " << std::strerror(-ret) << std::endl;
+        return false;
+    }
+    return true;
+}
 
-// // class cancellable_sleep_awaiter : public webcraft::async::runtime::detail::cancellable_runtime_event
-// // {
-// // private:
-// //     win32_provider *provider;
-// //     PTP_TIMER timer;                                // Timer for the sleep operation
-// //     std::chrono::steady_clock::duration sleep_time; // Duration to sleep
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
+{
+    // Directly call the function to simulate posting a yield event
+    struct yield_event final : webcraft::async::detail::runtime_event
+    {
 
-// // public:
-// //     cancellable_sleep_awaiter(win32_provider *provider,
-// //                               std::chrono::steady_clock::duration sleep_time,
-// //                               std::stop_token token)
-// //         : cancellable_runtime_event(token), provider(provider), sleep_time(sleep_time)
-// //     {
-// //     }
+    public:
+        yield_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token) {}
 
-// //     void try_start() noexcept override;
+        void try_native_cancel() override
+        {
+        }
 
-// //     void try_native_cancel() noexcept override;
-// // };
+        void try_start() override
+        {
+            std::lock_guard<std::mutex> lock(io_uring_mutex);
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+            if (!sqe)
+            {
+                throw std::runtime_error("Failed to get SQE from io_uring");
+            }
 
-// class win32_provider : public webcraft::async::runtime::detail::runtime_provider
-// {
-// private:
-//     webcraft::async::runtime::detail::timer_manager timer_manager; // Timer manager for handling timers
-//     HANDLE iocp;                                                   // IOCP handle for the runtime
-// public:
-//     win32_provider()
-//     {
-//         setup_runtime(); // Setup the runtime environment
-//     }
+            // Prepare a NOP operation to signal the completion of the task
+            io_uring_prep_nop(sqe);
+            io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(this));
+            int ret = io_uring_submit(&global_ring);
+            if (ret < 0)
+            {
+                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
+            }
+        }
+    };
 
-//     ~win32_provider()
-//     {
-//         cleanup_runtime(); // Cleanup the runtime environment
-//     }
+    return std::make_unique<yield_event>();
+}
 
-//     void setup_runtime()
-//     {
-//         // Initialize Winsock
-//         WSADATA wsaData;
-//         int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
-//         if (result != 0)
-//         {
-//             throw std::runtime_error("Failed to initialize Winsock");
-//         }
-//         // Create an IO Completion Port (IOCP)
-//         iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
+{
 
-//         if (iocp == NULL)
-//         {
-//             WSACleanup(); // Cleanup Winsock if IOCP creation fails
-//             throw std::runtime_error("Failed to create IOCP");
-//         }
-//     }
+    struct sleep_event final : webcraft::async::detail::runtime_event
+    {
+    private:
+        std::chrono::steady_clock::duration duration;
 
-//     void cleanup_runtime()
-//     {
-//         auto check = CloseHandle(iocp);
-//         if (!check)
-//         {
-//             throw std::runtime_error("Failed to close IOCP handle");
-//         }
-//         // Cleanup Winsock
-//         int result = WSACleanup();
-//         if (result != 0)
-//         {
-//             throw std::runtime_error("Failed to cleanup Winsock");
-//         }
-//     }
+    public:
+        sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token) : runtime_event(token), duration(duration) {}
 
-//     webcraft::async::runtime::detail::runtime_event *wait_and_get_event() override
-//     {
-//         auto [payload, ret] = detail::win32::wait_for_event(iocp);
-//         if (payload == 0)
-//         {
-//             return nullptr; // No event was ready
-//         }
+        void try_native_cancel() override
+        {
+            std::lock_guard<std::mutex> lock(io_uring_mutex);
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+            if (!sqe)
+            {
+                throw std::runtime_error("Failed to get SQE from io_uring");
+            }
+            io_uring_prep_cancel64(sqe, reinterpret_cast<uint64_t>(this), IORING_ASYNC_CANCEL_USERDATA);
+            int ret = io_uring_submit(&global_ring);
+            if (ret < 0)
+            {
+                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
+            }
+        }
 
-//         std::cerr << "Event ready with payload: " << payload << ", bytes transferred: " << ret << std::endl;
-//         auto event = reinterpret_cast<webcraft::async::runtime::detail::runtime_event *>(payload);
-//         // event->set_result(static_cast<int>(ret)); // Set the result of the event
-//         return event; // Return the event that was ready
-//     }
+        void try_start() override
+        {
+            std::lock_guard<std::mutex> lock(io_uring_mutex);
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+            if (!sqe)
+            {
+                throw std::runtime_error("Failed to get SQE from io_uring");
+            }
 
-//     ::async::task<void> yield() override
-//     {
-//         // co_await yield_awaiter(this); // Use the yield awaiter to yield control back to the runtime
-//         co_return;
-//     }
+            __kernel_timespec its;
+            its.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+            its.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(duration % std::chrono::seconds(1)).count();
+            io_uring_prep_timeout(sqe, &its, 0, 0);
+            io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(this));
+            int ret = io_uring_submit(&global_ring);
+            if (ret < 0)
+            {
+                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
+            }
+        }
+    };
 
-//     // ::async::task<bool> sleep_for(std::chrono::steady_clock::duration duration, std::stop_token token) override
-//     // {
-//     //     auto sleep_awaiter = std::make_shared<cancellable_sleep_awaiter>(this, duration, token);
-//     //     co_return co_await *sleep_awaiter; // Use the cancellable sleep awaiter to sleep for the specified duration
-//     // }
+    return std::make_unique<sleep_event>(duration, token);
+}
 
-//     HANDLE get_iocp_handle() const
-//     {
-//         return iocp; // Return the IOCP handle for external use
-//     }
+#elif defined(_WIN32)
 
-//     webcraft::async::runtime::detail::timer_manager &get_timer_manager()
-//     {
-//         return timer_manager; // Return the timer manager for handling timers
-//     }
-// };
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <webcraft/async/runtime/windows/windows_timer_manager.hpp>
+#include <WinSock2.h>
 
-// // void yield_awaiter::try_start() noexcept
-// // {
-// //     // Post a NOP event to the IOCP to yield control back to the runtime
-// //     std::cerr << "Yielding control to the runtime: " << (uint64_t)this << std::endl;
-// //     detail::win32::post_nop_event(provider->get_iocp_handle(), reinterpret_cast<uint64_t>(this));
-// // }
+static HANDLE iocp;
+static webcraft::async::runtime::detail::timer_manager timer_manager;
 
-// // void cancellable_sleep_awaiter::try_start() noexcept
-// // {
-// //     // Create a timer for the sleep operation
-// //     timer = detail::win32::post_timer_event(provider->get_iocp_handle(), provider->get_timer_manager(), sleep_time, reinterpret_cast<uint64_t>(this));
-// // }
+struct overlapped_event : public OVERLAPPED
+{
+    webcraft::async::detail::runtime_event *event;
 
-// // void cancellable_sleep_awaiter::try_native_cancel() noexcept
-// // {
-// //     // Cancel the timer if it is still pending
-// //     provider->get_timer_manager().cancel_timer(timer);
-// // }
+    overlapped_event(webcraft::async::detail::runtime_event *ev) : event(ev)
+    {
+        ZeroMemory(this, sizeof(OVERLAPPED));
+    }
+};
 
-// static auto provider_instance = std::make_shared<win32_provider>();
+void run_loop(std::stop_token token)
+{
+    std::stop_callback callback(token, []()
+                                {
+        WSACleanup();
+        if (iocp)
+        {
+            CloseHandle(iocp);
+            iocp = nullptr;
+        } });
+    std::cout << "IOCP loop started." << std::endl;
 
-// #pragma endregion
+    while (!token.stop_requested())
+    {
+        DWORD bytesTransferred;
+        ULONG_PTR completionKey;
+        LPOVERLAPPED overlapped;
 
-// #elif defined(__linux__)
+        BOOL result = GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, static_cast<DWORD>(wait_timeout.count()));
+        if (!result)
+        {
+            if (GetLastError() == WAIT_TIMEOUT)
+            {
+                continue; // Timeout, retry
+            }
 
-// #include <liburing.h>
+            std::cerr << "GetQueuedCompletionStatus failed: " << GetLastError() << std::endl;
+            break; // Other error, exit loop
+        }
 
-// class linux_provider : public webcraft::async::runtime::detail::runtime_provider
-// {
-// public:
-//     void setup_runtime() override
-//     {
-//         // TODO: Setup the runtime environment, such as initializing io_uring or other resources
-//     }
+        // Process the completion event
+        auto *event = reinterpret_cast<overlapped_event *>(overlapped);
+        if (event == nullptr)
+        {
+            std::cerr << "Received null event in IOCP loop." << std::endl;
+            continue; // Skip if event is null
+        }
+        auto runtime_event = event->event;
+        if (runtime_event)
+        {
+            // Call the callback function
+            runtime_event->try_execute(static_cast<int>(bytesTransferred));
+        }
+        delete event; // Clean up the overlapped structure
+    }
+}
 
-//     void cleanup_runtime() override
-//     {
-//         // TODO: Cleanup the runtime environment, such as closing io_uring or other resources
-//     }
+bool start_runtime_async() noexcept
+{
+    // Windows does not require special initialization for async operations
+    iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
+    if (iocp == nullptr)
+    {
+        std::cerr << "Failed to create IOCP: " << GetLastError() << std::endl;
+        return false;
+    }
 
-//     webcraft::async::runtime::detail::runtime_event *wait_and_get_event() override
-//     {
-//         // TODO: Implement the logic to wait for an event and return it
-//         return nullptr;
-//     }
+    WSAData wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
+    {
+        std::cerr << "WSAStartup failed: " << WSAGetLastError() << std::endl;
+        CloseHandle(iocp);
+        return false;
+    }
 
-//     ::async::task<void> yield() override
-//     {
-//         // TODO: Implement the logic to yield control back to the runtime
-//         co_return;
-//     }
+    return true;
+}
 
-//     ::async::task<void> sleep_for(std::chrono::steady_clock::duration duration, std::stop_token token) override
-//     {
-//         // TODO: Implement the logic to sleep for the specified duration
-//         co_return;
-//     }
-// };
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
+{
+    struct yield_event final : webcraft::async::detail::runtime_event
+    {
+    private:
+        overlapped_event *overlapped;
 
-// static auto provider_instance = std::make_shared<linux_provider>();
+    public:
+        yield_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token)
+        {
+            overlapped = new overlapped_event(this);
+        }
 
-// #elif defined(__APPLE__)
+        ~yield_event() = default;
 
-// #include <sys/event.h>
+        void try_native_cancel() override
+        {
+        }
 
-// class macos_provider : public webcraft::async::runtime::detail::runtime_provider
-// {
-// public:
-//     void setup_runtime() override
-//     {
-//         // TODO: Setup the runtime environment, such as initializing kqueue or other resources
-//     }
+        void try_start() override
+        {
+            BOOL result = PostQueuedCompletionStatus(iocp, 0, 0, overlapped);
+            if (!result)
+            {
+                throw std::runtime_error("Failed to post yield event: " + std::to_string(GetLastError()));
+            }
+        }
+    };
 
-//     void cleanup_runtime() override
-//     {
-//         // TODO: Cleanup the runtime environment, such as closing kqueue or other resources
-//     }
+    return std::make_unique<yield_event>(); // Windows does not support yield events in the same way
+}
 
-//     webcraft::async::runtime::detail::runtime_event *wait_and_get_event() override
-//     {
-//         // TODO: Implement the logic to wait for an event and return it
-//         return nullptr;
-//     }
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
+{
+    struct sleep_event final : webcraft::async::detail::runtime_event
+    {
+    private:
+        std::chrono::steady_clock::duration duration;
+        PTP_TIMER timer;
 
-//     ::async::task<void> yield() override
-//     {
-//         // TODO: Implement the logic to yield control back to the runtime
-//         co_return;
-//     }
+    public:
+        sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token) : runtime_event(token), duration(duration)
+        {
+        }
 
-//     ::async::task<void> sleep_for(std::chrono::steady_clock::duration duration, std::stop_token token) override
-//     {
-//         // TODO: Implement the logic to sleep for the specified duration
-//         co_return;
-//     }
-// };
+        void try_native_cancel() override
+        {
+            timer_manager.cancel_timer(timer);
+        }
 
-// static auto provider_instance = std::make_shared<macos_provider>();
+        void try_start() override
+        {
+            runtime_event *ev = this;
+            timer = timer_manager.post_timer_event(duration, [ev]()
+                                                   {
+                                                       ev->try_execute(0); // Indicate completion with 0 result
+                                                   });
+        }
+    };
 
-// #else
+    return std::make_unique<sleep_event>(duration, token); // Windows does not support sleep events in the same way
+}
 
-// #error "Unsupported platform for runtime provider"
-// #endif
+#elif defined(__APPLE__)
 
-// std::shared_ptr<webcraft::async::runtime::detail::runtime_provider> webcraft::async::runtime::detail::get_runtime_provider()
-// {
-//     return provider_instance; // Return the platform-specific provider instance
-// }
+#include <sys/event.h>
+#include <unistd.h>
+
+static int queue;
+
+bool start_runtime_async() noexcept
+{
+    queue = kqueue();
+
+    if (queue == -1)
+    {
+        // Marked noexcept so can't throw exceptions, handle error gracefully
+        std::cerr << "Failed to initialize kqueue: " << std::strerror(queue) << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+void run_loop(std::stop_token token)
+{
+    // perform the following when we're done with the io_uring loop
+    std::stop_callback callback(token, []
+                                { close(queue); });
+
+    // while we're running, we will wait for events
+    std::cout << "kqueue loop started." << std::endl;
+    while (!token.stop_requested())
+    {
+        timespec ts = {0, 0};
+        ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(wait_timeout).count(); // 10ms timeout
+
+        struct kevent event;
+        int ret = kevent(queue, nullptr, 0, &event, 1, &ts);
+
+        if (ret == 0)
+            continue; // Timeout has occured
+        if (ret == -1)
+        {
+            break; // Error has occured
+        }
+
+        // Process the completion event
+        auto user_data = event.udata;
+
+        // remove yield event listener
+        EV_SET(&event, event.ident, event.filter, EV_DELETE, 0, 0, nullptr);
+        ret = kevent(queue, &event, 1, nullptr, 0, nullptr);
+        if (ret < 0)
+        {
+            std::cerr << "An error has occured with deleting the event" << ret << std::endl;
+            break;
+        }
+        // Call the callback or handle the event based on user_data
+        auto *ev = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
+        if (ev)
+        {
+            // Call the callback function
+            ev->try_execute(ret);
+        }
+    }
+}
+
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
+{
+    // Directly call the function to simulate posting a yield event
+    struct yield_event final : webcraft::async::detail::runtime_event
+    {
+    private:
+        uintptr_t id;
+
+    public:
+        yield_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token)
+        {
+            id = reinterpret_cast<uintptr_t>(this);
+        }
+
+        void try_native_cancel() override
+        {
+        }
+
+        void try_start() override
+        {
+            // listen to the yield event
+            struct kevent event;
+            EV_SET(&event, id, EVFILT_USER, EV_ADD | EV_ENABLE, 0, 0, nullptr);
+            int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result != 0)
+            {
+                throw std::runtime_error("Failed to register yield event: " + std::to_string(result));
+            }
+
+            EV_SET(&event, id, EVFILT_USER, 0, NOTE_TRIGGER, 0, this);
+            result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result != 0)
+            {
+                throw std::runtime_error("Failed to fire yield event: " + std::to_string(result));
+            }
+        }
+    };
+
+    return std::make_unique<yield_event>();
+}
+
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
+{
+
+    struct sleep_event final : webcraft::async::detail::runtime_event
+    {
+    private:
+        std::chrono::steady_clock::duration duration;
+        uintptr_t id;
+
+    public:
+        sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token) : runtime_event(token), duration(duration)
+        {
+            id = reinterpret_cast<uintptr_t>(this);
+        }
+
+        void try_native_cancel() override
+        {
+            struct kevent event;
+            // remove yield event listener
+            EV_SET(&event, id, EVFILT_TIMER, EV_DELETE, 0, 0, nullptr);
+            int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result < 0)
+            {
+                throw std::runtime_error("Failed to remove event from kqueue: " + std::to_string(result));
+            }
+        }
+
+        void try_start() override
+        {
+            struct kevent event;
+            EV_SET(&event, id, EVFILT_TIMER, EV_ADD | EV_ENABLE, NOTE_NSECONDS, std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count(), this);
+            int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result < 0)
+            {
+                throw std::runtime_error("Failed to spawn timer event to kqueue" + std::to_string(result));
+            }
+        }
+    };
+
+    return std::make_unique<sleep_event>(duration, token);
+}
+
+#endif

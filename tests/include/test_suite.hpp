@@ -9,6 +9,8 @@
 #include <thread>
 #include <memory>
 
+using namespace std::chrono_literals;
+
 #ifdef TEST_SUITE_NAME
 
 #define TEST_CASE(name) TEST(TEST_SUITE_NAME, name)
@@ -23,3 +25,7 @@ inline uint64_t generate_random_uint64()
 
     return dist(gen);
 }
+
+constexpr auto test_timer_timeout = 200ms;
+constexpr auto test_cancel_timeout = 100ms;
+constexpr auto test_adjustment_factor = 50ms;

@@ -227,18 +227,17 @@ TEST_CASE(iocp_test_timer)
     // Initialize the IOCP
     HANDLE iocp = initialize_iocp();
 
-    auto sleep_time = std::chrono::seconds(5);
-    std::cout << "Posting timer event with sleep time: " << sleep_time.count() << " seconds" << std::endl;
+    std::cout << "Posting timer event with sleep time: " << test_timer_timeout.count() << " seconds" << std::endl;
 
-    post_timer_event(iocp, manager, sleep_time, payload);
+    post_timer_event(iocp, manager, test_timer_timeout, payload);
 
     auto start = std::chrono::steady_clock::now();
     wait_for_timeout_event(iocp, payload);
     auto end = std::chrono::steady_clock::now();
 
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + 100ms);
+    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start + test_adjustment_factor);
 
-    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+    EXPECT_GE(elapsed_time, test_timer_timeout) << "Timer event did not complete after the expected duration";
 
     destroy_iocp(iocp);
 }
@@ -249,11 +248,11 @@ TEST_CASE(try_cancellation_test)
 
     webcraft::async::runtime::detail::timer_manager manager;
 
-    PTP_TIMER timer = post_timer_event(iocp, manager, std::chrono::seconds(5), 0);
+    PTP_TIMER timer = post_timer_event(iocp, manager, test_timer_timeout, 0);
 
     std::jthread cancel_thread([&manager, &timer, iocp]()
                                {
-                                   std::this_thread::sleep_for(std::chrono::seconds(2));
+                                   std::this_thread::sleep_for(test_cancel_timeout);
                                    manager.cancel_timer(timer); // Cancel the timer after 2 seconds
                                    post_nop_event(iocp, 1);     // Post a dummy event to signal cancellation
                                });
@@ -273,11 +272,11 @@ TEST_CASE(try_cancellation_test_with_stop_token)
     webcraft::async::runtime::detail::timer_manager manager;
 
     std::stop_source source;
-    PTP_TIMER timer = post_timer_event(iocp, manager, std::chrono::seconds(5), 0);
+    PTP_TIMER timer = post_timer_event(iocp, manager, test_timer_timeout, 0);
 
     std::jthread cancel_thread([&manager, &source]()
                                {
-                                   std::this_thread::sleep_for(std::chrono::seconds(2));
+                                   std::this_thread::sleep_for(test_cancel_timeout);
                                    source.request_stop(); // Request cancellation after 2 seconds
                                });
 
@@ -312,23 +311,14 @@ TEST_CASE(try_cancellation_test_with_stop_token_and_callback)
         }
     };
 
-    constexpr auto sleep_time = std::chrono::seconds(5);
-    constexpr auto cancel_time = std::chrono::seconds(2);
-
     webcraft::async::runtime::detail::timer_manager manager;
 
     std::stop_source source;
-    PTP_TIMER timer = manager.post_timer_event(sleep_time, [&resume_signal, iocp]()
+    PTP_TIMER timer = manager.post_timer_event(test_timer_timeout, [&resume_signal, iocp]()
                                                {
                                                    resume_signal.set();                                                                 // Set the resume signal when the timer expires
                                                    post_nop_event(iocp, reinterpret_cast<uint64_t>(new enable_signal(&resume_signal))); // Post a dummy event to signal completion
                                                });
-
-    std::jthread cancel_thread([&manager, &source, cancel_time]()
-                               {
-                                   std::this_thread::sleep_for(cancel_time);
-                                   source.request_stop(); // Request cancellation after 2 seconds
-                               });
 
     std::stop_token token = source.get_token();
     std::stop_callback cancel_callback(token, [&manager, &timer, iocp, &canceled_signal]()
@@ -336,6 +326,11 @@ TEST_CASE(try_cancellation_test_with_stop_token_and_callback)
                                            manager.cancel_timer(timer);                                                           // Cancel the timer after 2 seconds
                                            post_nop_event(iocp, reinterpret_cast<uint64_t>(new enable_signal(&canceled_signal))); // Post a dummy event to signal cancellation
                                        });
+    std::jthread cancel_thread([&manager, &source]()
+                               {
+                                   std::this_thread::sleep_for(test_cancel_timeout);
+                                   source.request_stop(); // Request cancellation after some time
+                               });
 
     // Wait for the event to complete
     auto start = std::chrono::steady_clock::now();
@@ -345,16 +340,18 @@ TEST_CASE(try_cancellation_test_with_stop_token_and_callback)
     (*signal)();   // Call the callback to set the signal
     delete signal; // Clean up the callback event
 
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     EXPECT_TRUE(canceled_signal.is_set()) << "Expected cancellation signal to be set, but it was not";
-    EXPECT_GE(std::chrono::duration_cast<std::chrono::seconds>(end - start), cancel_time)
+    EXPECT_GE(duration, test_cancel_timeout)
         << "Expected cancellation to occur after the cancel time, but it did not";
-    EXPECT_LE(std::chrono::duration_cast<std::chrono::seconds>(end - start), sleep_time)
+    EXPECT_LE(duration, test_timer_timeout)
         << "Expected cancellation to occur before the sleep time, but it did not";
 
-    std::this_thread::sleep_for(std::chrono::seconds(4));
+    std::this_thread::sleep_for(test_timer_timeout);
 
     end = std::chrono::steady_clock::now();
-    EXPECT_GE(std::chrono::duration_cast<std::chrono::seconds>(end - start), sleep_time) << "Expected resume signal to be set after the sleep time, but it was not";
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    EXPECT_GE(duration, test_timer_timeout + test_adjustment_factor) << "Expected resume signal to be set after the sleep time, but it was not";
 
     EXPECT_FALSE(resume_signal.is_set()) << "Expected resume signal to not be set, but it was";
 
