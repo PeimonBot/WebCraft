@@ -205,8 +205,6 @@ TEST_CASE(kqueue_test_timer)
 
     int queue = initialize_kqueue();
 
-    auto sleep_time = 5ms;
-
     post_timer_event(queue, sleep_time, payload);
 
     auto start = std::chrono::steady_clock::now();
@@ -215,7 +213,7 @@ TEST_CASE(kqueue_test_timer)
 
     auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+    EXPECT_GE(elapsed_time, test_timer_timeout) << "Timer event did not complete after the expected duration";
 
     destroy_kqueue(queue);
 }

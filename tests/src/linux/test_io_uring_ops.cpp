@@ -216,8 +216,6 @@ TEST_CASE(io_uring_test_timer)
     struct io_uring ring;
     initialize_io_uring(&ring);
 
-    auto sleep_time = 5ms;
-
     post_timer_event(&ring, sleep_time, payload);
 
     auto start = std::chrono::steady_clock::now();
@@ -226,7 +224,7 @@ TEST_CASE(io_uring_test_timer)
 
     auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    EXPECT_GE(elapsed_time, sleep_time) << "Timer event did not complete after the expected duration";
+    EXPECT_GE(elapsed_time, test_timer_timeout) << "Timer event did not complete after the expected duration";
 
     destroy_io_uring(&ring);
 }

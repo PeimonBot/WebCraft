@@ -43,17 +43,16 @@ TEST_CASE(TestRuntimeTimerTask)
 
     auto timer_task = []() -> task<void>
     {
-        constexpr auto factor = 10ms;
         for (int i = 0; i < 3; i++)
         {
-            auto timer_duration = factor * (i + 1);
+            auto timer_duration = test_timer_timeout * (i + 1);
             auto start_time = std::chrono::steady_clock::now();
             co_await sleep_for(timer_duration);
             auto end_time = std::chrono::steady_clock::now();
 
             auto elapsed_time = end_time - start_time;
             EXPECT_GE(elapsed_time, timer_duration) << "Elapsed time should be greater than or equal to timer duration";
-            EXPECT_LE(elapsed_time, timer_duration + 10ms) << "Elapsed time should not exceed timer duration by more than 10ms";
+            EXPECT_LE(elapsed_time, timer_duration + test_adjustment_factor) << "Elapsed time should not exceed timer duration by more than " << test_adjustment_factor.count() << "ms";
         }
     };
 
@@ -69,14 +68,11 @@ TEST_CASE(TestRuntimeTimerCancellationTask)
 
     auto timer_task = []() -> task<void>
     {
-        constexpr auto timer_time = 10ms;
-        constexpr auto cancel_time = 5ms;
-
         std::stop_source source;
 
-        std::thread([&source, cancel_time]
+        std::thread([&source]
                     {
-            std::this_thread::sleep_for(cancel_time);
+            std::this_thread::sleep_for(test_cancel_timeout);
             source.request_stop(); })
             .detach();
 
@@ -84,12 +80,12 @@ TEST_CASE(TestRuntimeTimerCancellationTask)
 
         auto start_time = std::chrono::steady_clock::now();
 
-        co_await sleep_for(timer_time, token);
+        co_await sleep_for(test_timer_timeout, token);
         auto end_time = std::chrono::steady_clock::now();
 
         auto elapsed_time = end_time - start_time;
-        EXPECT_GE(elapsed_time, cancel_time) << "The timer should have been cancelled after 5ms";
-        EXPECT_LE(elapsed_time, timer_time) << "The cancellation should not have happened after 10ms";
+        EXPECT_GE(elapsed_time, test_cancel_timeout) << "The timer should have been cancelled after " << test_cancel_timeout.count() << "ms";
+        EXPECT_LE(elapsed_time, test_timer_timeout) << "The cancellation should not have happened after " << test_timer_timeout.count() << "ms";
     };
 
     sync_wait(timer_task());

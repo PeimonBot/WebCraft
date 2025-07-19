@@ -107,8 +107,6 @@ TEST_CASE(TestingWithSyncWait)
     EXPECT_EQ(sync_wait(makeTask()), "foo") << "sync_wait should return 'foo' from the task";
 }
 
-constexpr std::chrono::milliseconds timeout(500);
-
 TEST_CASE(TestingSyncWaitWithAnotherThread)
 {
 
@@ -118,7 +116,7 @@ TEST_CASE(TestingSyncWaitWithAnotherThread)
         void await_suspend(std::coroutine_handle<> h) const noexcept
         {
             std::thread([h]()
-                        { std::this_thread::sleep_for(timeout); h.resume(); })
+                        { std::this_thread::sleep_for(test_timer_timeout); h.resume(); })
                 .detach();
         }
         void await_resume() const noexcept {}
@@ -134,8 +132,8 @@ TEST_CASE(TestingSyncWaitWithAnotherThread)
     auto end = std::chrono::steady_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    EXPECT_GE(duration, timeout) << "sync_wait should wait for the thread to finish";
-    EXPECT_LE(duration, timeout + 10ms) << "sync_wait should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout) << "sync_wait should wait for the thread to finish";
+    EXPECT_LE(duration, test_timer_timeout + test_adjustment_factor) << "sync_wait should not wait too long";
 }
 
 TEST_CASE(TestTaskThroughput)
@@ -183,7 +181,7 @@ TEST_CASE(TestTaskCompletesAsynchronously)
 
     std::thread([&]()
                 {
-        std::this_thread::sleep_for(timeout);
+        std::this_thread::sleep_for(test_timer_timeout);
         ev.set(); })
         .detach();
 
@@ -192,8 +190,8 @@ TEST_CASE(TestTaskCompletesAsynchronously)
     auto end = std::chrono::steady_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    EXPECT_GE(duration, timeout) << "sync_wait should wait for the event to be set";
-    EXPECT_LE(duration, timeout + 10ms) << "sync_wait should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout) << "sync_wait should wait for the event to be set";
+    EXPECT_LE(duration, test_timer_timeout + test_adjustment_factor) << "sync_wait should not wait too long";
     EXPECT_EQ(result, 42) << "sync_wait should return 42 after the event is set";
 
     EXPECT_TRUE(ev.is_set()) << "Event should be set after sync_wait completes";
@@ -239,9 +237,9 @@ TEST_CASE(TestTaskEagerness)
     EXPECT_TRUE(signal.is_set()) << "Signal should be set immediately after task creation";
 }
 
-struct resume_on_thread_with_timeout
+struct resume_on_thread_with_test_timer_timeout
 {
-    std::chrono::milliseconds timeout;
+    std::chrono::milliseconds test_timer_timeout;
 
     bool await_ready() const noexcept { return false; }
 
@@ -249,7 +247,7 @@ struct resume_on_thread_with_timeout
     {
         std::thread([h, this]()
                     {
-            std::this_thread::sleep_for(timeout);
+            std::this_thread::sleep_for(test_timer_timeout);
             h.resume(); })
             .detach();
     }
@@ -259,21 +257,21 @@ struct resume_on_thread_with_timeout
 
 TEST_CASE(TestTaskWhenAllVoid)
 {
-    constexpr std::chrono::milliseconds timeout_1(500);
-    constexpr std::chrono::milliseconds timeout_2(300);
+    constexpr std::chrono::milliseconds test_timer_timeout_1(500);
+    constexpr std::chrono::milliseconds test_timer_timeout_2(300);
 
     event_signal signal1, signal2;
 
     auto task1 = [&]() -> task<void>
     {
-        co_await resume_on_thread_with_timeout{timeout_1};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_1};
         signal1.set();
         co_return;
     };
 
     auto task2 = [&]() -> task<void>
     {
-        co_await resume_on_thread_with_timeout{timeout_2};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_2};
         signal2.set();
         co_return;
     };
@@ -289,25 +287,25 @@ TEST_CASE(TestTaskWhenAllVoid)
 
     EXPECT_TRUE(signal1.is_set()) << "First signal should be set after when_all completes";
     EXPECT_TRUE(signal2.is_set()) << "Second signal should be set after when_all completes";
-    EXPECT_GE(duration, timeout_1) << "when_all should wait for the longest task to complete";
-    EXPECT_LE(duration, timeout_1 + 10ms) << "when_all should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout_1) << "when_all should wait for the longest task to complete";
+    EXPECT_LE(duration, test_timer_timeout_1 + test_adjustment_factor) << "when_all should not wait too long";
 }
 
 TEST_CASE(TestTaskWhenAllHomogenous)
 {
-    constexpr std::chrono::milliseconds timeout_1(500);
-    constexpr std::chrono::milliseconds timeout_2(300);
+    constexpr std::chrono::milliseconds test_timer_timeout_1(500);
+    constexpr std::chrono::milliseconds test_timer_timeout_2(300);
 
     auto task1 = [&]() -> task<int>
     {
-        co_await resume_on_thread_with_timeout{timeout_1};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_1};
 
         co_return 1;
     };
 
     auto task2 = [&]() -> task<int>
     {
-        co_await resume_on_thread_with_timeout{timeout_2};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_2};
         co_return 2;
     };
 
@@ -325,32 +323,32 @@ TEST_CASE(TestTaskWhenAllHomogenous)
     EXPECT_EQ(results[0], 1) << "First result should be 1";
     EXPECT_EQ(results[1], 2) << "Second result should be 2";
 
-    EXPECT_GE(duration, timeout_1) << "when_all should wait for the longest task to complete";
-    EXPECT_LE(duration, timeout_1 + 10ms) << "when_all should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout_1) << "when_all should wait for the longest task to complete";
+    EXPECT_LE(duration, test_timer_timeout_1 + test_adjustment_factor) << "when_all should not wait too long";
 }
 
 TEST_CASE(TestTaskWhenAllHeterogenous)
 {
-    constexpr std::chrono::milliseconds timeout_1(500);
-    constexpr std::chrono::milliseconds timeout_2(300);
-    constexpr std::chrono::milliseconds timeout_3(800);
+    constexpr std::chrono::milliseconds test_timer_timeout_1(500);
+    constexpr std::chrono::milliseconds test_timer_timeout_2(300);
+    constexpr std::chrono::milliseconds test_timer_timeout_3(800);
     event_signal signal;
 
     auto task1 = [&]() -> task<int>
     {
-        co_await resume_on_thread_with_timeout{timeout_1};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_1};
         co_return 1;
     };
 
     auto task2 = [&]() -> task<std::string>
     {
-        co_await resume_on_thread_with_timeout{timeout_2};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_2};
         co_return "two";
     };
 
     auto task3 = [&]() -> task<void>
     {
-        co_await resume_on_thread_with_timeout{timeout_3};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_3};
         signal.set();
         co_return;
     };
@@ -366,27 +364,27 @@ TEST_CASE(TestTaskWhenAllHeterogenous)
     EXPECT_EQ(std::get<1>(results), "two") << "Second result should be 'two'";
     EXPECT_TRUE(signal.is_set()) << "Signal should be set after the third task completes";
 
-    EXPECT_GE(duration, timeout_3) << "when_all should wait for the longest task to complete";
-    EXPECT_LE(duration, timeout_3 + 10ms) << "when_all should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout_3) << "when_all should wait for the longest task to complete";
+    EXPECT_LE(duration, test_timer_timeout_3 + test_adjustment_factor) << "when_all should not wait too long";
 }
 
 TEST_CASE(TestTaskWhenAnyVoid)
 {
-    constexpr std::chrono::milliseconds timeout_1(500);
-    constexpr std::chrono::milliseconds timeout_2(300);
+    constexpr std::chrono::milliseconds test_timer_timeout_1(500);
+    constexpr std::chrono::milliseconds test_timer_timeout_2(300);
 
     event_signal signal1, signal2;
 
     auto task1 = [&]() -> task<void>
     {
-        co_await resume_on_thread_with_timeout{timeout_1};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_1};
         signal1.set();
         co_return;
     };
 
     auto task2 = [&]() -> task<void>
     {
-        co_await resume_on_thread_with_timeout{timeout_2};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_2};
         signal2.set();
         co_return;
     };
@@ -402,24 +400,24 @@ TEST_CASE(TestTaskWhenAnyVoid)
 
     EXPECT_TRUE(signal2.is_set()) << "At least one signal should be set after when_any completes";
     EXPECT_TRUE(!signal1.is_set()) << "Only the first task should complete, as it is the shortest";
-    EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
-    EXPECT_LE(duration, timeout_2 + 10ms) << "when_any should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout_2) << "when_any should wait for the shortest task to complete";
+    EXPECT_LE(duration, test_timer_timeout_2 + test_adjustment_factor) << "when_any should not wait too long";
 }
 
 TEST_CASE(TestTaskWhenAnyReturnType)
 {
-    constexpr std::chrono::milliseconds timeout_1(500);
-    constexpr std::chrono::milliseconds timeout_2(300);
+    constexpr std::chrono::milliseconds test_timer_timeout_1(500);
+    constexpr std::chrono::milliseconds test_timer_timeout_2(300);
 
     auto task1 = [&]() -> task<int>
     {
-        co_await resume_on_thread_with_timeout{timeout_1};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_1};
         co_return 5;
     };
 
     auto task2 = [&]() -> task<int>
     {
-        co_await resume_on_thread_with_timeout{timeout_2};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_2};
         co_return 3;
     };
 
@@ -433,33 +431,33 @@ TEST_CASE(TestTaskWhenAnyReturnType)
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     EXPECT_EQ(result, 3) << "when_any should return the result of the first completed task";
-    EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
-    EXPECT_LE(duration, timeout_2 + 10ms) << "when_any should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout_2) << "when_any should wait for the shortest task to complete";
+    EXPECT_LE(duration, test_timer_timeout_2 + test_adjustment_factor) << "when_any should not wait too long";
 }
 
 TEST_CASE(TestTaskWhenAnyHeterogeneous)
 {
-    constexpr std::chrono::milliseconds timeout_1(500);
-    constexpr std::chrono::milliseconds timeout_2(300);
-    constexpr std::chrono::milliseconds timeout_3(800);
+    constexpr std::chrono::milliseconds test_timer_timeout_1(500);
+    constexpr std::chrono::milliseconds test_timer_timeout_2(300);
+    constexpr std::chrono::milliseconds test_timer_timeout_3(800);
 
     event_signal signal;
 
     auto task1 = [&]() -> task<int>
     {
-        co_await resume_on_thread_with_timeout{timeout_1};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_1};
         co_return 1;
     };
 
     auto task2 = [&]() -> task<std::string>
     {
-        co_await resume_on_thread_with_timeout{timeout_2};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_2};
         co_return "two";
     };
 
     auto task3 = [&]() -> task<void>
     {
-        co_await resume_on_thread_with_timeout{timeout_3};
+        co_await resume_on_thread_with_test_timer_timeout{test_timer_timeout_3};
         signal.set();
         co_return;
     };
@@ -474,6 +472,6 @@ TEST_CASE(TestTaskWhenAnyHeterogeneous)
     EXPECT_TRUE(std::holds_alternative<std::string>(result)) << "Result should be either int or string";
     EXPECT_EQ(std::get<std::string>(result), "two") << "Second result should be 'two'";
 
-    EXPECT_GE(duration, timeout_2) << "when_any should wait for the shortest task to complete";
-    EXPECT_LE(duration, timeout_2 + 10ms) << "when_any should not wait too long";
+    EXPECT_GE(duration, test_timer_timeout_2) << "when_any should wait for the shortest task to complete";
+    EXPECT_LE(duration, test_timer_timeout_2 + test_adjustment_factor) << "when_any should not wait too long";
 }
