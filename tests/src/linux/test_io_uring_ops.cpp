@@ -216,7 +216,7 @@ TEST_CASE(io_uring_test_timer)
     struct io_uring ring;
     initialize_io_uring(&ring);
 
-    post_timer_event(&ring, sleep_time, payload);
+    post_timer_event(&ring, test_timer_timeout, payload);
 
     auto start = std::chrono::steady_clock::now();
     wait_for_timeout_event(&ring, payload);

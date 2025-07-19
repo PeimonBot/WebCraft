@@ -73,7 +73,7 @@ void run_loop(std::stop_token token)
     while (!token.stop_requested())
     {
         __kernel_timespec ts = {0, 0};
-        ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(wait_timeout); // 10ms timeout
+        ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(wait_timeout).count(); // 10ms timeout
 
         struct io_uring_cqe *cqe;
         int ret = io_uring_wait_cqe_timeout(&global_ring, &cqe, &ts);
