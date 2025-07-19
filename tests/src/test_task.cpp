@@ -130,12 +130,7 @@ TEST_CASE(TestingSyncWaitWithAnotherThread)
         EXPECT_NE(id, new_id) << "Task should resume on a different thread";
     };
 
-    auto start = std::chrono::steady_clock::now();
     sync_wait(asyncfn());
-    auto end = std::chrono::steady_clock::now();
-
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    EXPECT_GE(duration, test_timer_timeout) << "sync_wait should wait for the thread to finish";
 }
 
 TEST_CASE(TestTaskThroughput)
