@@ -205,7 +205,7 @@ TEST_CASE(kqueue_test_timer)
 
     int queue = initialize_kqueue();
 
-    post_timer_event(queue, sleep_time, payload);
+    post_timer_event(queue, test_timer_timeout, payload);
 
     auto start = std::chrono::steady_clock::now();
     wait_for_timeout_event(queue, payload);

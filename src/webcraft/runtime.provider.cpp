@@ -353,4 +353,152 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
     return std::make_unique<sleep_event>(duration, token); // Windows does not support sleep events in the same way
 }
 
+#elif defined(__APPLE__)
+
+#include <sys/event.h>
+#include <unistd.h>
+
+static int queue;
+
+bool start_runtime_async() noexcept
+{
+    queue = kqueue();
+
+    if (queue == -1)
+    {
+        // Marked noexcept so can't throw exceptions, handle error gracefully
+        std::cerr << "Failed to initialize kqueue: " << std::strerror(queue) << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+void run_loop(std::stop_token token)
+{
+    // perform the following when we're done with the io_uring loop
+    std::stop_callback callback(token, []
+                                { close(queue); });
+
+    // while we're running, we will wait for events
+    std::cout << "kqueue loop started." << std::endl;
+    while (!token.stop_requested())
+    {
+        timespec ts = {0, 0};
+        ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(wait_timeout).count(); // 10ms timeout
+
+        struct kevent event;
+        int ret = kevent(queue, nullptr, 0, &event, 1, &ts);
+
+        if (ret == 0)
+            continue; // Timeout has occured
+        if (ret == -1)
+        {
+            break; // Error has occured
+        }
+
+        // Process the completion event
+        auto user_data = event.udata;
+
+        // remove yield event listener
+        EV_SET(&event, event.ident, event.filter, EV_DELETE, 0, 0, nullptr);
+        ret = kevent(queue, &event, 1, nullptr, 0, nullptr);
+        if (ret < 0)
+        {
+            std::cerr << "An error has occured with deleting the event" << ret << std::endl;
+            break;
+        }
+        // Call the callback or handle the event based on user_data
+        auto *ev = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
+        if (ev)
+        {
+            // Call the callback function
+            ev->try_execute(ret);
+        }
+    }
+}
+
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
+{
+    // Directly call the function to simulate posting a yield event
+    struct yield_event final : webcraft::async::detail::runtime_event
+    {
+    private:
+        uintptr_t id;
+
+    public:
+        yield_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token)
+        {
+            id = reinterpret_cast<uintptr_t>(this);
+        }
+
+        void try_native_cancel() override
+        {
+        }
+
+        void try_start() override
+        {
+            // listen to the yield event
+            struct kevent event;
+            EV_SET(&event, id, EVFILT_USER, EV_ADD | EV_ENABLE, 0, 0, nullptr);
+            int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result != 0)
+            {
+                throw std::runtime_error("Failed to register yield event: " + std::to_string(result));
+            }
+
+            EV_SET(&event, id, EVFILT_USER, 0, NOTE_TRIGGER, 0, this);
+            result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result != 0)
+            {
+                throw std::runtime_error("Failed to fire yield event: " + std::to_string(result));
+            }
+        }
+    };
+
+    return std::make_unique<yield_event>();
+}
+
+std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
+{
+
+    struct sleep_event final : webcraft::async::detail::runtime_event
+    {
+    private:
+        std::chrono::steady_clock::duration duration;
+        uintptr_t id;
+
+    public:
+        sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token) : runtime_event(token), duration(duration)
+        {
+            id = reinterpret_cast<uintptr_t>(this);
+        }
+
+        void try_native_cancel() override
+        {
+            struct kevent event;
+            // remove yield event listener
+            EV_SET(&event, id, EVFILT_TIMER, EV_DELETE, 0, 0, nullptr);
+            int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result < 0)
+            {
+                throw std::runtime_error("Failed to remove event from kqueue: " + std::to_string(result));
+            }
+        }
+
+        void try_start() override
+        {
+            struct kevent event;
+            EV_SET(&event, id, EVFILT_TIMER, EV_ADD | EV_ENABLE, NOTE_NSECONDS, std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count(), this);
+            int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
+            if (result < 0)
+            {
+                throw std::runtime_error("Failed to spawn timer event to kqueue" + std::to_string(result));
+            }
+        }
+    };
+
+    return std::make_unique<sleep_event>(duration, token);
+}
+
 #endif
