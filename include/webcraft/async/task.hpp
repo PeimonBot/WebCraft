@@ -8,7 +8,7 @@
 #include <iostream>
 #include <ranges>
 #include <utility>
-#include <exception>
+#include <functional>
 
 namespace webcraft::async
 {
@@ -197,53 +197,183 @@ namespace webcraft::async
         return task<void>{std::coroutine_handle<task_promise>::from_promise(*this)};
     }
 
-    // then() implementation
-    template <typename Func>
-    struct then_awaitable
-    {
-        Func func;
+    // // then() implementation
+    // template <typename Func>
+    // struct then_awaitable
+    // {
+    //     Func func;
 
-        explicit then_awaitable(Func f) : func(std::move(f)) {}
+    //     explicit then_awaitable(Func f) : func(std::move(f)) {}
+    // };
+
+    // template <typename Func>
+    // then_awaitable<Func> then(Func &&func)
+    // {
+    //     return then_awaitable<Func>{std::forward<Func>(func)};
+    // }
+
+    // template <typename Awaitable, typename Func>
+    // auto operator|(Awaitable &&awaitable, then_awaitable<Func> then_op) -> task<std::invoke_result_t<Func, awaitable_resume_t<Awaitable>>>
+    //     requires(!std::same_as<awaitable_resume_t<Awaitable>, void>)
+    // {
+    //     using result_type = std::invoke_result_t<Func, awaitable_resume_t<Awaitable>>;
+
+    //     auto result = co_await std::forward<Awaitable>(awaitable);
+
+    //     if constexpr (awaitable_t<result_type>)
+    //     {
+    //         co_return co_await then_op.func(result); // If result is also awaitable, await it
+    //     }
+    //     else
+    //     {
+    //         co_return then_op.func(result);
+    //     }
+    // }
+
+    // template <typename Awaitable, typename Func>
+    // auto operator|(Awaitable &&awaitable, then_awaitable<Func> then_op) -> task<std::invoke_result_t<Func>>
+    //     requires std::same_as<awaitable_resume_t<Awaitable>, void>
+    // {
+    //     using result_type = std::invoke_result_t<Func>;
+
+    //     co_await std::forward<Awaitable>(awaitable);
+    //     if constexpr (awaitable_t<result_type>)
+    //     {
+    //         co_return co_await then_op.func(); // If result is also awaitable, await it
+    //     }
+    //     else
+    //     {
+    //         co_return then_op.func();
+    //     }
+    // }
+
+    template <typename Derived>
+    struct task_adaptor_closure
+    {
+        template <typename Awaitable>
+        friend auto operator|(Awaitable &&awaitable, Derived &&self)
+        {
+            return self(std::forward<Awaitable>(awaitable));
+        }
+
+        template <typename Awaitable>
+        friend auto operator|(Awaitable &&awaitable, Derived &self)
+        {
+            return self(std::forward<Awaitable>(awaitable));
+        }
+
+        template <typename Awaitable>
+        friend auto operator|(Awaitable &&awaitable, const Derived &self)
+        {
+            return self(std::forward<Awaitable>(awaitable));
+        }
     };
 
+    namespace detail
+    {
+        template <typename Func>
+        class then_adaptor_closure : public task_adaptor_closure<then_adaptor_closure<Func>>
+        {
+        private:
+            Func func;
+
+        public:
+            explicit then_adaptor_closure(Func f) : func(std::move(f)) {}
+
+            template <awaitable_t Awaitable>
+            auto operator()(Awaitable &&awaitable) const
+            {
+                using AwaitedType = awaitable_resume_t<Awaitable>;
+
+                if constexpr (std::is_void_v<AwaitedType>)
+                {
+                    using Result = std::invoke_result_t<Func>;
+
+                    auto task_fn = [](Awaitable &&awaitable, const Func &func) -> task<Result>
+                    {
+                        if constexpr (awaitable_t<Result>)
+                        {
+                            co_await std::forward<Awaitable>(awaitable);
+                            co_return co_await func();
+                        }
+                        else
+                        {
+                            co_await std::forward<Awaitable>(awaitable);
+                            co_return func();
+                        }
+                    };
+
+                    return task_fn(std::forward<Awaitable>(awaitable), func);
+                }
+                else
+                {
+                    using Result = std::invoke_result_t<Func, AwaitedType>;
+
+                    auto task_fn = [](Awaitable &&awaitable, const Func &func) -> task<Result>
+                    {
+                        if constexpr (awaitable_t<Result>)
+                        {
+                            co_return co_await func(co_await std::forward<Awaitable>(awaitable));
+                        }
+                        else
+                        {
+                            co_return func(co_await std::forward<Awaitable>(awaitable));
+                        }
+                    };
+                    return task_fn(std::forward<Awaitable>(awaitable), func);
+                }
+            }
+        };
+
+        template <typename Func>
+        class upon_error_adaptor_closure : public task_adaptor_closure<upon_error_adaptor_closure<Func>>
+        {
+        private:
+            Func handler;
+
+        public:
+            upon_error_adaptor_closure(Func &&h)
+                : handler(std::move(h)) {}
+            static_assert(std::is_invocable_v<Func, std::exception_ptr>,
+                          "Handler must be invocable with std::exception_ptr");
+
+            template <awaitable_t Awaitable>
+            task<awaitable_resume_t<Awaitable>> operator()(Awaitable &&awaitable) const
+            {
+                static_assert(std::convertible_to<awaitable_resume_t<Awaitable>, std::invoke_result_t<Func, std::exception_ptr>>,
+                              "Awaitable result must be convertible to the handler's result type");
+
+                using ResultType = awaitable_resume_t<Awaitable>;
+
+                try
+                {
+                    if constexpr (std::is_void_v<ResultType>)
+                    {
+                        co_await std::forward<Awaitable>(awaitable);
+                    }
+                    else
+                    {
+                        co_return co_await std::forward<Awaitable>(awaitable);
+                    }
+                }
+                catch (...)
+                {
+                    co_return handler(std::current_exception());
+                }
+            }
+        };
+    }
+
     template <typename Func>
-    then_awaitable<Func> then(Func &&func)
+    auto then(Func &&func)
     {
-        return then_awaitable<Func>{std::forward<Func>(func)};
+        return detail::then_adaptor_closure<std::decay_t<Func>>{std::forward<Func>(func)};
     }
 
-    template <typename Awaitable, typename Func>
-    auto operator|(Awaitable &&awaitable, then_awaitable<Func> then_op) -> task<std::invoke_result_t<Func, awaitable_resume_t<Awaitable>>>
-        requires(!std::same_as<awaitable_resume_t<Awaitable>, void>)
+    template <typename Func>
+    auto upon_error(Func &&handler)
     {
-        using result_type = std::invoke_result_t<Func, awaitable_resume_t<Awaitable>>;
-
-        auto result = co_await std::forward<Awaitable>(awaitable);
-
-        if constexpr (awaitable_t<result_type>)
-        {
-            co_return co_await then_op.func(result); // If result is also awaitable, await it
-        }
-        else
-        {
-            co_return then_op.func(result);
-        }
+        return detail::upon_error_adaptor_closure<std::decay_t<Func>>{std::forward<Func>(handler)};
     }
 
-    template <typename Awaitable, typename Func>
-    auto operator|(Awaitable &&awaitable, then_awaitable<Func> then_op) -> task<std::invoke_result_t<Func>>
-        requires std::same_as<awaitable_resume_t<Awaitable>, void>
-    {
-        using result_type = std::invoke_result_t<Func>;
-
-        co_await std::forward<Awaitable>(awaitable);
-        if constexpr (awaitable_t<result_type>)
-        {
-            co_return co_await then_op.func(); // If result is also awaitable, await it
-        }
-        else
-        {
-            co_return then_op.func();
-        }
-    }
 }
