@@ -10,7 +10,6 @@ on:
         types: [review_requested, ready_for_review]
 
 jobs:
-    if: github.event.pull_request.draft == false
     build:
         runs-on: ${{ matrix.os }}
 
