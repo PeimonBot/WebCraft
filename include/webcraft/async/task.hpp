@@ -197,56 +197,6 @@ namespace webcraft::async
         return task<void>{std::coroutine_handle<task_promise>::from_promise(*this)};
     }
 
-    // // then() implementation
-    // template <typename Func>
-    // struct then_awaitable
-    // {
-    //     Func func;
-
-    //     explicit then_awaitable(Func f) : func(std::move(f)) {}
-    // };
-
-    // template <typename Func>
-    // then_awaitable<Func> then(Func &&func)
-    // {
-    //     return then_awaitable<Func>{std::forward<Func>(func)};
-    // }
-
-    // template <typename Awaitable, typename Func>
-    // auto operator|(Awaitable &&awaitable, then_awaitable<Func> then_op) -> task<std::invoke_result_t<Func, awaitable_resume_t<Awaitable>>>
-    //     requires(!std::same_as<awaitable_resume_t<Awaitable>, void>)
-    // {
-    //     using result_type = std::invoke_result_t<Func, awaitable_resume_t<Awaitable>>;
-
-    //     auto result = co_await std::forward<Awaitable>(awaitable);
-
-    //     if constexpr (awaitable_t<result_type>)
-    //     {
-    //         co_return co_await then_op.func(result); // If result is also awaitable, await it
-    //     }
-    //     else
-    //     {
-    //         co_return then_op.func(result);
-    //     }
-    // }
-
-    // template <typename Awaitable, typename Func>
-    // auto operator|(Awaitable &&awaitable, then_awaitable<Func> then_op) -> task<std::invoke_result_t<Func>>
-    //     requires std::same_as<awaitable_resume_t<Awaitable>, void>
-    // {
-    //     using result_type = std::invoke_result_t<Func>;
-
-    //     co_await std::forward<Awaitable>(awaitable);
-    //     if constexpr (awaitable_t<result_type>)
-    //     {
-    //         co_return co_await then_op.func(); // If result is also awaitable, await it
-    //     }
-    //     else
-    //     {
-    //         co_return then_op.func();
-    //     }
-    // }
-
     template <typename Derived>
     struct task_adaptor_closure
     {
