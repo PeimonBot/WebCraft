@@ -23,18 +23,7 @@ The codebase supports being able to yield control back to the runtime, being abl
 
 ### Async IO
 
-The way I treat AsyncIO in my framework is with 2 concepts: Pub/Sub & Streams. Pub Sub is the concept where:
- - you have subscribers subscribed to publishers and receiving messages from them
- - messages can be either values, errors, or completion status (`onNext`, `onError`, `onCompletion`, `onSubscribe`)
- - subscribers can cancel their subscription
+The way I am treating AsyncIO is inspired by Java Streams and a couple other functional programming frameworks. I really liked Java Streams (it made everything much simpler but I'm only mentioning this since I came from a Java world). I also really like the Ranges API of C++, LINQ of C#, and I couple others and I believe that both the I/O streams and functional programming should inherintly be together.
+So I have modeled the framework based off of input and output streams which can be adapted to use common functional programming concepts and be transformed and translated into streams of other types using `async_generator` and other powerful types derived from C++ 20. Right now it is a work in progress but I will update the feature list once its done.
 
-Streams are the concept where you have 2 types: InputStreams and OutputStreams:
- - You can receive items from InputStreams (if they still are there otherwise it'll give you `std::nullopt`)
- - You can send items to OutputStreams
- - Streams can be closed and asynchronous streams will resume once the task is complete
-
-The idea is that Pub Sub is very closely related to I/O Streams in the sense that:
- - OutputStreams are the frontend publishers whose subscribers are the areas which are being written to (which is only 1 since its a stream)
- - InputStreams are the subscribers to published events whose publishers read from
-So in a nutshell: OutputStreams = Publisher (to 1 subscriber) and InputStreams are a subscriber
-
+When in doubt, the test cases are the documentation!
