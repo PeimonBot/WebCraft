@@ -88,6 +88,31 @@ namespace webcraft::async::io
         }
     };
 
+    template <typename StreamType>
+    std::unique_ptr<async_readable_stream<StreamType>> to_readable_stream(async_generator<StreamType> gen)
+    {
+
+        struct generator_readable_stream : public async_readable_stream<StreamType>
+        {
+            async_generator<StreamType> generator;
+
+            explicit generator_readable_stream(async_generator<StreamType> gen)
+                : generator(std::move(gen)) {}
+
+            task<std::optional<StreamType>> recv() override
+            {
+                auto it = co_await generator.begin();
+                if (it == generator.end())
+                {
+                    co_return std::nullopt; // No more data
+                }
+                co_return *it; // Return the current value
+            }
+        };
+
+        return std::make_unique<generator_readable_stream>(std::move(gen));
+    }
+
     namespace adaptors
     {
 
@@ -112,31 +137,6 @@ namespace webcraft::async::io
                 return self(stream);
             }
         };
-
-        template <typename StreamType>
-        std::unique_ptr<async_readable_stream<StreamType>> to_readable_stream(async_generator<StreamType> gen)
-        {
-
-            struct generator_readable_stream : public async_readable_stream<StreamType>
-            {
-                async_generator<StreamType> generator;
-
-                explicit generator_readable_stream(async_generator<StreamType> gen)
-                    : generator(std::move(gen)) {}
-
-                task<std::optional<StreamType>> recv() override
-                {
-                    auto it = co_await generator.begin();
-                    if (it == generator.end())
-                    {
-                        co_return std::nullopt; // No more data
-                    }
-                    co_return *it; // Return the current value
-                }
-            };
-
-            return std::make_unique<generator_readable_stream>(std::move(gen));
-        }
 
         namespace detail
         {
@@ -512,4 +512,28 @@ namespace webcraft::async::io
                 });
         }
     }
+
+    namespace collectors
+    {
+        // TODO: To be done, make basic collectors like to_vector, to_set, to_string, joining, foldLeft, foldRight, etc.
+    }
+
+    template <non_void_v T>
+    struct channel
+    {
+        // Channel implementation goes here
+        std::unique_ptr<async_readable_stream<T>> reader;
+        std::shared_ptr<async_writable_stream<T>> writer;
+
+        // TODO: build this
+    };
+
+    namespace fs {
+        // build these types
+    }
+
+    namespace socket {
+        // build these types as well
+    }
+
 }
