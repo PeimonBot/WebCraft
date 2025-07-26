@@ -78,8 +78,8 @@ namespace webcraft::async
 
     template <typename... Tasks>
         requires(awaitable_t<Tasks> && ...)
-    task<std::tuple<normalized_result_t<Tasks>...>> when_all(Tasks &&...tasks)
+    auto when_all(Tasks &&...tasks)
     {
-        co_return co_await when_all(std::make_tuple(std::forward<Tasks>(tasks)...));
+        return when_all(std::make_tuple(std::forward<Tasks>(tasks)...));
     }
 }
