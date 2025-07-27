@@ -7,6 +7,7 @@
 #include "task.hpp"
 #include "generator.hpp"
 #include "async_generator.hpp"
+#include <mutex>
 
 namespace webcraft::async::io
 {
@@ -116,52 +117,104 @@ namespace webcraft::async::io
     namespace detail
     {
         template <typename StreamType>
-        struct channel
+        struct mpsc_channel_subscription
         {
-            std::unique_ptr<async_readable_stream<StreamType>> source;
-            std::shared_ptr<async_writable_stream<StreamType>> sink;
-        };
+            std::deque<StreamType> queue;
+            std::coroutine_handle<> waiter;
+            std::mutex mutex;
 
-        struct channel_subscription
-        {
-        };
-
-        template <typename StreamType>
-        struct channel_rstream : public async_readable_stream<typename channel<StreamType>::value_type>
-        {
-            channel<StreamType> chan;
-
-            explicit channel_rstream(channel<StreamType> c)
-                : chan(std::move(c)) {}
-
-            task<std::optional<typename channel<StreamType>::value_type>> recv() override
+            task<std::optional<StreamType>> get_next()
             {
-                auto value = co_await chan.source->recv();
-                if (value)
+                struct awaiter
                 {
-                    co_await chan.sink->send(*value);
+                    mpsc_channel_subscription *self;
+
+                    bool await_ready() const noexcept
+                    {
+                        std::scoped_lock lock(self->mutex);
+                        return !self->queue.empty();
+                    }
+
+                    void await_suspend(std::coroutine_handle<> handle)
+                    {
+                        std::scoped_lock lock(self->mutex);
+                        self->waiter = handle;
+                    }
+
+                    std::optional<StreamType> await_resume()
+                    {
+                        std::scoped_lock lock(self->mutex);
+                        if (!self->queue.empty())
+                        {
+                            auto val = std::move(self->queue.front());
+                            self->queue.pop_front();
+                            return val;
+                        }
+                        return std::nullopt;
+                    }
+                };
+
+                co_return co_await awaiter{this};
+            }
+
+            task<bool> set_next(StreamType &&value)
+            {
+                std::unique_lock lock(mutex);
+                if (waiter && !waiter.done())
+                {
+                    auto h = std::exchange(waiter, {});
+                    queue.push_back(std::move(value));
+                    h.resume();
+                    co_return true;
                 }
-                co_return value;
+                else
+                {
+                    queue.push_back(std::move(value));
+                    co_return true;
+                }
             }
         };
 
         template <typename StreamType>
-        struct channel_wstream : public async_writable_stream<typename channel<StreamType>::value_type>
+        struct mpsc_channel_rstream : public async_readable_stream<StreamType>
         {
-            channel<StreamType> chan;
+            std::shared_ptr<mpsc_channel_subscription<StreamType>> chan;
 
-            explicit channel_wstream(channel<StreamType> c)
-                : chan(std::move(c)) {}
+            explicit mpsc_channel_rstream(std::shared_ptr<mpsc_channel_subscription<StreamType>> c)
+                : chan(c) {}
 
-            task<bool> send(typename channel<StreamType>::value_type &&value) override
+            task<std::optional<StreamType>> recv() override
             {
-                co_return co_await chan.sink->send(std::move(value));
-            }
-
-            task<bool> send(const typename channel<StreamType>::value_type &value) override
-            {
-                co_return co_await chan.sink->send(value);
+                co_return co_await chan->get_next();
             }
         };
+
+        template <typename StreamType>
+        struct mpsc_channel_wstream : public async_writable_stream<StreamType>
+        {
+            std::shared_ptr<mpsc_channel_subscription<StreamType>> chan;
+
+            explicit mpsc_channel_wstream(std::shared_ptr<mpsc_channel_subscription<StreamType>> c)
+                : chan(c) {}
+
+            task<bool> send(StreamType &&value) override
+            {
+                co_return co_await chan->set_next(std::move(value));
+            }
+
+            task<bool> send(const StreamType &value) override
+            {
+                co_return co_await chan->set_next(value);
+            }
+        };
+    }
+
+    template <typename StreamType>
+    std::pair<std::unique_ptr<async_readable_stream<StreamType>>, std::unique_ptr<async_writable_stream<StreamType>>> make_mpsc_channel()
+    {
+        auto subscription = std::make_shared<detail::mpsc_channel_subscription<StreamType>>();
+        auto rstream = std::make_unique<detail::mpsc_channel_rstream<StreamType>>(subscription);
+        auto wstream = std::make_unique<detail::mpsc_channel_wstream<StreamType>>(subscription);
+        return {std::move(rstream), std::move(wstream)};
     }
 }
