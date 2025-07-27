@@ -4,10 +4,12 @@
 #include <concepts>
 #include <optional>
 #include <coroutine>
-#include "task.hpp"
-#include "generator.hpp"
-#include "async_generator.hpp"
+#include <webcraft/async/task.hpp>
+#include <webcraft/async/generator.hpp>
+#include <webcraft/async/async_generator.hpp>
 #include <mutex>
+#include <deque>
+#include <span>
 
 namespace webcraft::async::io
 {
@@ -31,7 +33,7 @@ namespace webcraft::async::io
             if (buffer.empty())
                 co_return 0;
 
-            constexpr size_t buffer_size = buffer.size();
+            size_t buffer_size = buffer.size();
             size_t count = 0;
             while (count < buffer_size)
             {
@@ -96,18 +98,28 @@ namespace webcraft::async::io
         struct generator_readable_stream : public async_readable_stream<StreamType>
         {
             async_generator<StreamType> generator;
+            std::unique_ptr<typename async_generator<StreamType>::iterator> current_it;
+            bool initialized = false;
 
             explicit generator_readable_stream(async_generator<StreamType> gen)
                 : generator(std::move(gen)) {}
 
             task<std::optional<StreamType>> recv() override
             {
-                auto it = co_await generator.begin();
-                if (it == generator.end())
+                if (!initialized)
+                {
+                    *current_it = co_await generator.begin();
+                    initialized = true;
+                }
+
+                if (*current_it == generator.end())
                 {
                     co_return std::nullopt; // No more data
                 }
-                co_return *it; // Return the current value
+
+                auto value = *(*current_it);
+                co_await ++(*current_it);
+                co_return value;
             }
         };
 
@@ -204,7 +216,8 @@ namespace webcraft::async::io
 
             task<bool> send(const StreamType &value) override
             {
-                co_return co_await chan->set_next(value);
+                StreamType copy = value;
+                co_return co_await chan->set_next(std::move(copy));
             }
         };
     }

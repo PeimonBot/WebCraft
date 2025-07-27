@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core"
+#include "core.hpp"
 
 namespace webcraft::async::io::adaptors
 {
@@ -11,19 +11,19 @@ namespace webcraft::async::io::adaptors
         template <typename StreamType>
         friend auto operator|(std::unique_ptr<async_readable_stream<StreamType>> &&stream, Derived &&self)
         {
-            return self(stream);
+            return self(std::move(stream));
         }
 
         template <typename StreamType>
         friend auto operator|(std::unique_ptr<async_readable_stream<StreamType>> &&stream, Derived &self)
         {
-            return self(stream);
+            return self(std::move(stream));
         }
 
         template <typename StreamType>
         friend auto operator|(std::unique_ptr<async_readable_stream<StreamType>> &&stream, const Derived &self)
         {
-            return self(stream);
+            return self(std::move(stream));
         }
     };
 
@@ -129,7 +129,7 @@ namespace webcraft::async::io::adaptors
 
             std::unique_ptr<async_readable_stream<ToType>> operator()(std::unique_ptr<async_readable_stream<FromType>> stream) const
             {
-                auto gen = func(to_generator(std::move(stream)));
+                auto gen = func(stream->to_generator());
                 return to_readable_stream(std::move(gen));
             }
         };
@@ -166,12 +166,14 @@ namespace webcraft::async::io::adaptors
     {
         auto generator_func = [predicate = std::move(predicate)](async_generator<StreamType> gen) -> async_generator<StreamType>
         {
-            for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
                 if (predicate(*it))
                 {
                     co_yield *it;
                 }
+                co_await ++it; // Move to the next value
             }
         };
 
@@ -183,13 +185,15 @@ namespace webcraft::async::io::adaptors
     {
         auto generator_func = [predicate = std::move(predicate)](async_generator<StreamType> gen) -> async_generator<StreamType>
         {
-            for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
                 if (!predicate(*it))
                 {
                     break; // Stop yielding when predicate fails
                 }
                 co_yield *it;
+                co_await ++it; // Move to the next value
             }
         };
 
@@ -202,14 +206,17 @@ namespace webcraft::async::io::adaptors
         auto generator_func = [predicate = std::move(predicate)](async_generator<StreamType> gen) -> async_generator<StreamType>
         {
             bool should_drop = true;
-            for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
                 if (should_drop && predicate(*it))
                 {
+                    co_await ++it;
                     continue; // Skip this value
                 }
                 should_drop = false; // Start yielding after the first non-matching value
                 co_yield *it;
+                co_await ++it; // Move to the next value
             }
         };
 
@@ -222,10 +229,14 @@ namespace webcraft::async::io::adaptors
         auto generator_func = [count](async_generator<StreamType> gen) -> async_generator<StreamType>
         {
             size_t yielded = 0;
-            for (auto it = co_await gen.begin(); it != gen.end() && yielded < count; co_await ++it)
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
+                if (yielded >= count)
+                    break; // Stop yielding after reaching the count
                 co_yield *it;
                 ++yielded;
+                co_await ++it; // Move to the next value
             }
         };
 
@@ -238,7 +249,8 @@ namespace webcraft::async::io::adaptors
         auto generator_func = [count](async_generator<StreamType> gen) -> async_generator<StreamType>
         {
             size_t skipped = 0;
-            for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
                 if (skipped < count)
                 {
@@ -246,6 +258,7 @@ namespace webcraft::async::io::adaptors
                     continue;
                 }
                 co_yield *it;
+                co_await ++it; // Move to the next value
             }
         };
 
@@ -272,12 +285,15 @@ namespace webcraft::async::io::adaptors
         return detail::transform_adaptor_closure<StreamType, typename StreamType::value_type>(
             [](async_generator<StreamType> gen) -> async_generator<typename StreamType::value_type>
             {
-                for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+                auto it = co_await gen.begin();
+                while (it != gen.end())
                 {
-                    for (auto inner_it = co_await (*it).begin(); inner_it != (*it).end(); ++inner_it)
+                    auto &range = *it;
+                    for (auto inner_it = range.begin(); inner_it != range.end(); ++inner_it)
                     {
                         co_yield *inner_it;
                     }
+                    co_await ++it;
                 }
             });
     }
@@ -287,18 +303,20 @@ namespace webcraft::async::io::adaptors
     {
         auto collector = [&sink](async_generator<StreamType> gen) -> task<void>
         {
-            for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
                 bool sent = co_await sink.send(*it);
                 if (!sent)
                 {
                     break; // Stop sending if the sink cannot accept more data
                 }
+                co_await ++it;
             }
             co_return;
         };
 
-        return collect(collector);
+        return collector;
     }
 
     template <typename T>
@@ -308,9 +326,11 @@ namespace webcraft::async::io::adaptors
             [](async_generator<T> gen) -> async_generator<std::pair<size_t, T>>
             {
                 size_t index = 0;
-                for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+                auto it = co_await gen.begin();
+                while (it != gen.end())
                 {
                     co_yield {index++, *it};
+                    co_await ++it;
                 }
             });
     }
@@ -323,7 +343,8 @@ namespace webcraft::async::io::adaptors
             {
                 std::vector<T> buffer;
                 buffer.reserve(size);
-                for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+                auto it = co_await gen.begin();
+                while (it != gen.end())
                 {
                     buffer.push_back(*it);
                     if (buffer.size() == size)
@@ -332,6 +353,7 @@ namespace webcraft::async::io::adaptors
                         buffer.clear();
                         buffer.reserve(size);
                     }
+                    co_await ++it; // Move to the next value
                 }
                 if (!buffer.empty())
                 {
@@ -343,16 +365,19 @@ namespace webcraft::async::io::adaptors
     template <typename StreamType>
     auto count()
     {
-        return collect<StreamType, size_t>(
-            [](async_generator<StreamType> gen) -> task<size_t>
+        auto collector = [](async_generator<StreamType> gen) -> task<size_t>
+        {
+            size_t count = 0;
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
-                size_t count = 0;
-                for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
-                {
-                    ++count;
-                }
-                co_return count;
-            });
+                ++count;
+                co_await ++it;
+            }
+            co_return count;
+        };
+
+        return collector;
     }
 
     enum class zip_strategy
@@ -374,15 +399,16 @@ namespace webcraft::async::io::adaptors
     }
 
     template <typename StreamType>
-    auto zip(std::unique_ptr<StreamType> other, zip_strategy strat = zip_strategy::FULL)
+    auto zip(std::unique_ptr<async_readable_stream<StreamType>> other, zip_strategy strat = zip_strategy::FULL)
     {
         return transform<StreamType, std::pair<std::optional<StreamType>, std::optional<StreamType>>>(
-            [other = std::move(other), strat](async_generator<StreamType> gen) -> async_generator<std::pair<std::optional<StreamType>, std::optional<StreamType>>>
+            [&](async_generator<StreamType> gen) -> async_generator<std::pair<std::optional<StreamType>, std::optional<StreamType>>>
             {
+                auto other_gen = other->to_generator();
                 auto it1 = co_await gen.begin();
-                auto it2 = co_await other->begin();
+                auto it2 = co_await other_gen.begin();
 
-                while (it1 != gen.end() && it2 != other->end())
+                while (it1 != gen.end() && it2 != other_gen.end())
                 {
                     co_yield {*it1, *it2};
                     co_await ++it1;
@@ -393,7 +419,7 @@ namespace webcraft::async::io::adaptors
                     co_yield {*it1, std::nullopt};
                     co_await ++it1;
                 }
-                while (it2 != other->end() && allows_right_zip(strat))
+                while (it2 != other_gen.end() && allows_right_zip(strat))
                 {
                     co_yield {std::nullopt, *it2};
                     co_await ++it2;
