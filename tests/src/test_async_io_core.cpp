@@ -165,6 +165,167 @@ TEST_CASE(ReadableStreamToGenerator)
     sync_wait(task());
 }
 
+TEST_CASE(ReadableStreamToGeneratorBackToStream)
+{
+    auto stream = std::make_unique<mock_readable_stream<int>>(std::vector<int>{10, 20, 30});
+
+    auto task = [&]() -> webcraft::async::task<void>
+    {
+        auto gen = stream->to_generator();
+        std::vector<int> results;
+
+        auto rstream_from_gen = to_readable_stream(std::move(gen));
+
+        while (true)
+        {
+            auto value = co_await rstream_from_gen->recv();
+            if (!value)
+                break; // No more data
+            results.push_back(*value);
+        }
+
+        EXPECT_EQ(results.size(), 3);
+        EXPECT_EQ(results[0], 10);
+        EXPECT_EQ(results[1], 20);
+        EXPECT_EQ(results[2], 30);
+    };
+
+    sync_wait(task());
+}
+
+TEST_CASE(ReadableStreamToGeneratorBackToStreamWithTransformFunction)
+{
+    auto stream = std::make_unique<mock_readable_stream<int>>(std::vector<int>{10, 20, 30});
+
+    auto transform_func = [](async_generator<int> gen) -> async_generator<int>
+    {
+        auto it = co_await gen.begin();
+        while (it != gen.end())
+        {
+            co_yield *it * 2; // Transform: double the value
+            co_await ++it;    // Move to the next value
+        }
+    };
+
+    auto task = [&]() -> webcraft::async::task<void>
+    {
+        auto gen = stream->to_generator();
+        auto new_gen = transform_func(std::move(gen));
+        std::vector<int> results;
+
+        auto rstream_from_gen = to_readable_stream(std::move(new_gen));
+
+        while (true)
+        {
+            auto value = co_await rstream_from_gen->recv();
+            if (!value)
+                break; // No more data
+            results.push_back(*value);
+        }
+
+        EXPECT_EQ(results.size(), 3);
+        EXPECT_EQ(results[0], 20);
+        EXPECT_EQ(results[1], 40);
+        EXPECT_EQ(results[2], 60);
+    };
+
+    sync_wait(task());
+}
+
+TEST_CASE(ReadableStreamToGeneratorBackToStreamWithTransformFunctionString)
+{
+    auto stream = std::make_unique<mock_readable_stream<int>>(std::vector<int>{10, 20, 30});
+
+    auto transform_func = [](async_generator<int> gen) -> async_generator<std::string>
+    {
+        auto it = co_await gen.begin();
+        while (it != gen.end())
+        {
+            co_yield "test_" + std::to_string(*it * 2); // Transform: double the value and convert to string
+            co_yield "success";
+            co_await ++it; // Move to the next value
+        }
+    };
+
+    auto task = [&]() -> webcraft::async::task<void>
+    {
+        auto gen = stream->to_generator();
+        auto new_gen = transform_func(std::move(gen));
+        std::vector<std::string> results;
+
+        auto rstream_from_gen = to_readable_stream(std::move(new_gen));
+
+        while (true)
+        {
+            auto value = co_await rstream_from_gen->recv();
+            if (!value)
+                break; // No more data
+            results.push_back(*value);
+        }
+
+        EXPECT_EQ(results.size(), 6);
+        EXPECT_EQ(results[0], "test_20");
+        EXPECT_EQ(results[1], "success");
+        EXPECT_EQ(results[2], "test_40");
+        EXPECT_EQ(results[3], "success");
+        EXPECT_EQ(results[4], "test_60");
+        EXPECT_EQ(results[5], "success");
+    };
+
+    sync_wait(task());
+}
+
+template <typename FromType, typename ToType>
+std::unique_ptr<async_readable_stream<ToType>> transform_readable_stream(
+    std::unique_ptr<async_readable_stream<FromType>> &stream,
+    std::function<async_generator<ToType>(async_generator<FromType>)> transform_func)
+{
+    auto gen = stream->to_generator();
+    auto new_gen = transform_func(std::move(gen));
+    return to_readable_stream(std::move(new_gen));
+}
+
+TEST_CASE(ReadableStreamToGeneratorBackToStreamWithTransformFunctionStringWithExternalTransform)
+{
+    std::unique_ptr<async_readable_stream<int>> stream = std::make_unique<mock_readable_stream<int>>(std::vector<int>{10, 20, 30});
+
+    std::function<async_generator<std::string>(async_generator<int>)> transform_func = [](async_generator<int> gen) -> async_generator<std::string>
+    {
+        auto it = co_await gen.begin();
+        while (it != gen.end())
+        {
+            co_yield "test_" + std::to_string(*it * 2); // Transform: double the value and convert to string
+            co_yield "success";
+            co_await ++it; // Move to the next value
+        }
+    };
+
+    auto task = [&]() -> webcraft::async::task<void>
+    {
+        std::vector<std::string> results;
+
+        auto rstream_from_gen = transform_readable_stream(stream, transform_func);
+
+        while (true)
+        {
+            auto value = co_await rstream_from_gen->recv();
+            if (!value)
+                break; // No more data
+            results.push_back(*value);
+        }
+
+        EXPECT_EQ(results.size(), 6);
+        EXPECT_EQ(results[0], "test_20");
+        EXPECT_EQ(results[1], "success");
+        EXPECT_EQ(results[2], "test_40");
+        EXPECT_EQ(results[3], "success");
+        EXPECT_EQ(results[4], "test_60");
+        EXPECT_EQ(results[5], "success");
+    };
+
+    sync_wait(task());
+}
+
 TEST_CASE(ReadableStreamImplicitConversion)
 {
     auto stream = std::make_unique<mock_readable_stream<int>>(std::vector<int>{100, 200});
