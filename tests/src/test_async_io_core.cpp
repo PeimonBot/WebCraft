@@ -292,7 +292,6 @@ TEST_CASE(GeneratorToReadableStream)
     sync_wait(task());
 }
 
-
 TEST_CASE(MPSCChannelBasicFunctionality)
 {
     auto [reader, writer] = make_mpsc_channel<int>();
