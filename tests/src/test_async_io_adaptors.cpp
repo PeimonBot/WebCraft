@@ -62,6 +62,9 @@ public:
     }
 };
 
+static_assert(std::is_base_of_v<async_readable_stream<int>, test_readable_stream<int>>, "test_readable_stream should inherit from async_readable_stream");
+static_assert(std::is_base_of_v<async_writable_stream<std::string>, test_writable_stream<std::string>>, "test_writable_stream should inherit from async_writable_stream");
+
 // Helper function to create readable stream
 template <typename T>
 std::unique_ptr<async_readable_stream<T>> make_test_stream(std::vector<T> data)

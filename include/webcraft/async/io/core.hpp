@@ -98,7 +98,7 @@ namespace webcraft::async::io
         struct generator_readable_stream : public async_readable_stream<StreamType>
         {
             async_generator<StreamType> generator;
-            std::unique_ptr<typename async_generator<StreamType>::iterator> current_it;
+            std::optional<typename async_generator<StreamType>::iterator> current_it;
             bool initialized = false;
 
             explicit generator_readable_stream(async_generator<StreamType> gen)
@@ -108,17 +108,17 @@ namespace webcraft::async::io
             {
                 if (!initialized)
                 {
-                    *current_it = co_await generator.begin();
+                    current_it = co_await generator.begin();
                     initialized = true;
                 }
 
-                if (*current_it == generator.end())
+                if (current_it == generator.end())
                 {
                     co_return std::nullopt; // No more data
                 }
 
-                auto value = *(*current_it);
-                co_await ++(*current_it);
+                auto value = *current_it.value();
+                co_await ++current_it.value();
                 co_return value;
             }
         };
