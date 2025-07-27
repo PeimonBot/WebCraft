@@ -10,117 +10,135 @@
 namespace webcraft::async
 {
     template <typename T>
-    class task_completion_source final
+    class task_completion_source;
+
+    class task_completion_source_base
+    {
+    protected:
+        std::coroutine_handle<> handle_;
+        std::exception_ptr exception_;
+
+    public:
+        task_completion_source_base() noexcept : handle_(), exception_(nullptr) {}
+        task_completion_source_base(const task_completion_source_base &) = delete;
+        task_completion_source_base &operator=(const task_completion_source_base &) = delete;
+        task_completion_source_base(task_completion_source_base &&other) = delete;
+
+        task_completion_source_base &operator=(task_completion_source_base &&other) = delete;
+
+        virtual ~task_completion_source_base() = default;
+
+        void set_exception(std::exception_ptr exception)
+        {
+            if (handle_ && !handle_.done())
+            {
+                exception_ = std::move(exception);
+                handle_.resume();
+            }
+            else
+            {
+                throw std::logic_error("Task completion source already completed");
+            }
+        }
+
+        struct awaitable
+        {
+            task_completion_source_base *tcs;
+
+            bool await_ready() const noexcept
+            {
+                return tcs->handle_ && tcs->handle_.done();
+            }
+
+            void await_suspend(std::coroutine_handle<> h) noexcept
+            {
+                tcs->handle_ = h;
+            }
+
+            constexpr void await_resume()
+            {
+            }
+        };
+    };
+
+    template <typename T>
+    class task_completion_source : public task_completion_source_base
     {
     private:
-        void *m_state;                                  // Placeholder for the actual state type
-        std::vector<std::coroutine_handle<>> m_waiters; // List of waiters
-        std::exception_ptr m_exception;                 // Exception pointer if an error occurs
+        std::optional<T> value_;
 
     public:
         using value_type = T;
 
-        task_completion_source() : m_state(nullptr) {}
+        using task_completion_source_base::set_exception;
+
+        task_completion_source() noexcept : task_completion_source_base(), value_(std::nullopt) {}
         task_completion_source(const task_completion_source &) = delete;
         task_completion_source &operator=(const task_completion_source &) = delete;
-        task_completion_source(task_completion_source &&other) : m_state(std::exchange(other.m_state, nullptr)), m_waiters(std::exchange(other.m_waiters, {})), m_exception(std::exchange(other.m_exception, nullptr))
-        {
-        }
-        task_completion_source &operator=(task_completion_source &&other) noexcept
-        {
-            if (this != &other)
-            {
-                m_state = std::exchange(other.m_state, nullptr);
-                m_waiters = std::exchange(other.m_waiters, {});
-                m_exception = std::exchange(other.m_exception, nullptr);
-            }
-            return *this;
-        }
+        task_completion_source(task_completion_source &&other) = delete;
+        task_completion_source &operator=(task_completion_source &&other) = delete;
 
         ~task_completion_source() = default;
 
-        // Method to set the value
-        void set_value(T &&value)
-            requires(!std::is_void_v<T> && (std::is_copy_constructible_v<T> || std::is_move_constructible_v<T>))
+        void set_value(T value)
         {
-            // Implementation to set the value in the state
-            m_state = std::addressof(value); // Placeholder for actual value storage
-            for (auto &waiter : m_waiters)
+            if (handle_)
             {
-                if (!waiter.done())
-                {
-                    waiter.resume(); // Resume the coroutine waiting for the value
-                }
+                value_ = std::move(value);
+                handle_.resume();
             }
-            m_waiters.clear();
-        }
-
-        void set_value()
-            requires std::is_void_v<T>
-        {
-            // Implementation for void type
-            for (auto &waiter : m_waiters)
+            else
             {
-                if (!waiter.done())
-                {
-                    waiter.resume(); // Resume the coroutine waiting for the value
-                }
+                throw std::logic_error("Task completion source already completed");
             }
-            m_waiters.clear();
-        }
-
-        // Method to set an exception
-        void set_exception(std::exception_ptr e)
-        {
-            m_exception = std::move(e);
-            for (auto &waiter : m_waiters)
-            {
-                if (!waiter.done())
-                {
-                    waiter.resume();
-                }
-            }
-            m_waiters.clear();
         }
 
         webcraft::async::task<T> task()
         {
-            struct awaiter
+            co_await task_completion_source_base::awaitable{this};
+            if (exception_)
             {
-                task_completion_source &source;
+                std::rethrow_exception(exception_);
+            }
+            co_return value_.value();
+        }
+    };
 
-                bool await_ready() const noexcept
-                {
-                    return !source.m_state; // Check if the state is ready
-                }
+    template <>
+    class task_completion_source<void> : public task_completion_source_base
+    {
+    public:
+        using value_type = void;
 
-                void await_suspend(std::coroutine_handle<> h) noexcept
-                {
-                    source.m_waiters.push_back(h); // Add the coroutine handle to waiters
-                }
+        using task_completion_source_base::set_exception;
 
-                T await_resume()
-                {
-                    if (source.m_exception)
-                    {
-                        std::rethrow_exception(source.m_exception); // Rethrow the stored exception
-                    }
+        task_completion_source() noexcept : task_completion_source_base() {}
+        task_completion_source(const task_completion_source &) = delete;
+        task_completion_source &operator=(const task_completion_source &) = delete;
+        task_completion_source(task_completion_source &&other) = delete;
+        task_completion_source &operator=(task_completion_source &&other) = delete;
 
-                    if constexpr (!std::is_void_v<T>)
-                    {
-                        return *static_cast<T *>(source.m_state); // Return the stored value
-                    }
-                }
-            };
+        ~task_completion_source() = default;
 
-            if constexpr (std::is_void_v<T>)
+        void set_value()
+        {
+            if (handle_)
             {
-                co_await awaiter{*this};
+                handle_.resume();
             }
             else
             {
-                co_return co_await awaiter{*this};
+                throw std::logic_error("Task completion source already completed");
+            }
+        }
+
+        webcraft::async::task<void> task()
+        {
+            co_await task_completion_source_base::awaitable{this};
+            if (exception_)
+            {
+                std::rethrow_exception(exception_);
             }
         }
     };
-};
+}
