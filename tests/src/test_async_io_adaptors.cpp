@@ -166,10 +166,12 @@ TEST_CASE(TransformAdaptor)
     {
         auto transform_func = [](async_generator<int> gen) -> async_generator<std::string>
         {
-            for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
+            auto it = co_await gen.begin();
+            while (it != gen.end())
             {
                 co_yield "value_" + std::to_string(*it);
                 co_yield "extra_" + std::to_string(*it);
+                co_await ++it;
             }
         };
 
@@ -584,17 +586,17 @@ TEST_CASE(FlattenAdaptor)
 TEST_CASE(ToAdaptor)
 {
     auto source = make_test_stream<int>({1, 2, 3, 4, 5});
-    auto sink = test_writable_stream<int>();
+    auto sink = std::make_shared<test_writable_stream<int>>();
+    std::shared_ptr<async_writable_stream<int>> sink_ptr = sink;
 
     auto task = [&]() -> webcraft::async::task<void>
     {
-        auto gen = source->to_generator();
-        co_await to(sink)(std::move(gen));
+        co_await (std::move(source) | to(sink_ptr));
 
-        EXPECT_EQ(sink.received().size(), 5);
+        EXPECT_EQ(sink->received().size(), 5);
         for (int i = 0; i < 5; ++i)
         {
-            EXPECT_EQ(sink.received()[i], i + 1);
+            EXPECT_EQ(sink->received()[i], i + 1);
         }
     };
 

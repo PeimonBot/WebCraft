@@ -271,7 +271,7 @@ namespace webcraft::async::io::adaptors
     };
 
     template <typename ToType, typename StreamType, collector<ToType, StreamType> Collector>
-    auto collect(Collector collector_func)
+    auto collect(Collector &&collector_func)
     {
         return [collector_func = std::move(collector_func)](async_generator<StreamType> gen) -> task<ToType>
         {
@@ -282,7 +282,7 @@ namespace webcraft::async::io::adaptors
     template <std::ranges::input_range StreamType>
     auto flatten()
     {
-        return detail::transform_adaptor_closure<StreamType, typename StreamType::value_type>(
+        return transform<StreamType, typename StreamType::value_type>(
             [](async_generator<StreamType> gen) -> async_generator<typename StreamType::value_type>
             {
                 auto it = co_await gen.begin();
@@ -299,24 +299,25 @@ namespace webcraft::async::io::adaptors
     }
 
     template <typename StreamType>
-    auto to(async_writable_stream<StreamType> &sink)
+    auto to(std::shared_ptr<async_writable_stream<StreamType>> &sink)
     {
-        auto collector = [&sink](async_generator<StreamType> gen) -> task<void>
+        std::function<task<void>(async_generator<StreamType>)> collector_func =
+            [&](async_generator<StreamType> gen) -> task<void>
         {
             auto it = co_await gen.begin();
             while (it != gen.end())
             {
-                bool sent = co_await sink.send(*it);
+                bool sent = co_await sink->send(*it);
                 if (!sent)
                 {
                     break; // Stop sending if the sink cannot accept more data
                 }
-                co_await ++it;
+                co_await ++it; // Move to the next value
             }
             co_return;
         };
 
-        return collector;
+        return collect<task<void>, StreamType>(std::move(collector_func));
     }
 
     template <typename T>

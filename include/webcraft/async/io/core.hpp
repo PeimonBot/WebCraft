@@ -91,6 +91,11 @@ namespace webcraft::async::io
         }
     };
 
+    template <typename T>
+    concept printable = requires(T t) {
+        { std::cout << t };
+    };
+
     template <typename StreamType>
     std::unique_ptr<async_readable_stream<StreamType>> to_readable_stream(async_generator<StreamType> gen)
     {
@@ -108,17 +113,25 @@ namespace webcraft::async::io
             {
                 if (!initialized)
                 {
+                    std::cout << "Range beginning" << std::endl;
                     current_it = co_await generator.begin();
                     initialized = true;
+                    std::cout << "Range began " << std::endl;
                 }
 
                 if (current_it == generator.end())
                 {
                     co_return std::nullopt; // No more data
                 }
+                std::cout << "End checked" << std::endl;
 
                 auto value = *current_it.value();
+                if constexpr (printable<StreamType>)
+                {
+                    std::cout << "Value" << value << std::endl;
+                }
                 co_await ++current_it.value();
+                std::cout << "Next" << std::endl;
                 co_return value;
             }
         };
