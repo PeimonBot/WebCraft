@@ -8,226 +8,202 @@
 #include <webcraft/async/generator.hpp>
 #include <webcraft/async/async_generator.hpp>
 #include <mutex>
-#include <deque>
+#include <queue>
 #include <span>
 
 namespace webcraft::async::io
 {
-
     template <typename T>
     concept non_void_v = !std::is_void_v<T>;
 
-    template <non_void_v T>
-    class async_readable_stream
+    template <typename Derived, typename R>
+    concept async_readable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream) {
+        { stream.recv() } -> std::same_as<task<std::optional<R>>>;
+    };
+
+    template <typename Derived, typename R>
+    concept async_buffered_readable_stream = async_readable_stream<Derived, R> && requires(Derived &stream, std::span<R> buffer) {
+        { stream.recv(buffer) } -> std::same_as<task<std::size_t>>;
+    };
+
+    template <typename Derived, typename R>
+    concept async_writable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream, R &&value) {
+        { stream.send(std::forward<R>(value)) } -> std::same_as<task<bool>>;
+    };
+
+    template <typename Derived, typename R>
+    concept async_buffered_writable_stream = async_writable_stream<Derived, R> && requires(Derived &stream, std::span<R> buffer) {
+        { stream.send(buffer) } -> std::same_as<task<size_t>>;
+    };
+
+    template <typename R>
+    auto recv(async_readable_stream<R> auto &stream)
     {
+        return stream.recv();
+    }
 
-    public:
-        using value_type = T;
-
-        virtual ~async_readable_stream() = default;
-
-        virtual task<std::optional<T>> recv() = 0;
-
-        task<size_t> recv(std::span<T> buffer)
+    template <typename R, async_readable_stream<R> RStream, size_t BufferSize>
+    task<std::size_t> recv(RStream &stream, std::span<R, BufferSize> buffer)
+    {
+        if constexpr (async_buffered_readable_stream<RStream, R>)
         {
-            if (buffer.empty())
-                co_return 0;
-
-            size_t buffer_size = buffer.size();
+            return co_await stream.recv(buffer);
+        }
+        else
+        {
             size_t count = 0;
-            while (count < buffer_size)
+            size_t size = buffer.size();
+            while (count < size)
             {
-                auto opt_value = co_await recv();
-                if (!opt_value)
-                    break; // No more data to read
-
-                buffer[count++] = std::move(*opt_value);
+                auto value = co_await stream.recv();
+                if (!value.has_value())
+                {
+                    break;
+                }
+                buffer[count++] = std::move(value.value());
             }
             co_return count;
         }
+    }
 
-        async_generator<T> to_generator()
-        {
-            while (true)
-            {
-                auto value = co_await recv();
-                if (!value)
-                    break; // No more data to read
-                co_yield std::move(*value);
-            }
-        }
-
-        operator async_generator<T>()
-        {
-            return to_generator();
-        }
-    };
-
-    template <non_void_v T>
-    class async_writable_stream
+    template <typename R, async_writable_stream<R> WStream>
+    task<bool> send(WStream &stream, R &&value)
     {
-    public:
-        using value_type = T;
+        co_return co_await stream.send(std::forward<R>(value));
+    }
 
-        virtual ~async_writable_stream() = default;
-
-        virtual task<bool> send(T &&value) = 0;
-        virtual task<bool> send(const T &value) = 0;
-
-        task<size_t> send(std::span<const T> buffer)
+    template <typename R, async_writable_stream<R> WStream, size_t BufferSize>
+    task<size_t> send(WStream &stream, std::span<R, BufferSize> buffer)
+    {
+        if constexpr (async_buffered_writable_stream<WStream, R>)
         {
-            if (buffer.empty())
-                co_return 0;
-
+            co_return co_await stream.send(buffer);
+        }
+        else
+        {
             size_t count = 0;
-            for (const auto &value : buffer)
+            size_t size = buffer.size();
+            while (count < size)
             {
-                bool sent = co_await send(value);
+                auto sent = co_await stream.send(std::move(buffer[count]));
                 if (!sent)
-                    break; // Failed to send, stop sending more data
-                ++count;
+                {
+                    break;
+                }
+                count++;
             }
             co_return count;
         }
-    };
+    }
 
-    template <typename StreamType>
-    std::unique_ptr<async_readable_stream<StreamType>> to_readable_stream(async_generator<StreamType> gen)
+    template <typename R, async_readable_stream<R> RStream>
+    async_generator<R> to_async_generator(RStream &&stream)
     {
-
-        struct generator_readable_stream : public async_readable_stream<StreamType>
+        while (true)
         {
-            async_generator<StreamType> generator;
-            std::optional<typename async_generator<StreamType>::iterator> current_it;
-            bool initialized = false;
-
-            explicit generator_readable_stream(async_generator<StreamType> gen)
-                : generator(std::move(gen)) {}
-
-            task<std::optional<StreamType>> recv() override
+            auto value = co_await stream.recv();
+            if (!value.has_value())
             {
-                if (!initialized)
-                {
-                    current_it = co_await generator.begin();
-                    initialized = true;
-                }
-
-                if (current_it == generator.end())
-                {
-                    co_return std::nullopt; // No more data
-                }
-
-                auto value = *current_it.value();
-                co_await ++current_it.value();
-                co_return value;
+                break;
             }
-        };
-
-        return std::make_unique<generator_readable_stream>(std::move(gen));
+            co_yield std::move(value.value());
+        }
+        co_return;
     }
 
     namespace detail
     {
-        template <typename StreamType>
+        template <non_void_v T>
         struct mpsc_channel_subscription
         {
-            std::deque<StreamType> queue;
-            std::coroutine_handle<> waiter;
-            std::mutex mutex;
+            std::coroutine_handle<> continuation;
+            std::queue<T> values;
 
-            task<std::optional<StreamType>> get_next()
+            task<std::optional<T>> get_next()
             {
-                struct awaiter
+                struct awaitable
                 {
-                    mpsc_channel_subscription *self;
+                    mpsc_channel_subscription<T> &sub;
 
                     bool await_ready() const noexcept
                     {
-                        std::scoped_lock lock(self->mutex);
-                        return !self->queue.empty();
+                        return !sub.values.empty();
                     }
 
-                    void await_suspend(std::coroutine_handle<> handle)
+                    void await_suspend(std::coroutine_handle<> h) noexcept
                     {
-                        std::scoped_lock lock(self->mutex);
-                        self->waiter = handle;
+                        sub.continuation = h;
                     }
 
-                    std::optional<StreamType> await_resume()
+                    T &&await_resume() noexcept
                     {
-                        std::scoped_lock lock(self->mutex);
-                        if (!self->queue.empty())
-                        {
-                            auto val = std::move(self->queue.front());
-                            self->queue.pop_front();
-                            return val;
-                        }
-                        return std::nullopt;
+                        auto &&value = std::move(sub.values.front());
+                        sub.values.pop();
+                        return std::move(value);
                     }
                 };
 
-                co_return co_await awaiter{this};
+                co_return co_await awaitable{*this};
             }
 
-            task<bool> set_next(StreamType &&value)
+            task<bool> send(T &&val)
             {
-                std::unique_lock lock(mutex);
-                if (waiter && !waiter.done())
+                values.push(std::move(val));
+                if (continuation)
                 {
-                    auto h = std::exchange(waiter, {});
-                    queue.push_back(std::move(value));
-                    h.resume();
-                    co_return true;
+                    continuation.resume();
                 }
-                else
-                {
-                    queue.push_back(std::move(value));
-                    co_return true;
-                }
+                continuation = std::exchange(continuation, {});
+                co_return true;
             }
         };
 
-        template <typename StreamType>
-        struct mpsc_channel_rstream : public async_readable_stream<StreamType>
+        template <non_void_v T>
+        struct mpsc_channel_rstream
         {
-            std::shared_ptr<mpsc_channel_subscription<StreamType>> chan;
+        private:
+            std::shared_ptr<mpsc_channel_subscription<T>> subscription;
 
-            explicit mpsc_channel_rstream(std::shared_ptr<mpsc_channel_subscription<StreamType>> c)
-                : chan(c) {}
-
-            task<std::optional<StreamType>> recv() override
+        public:
+            explicit mpsc_channel_rstream(std::shared_ptr<mpsc_channel_subscription<T>> sub) noexcept
+                : subscription(std::move(sub))
             {
-                co_return co_await chan->get_next();
+            }
+
+            task<std::optional<T>> recv()
+            {
+                return subscription->get_next();
             }
         };
 
-        template <typename StreamType>
-        struct mpsc_channel_wstream : public async_writable_stream<StreamType>
+        template <non_void_v T>
+        struct mpsc_channel_wstream
         {
-            std::shared_ptr<mpsc_channel_subscription<StreamType>> chan;
+        private:
+            std::shared_ptr<mpsc_channel_subscription<T>> subscription;
 
-            explicit mpsc_channel_wstream(std::shared_ptr<mpsc_channel_subscription<StreamType>> c)
-                : chan(c) {}
-
-            task<bool> send(StreamType &&value) override
+        public:
+            explicit mpsc_channel_wstream(std::shared_ptr<mpsc_channel_subscription<T>> sub) noexcept
+                : subscription(std::move(sub))
             {
-                co_return co_await chan->set_next(std::move(value));
             }
 
-            task<bool> send(const StreamType &value) override
+            task<bool> send(T &&val)
             {
-                StreamType copy = value;
-                co_return co_await chan->set_next(std::move(copy));
+                return subscription->send(std::move(val));
             }
         };
+
+        static_assert(async_readable_stream<mpsc_channel_rstream<int>, int>, "mpsc_channel_rstream should be an async readable stream");
+        static_assert(async_writable_stream<mpsc_channel_wstream<int>, int>, "mpsc_channel_wstream should be an async writable stream");
+        static_assert(async_readable_stream<mpsc_channel_rstream<std::string>, std::string>, "mpsc_channel_rstream should be an async readable stream");
+        static_assert(async_writable_stream<mpsc_channel_wstream<std::string>, std::string>, "mpsc_channel_wstream should be an async writable stream");
     }
 
-    template <typename StreamType>
-    std::pair<std::unique_ptr<async_readable_stream<StreamType>>, std::unique_ptr<async_writable_stream<StreamType>>> make_mpsc_channel()
+    template <non_void_v T>
+    std::pair<detail::mpsc_channel_rstream<T>, detail::mpsc_channel_wstream<T>> make_mpsc_channel()
     {
-        auto subscription = std::make_shared<detail::mpsc_channel_subscription<StreamType>>();
-        auto rstream = std::make_unique<detail::mpsc_channel_rstream<StreamType>>(subscription);
-        auto wstream = std::make_unique<detail::mpsc_channel_wstream<StreamType>>(subscription);
-        return {std::move(rstream), std::move(wstream)};
+        auto subscription = std::make_shared<detail::mpsc_channel_subscription<T>>();
+        return {detail::mpsc_channel_rstream<T>(subscription), detail::mpsc_channel_wstream<T>(subscription)};
     }
 }
