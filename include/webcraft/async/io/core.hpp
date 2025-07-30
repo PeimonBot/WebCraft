@@ -111,6 +111,40 @@ namespace webcraft::async::io
         co_return;
     }
 
+    template <typename R>
+    async_readable_stream<R> auto to_readable_stream(async_generator<R> &&gen)
+    {
+        struct stream
+        {
+            async_generator<R> gen;
+            std::optional<typename async_generator<R>::iterator> it;
+
+            explicit stream(async_generator<R> &&gen) : gen(std::move(gen)) {}
+
+            task<std::optional<R>> recv()
+            {
+                if (!it.has_value())
+                {
+                    it = co_await gen.begin();
+                }
+
+                if (it == gen.end())
+                {
+                    co_return std::nullopt;
+                }
+
+                auto &itr = *it;
+                auto value = *itr;
+                co_await ++itr;
+                co_return std::move(value);
+            }
+        };
+
+        static_assert(async_readable_stream<stream, R>, "Should be an async_readable_stream");
+
+        return stream{std::move(gen)};
+    };
+
     namespace detail
     {
         template <non_void_v T>

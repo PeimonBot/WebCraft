@@ -224,3 +224,30 @@ TEST_CASE(TestChannelsInt)
 
     sync_wait(when_all(producer_fn(), consumer_fn()));
 }
+
+TEST_CASE(GeneratorToReadableStream)
+{
+    std::vector<int> values = {1, 2, 3, 4, 5};
+
+    auto gen = [&]() -> async_generator<int>
+    {
+        for (auto value : values)
+        {
+            co_yield value;
+        }
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto readable_stream = to_readable_stream(gen());
+
+        size_t count = 0;
+        while (auto value = co_await readable_stream.recv())
+        {
+            EXPECT_EQ(value, values[count]) << "Values should be equal";
+            count++;
+        }
+    };
+
+    sync_wait(task_fn());
+}
