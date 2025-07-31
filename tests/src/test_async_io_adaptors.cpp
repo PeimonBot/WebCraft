@@ -251,3 +251,141 @@ TEST_CASE(TestForwardToAdaptor)
         EXPECT_TRUE(wstream.received(val)) << "Should have received: " << val;
     }
 }
+
+TEST_CASE(TestFilterAdaptor)
+{
+    std::vector<int> values({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    mock_readable_stream<int> rstream(values);
+
+    auto filter_fn = [](int value) -> bool
+    {
+        return value % 2 == 0; // Filter to keep only even numbers
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto filtered_stream = rstream | filter<int>(std::move(filter_fn));
+        std::vector<int> results;
+
+        while (auto value = co_await filtered_stream.recv())
+        {
+            results.push_back(std::move(*value));
+        }
+
+        EXPECT_EQ(results.size(), 5) << "Should read five values from the filtered stream";
+        for (size_t i = 0; i < results.size(); ++i)
+        {
+            EXPECT_EQ(results[i], (i + 1) * 2) << "Value at index " << i << " should be " << (i + 1) * 2;
+        }
+    };
+}
+
+TEST_CASE(TestTakeAdaptor)
+{
+    std::vector<int> values({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    mock_readable_stream<int> rstream(values);
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto taken_stream = rstream | take<int>(5);
+        std::vector<int> results;
+
+        while (auto value = co_await taken_stream.recv())
+        {
+            results.push_back(std::move(*value));
+        }
+
+        EXPECT_EQ(results.size(), 5) << "Should read five values from the taken stream";
+        for (size_t i = 0; i < results.size(); ++i)
+        {
+            EXPECT_EQ(results[i], i + 1) << "Value at index " << i << " should be " << (i + 1);
+        }
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestDropAdaptor)
+{
+    std::vector<int> values({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    mock_readable_stream<int> rstream(values);
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto dropped_stream = rstream | drop<int>(5);
+        std::vector<int> results;
+
+        while (auto value = co_await dropped_stream.recv())
+        {
+            results.push_back(std::move(*value));
+        }
+
+        EXPECT_EQ(results.size(), 5) << "Should read five values from the dropped stream";
+        for (size_t i = 0; i < results.size(); ++i)
+        {
+            EXPECT_EQ(results[i], i + 6) << "Value at index " << i << " should be " << (i + 6);
+        }
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestTakeWhileAdaptor)
+{
+    std::vector<int> values({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    mock_readable_stream<int> rstream(values);
+
+    auto take_while_fn = [](int value) -> bool
+    {
+        return value < 6; // Take while the value is less than 6
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto taken_stream = rstream | take_while<int>(std::move(take_while_fn));
+        std::vector<int> results;
+
+        while (auto value = co_await taken_stream.recv())
+        {
+            results.push_back(std::move(*value));
+        }
+
+        EXPECT_EQ(results.size(), 5) << "Should read five values from the taken stream";
+        for (size_t i = 0; i < results.size(); ++i)
+        {
+            EXPECT_EQ(results[i], i + 1) << "Value at index " << i << " should be " << (i + 1);
+        }
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestDropWhileAdaptor)
+{
+    std::vector<int> values({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    mock_readable_stream<int> rstream(values);
+
+    auto drop_while_fn = [](int value) -> bool
+    {
+        return value < 6; // Drop while the value is less than 6
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto dropped_stream = rstream | drop_while<int>(std::move(drop_while_fn));
+        std::vector<int> results;
+
+        while (auto value = co_await dropped_stream.recv())
+        {
+            results.push_back(std::move(*value));
+        }
+
+        EXPECT_EQ(results.size(), 5) << "Should read five values from the dropped stream";
+        for (size_t i = 0; i < results.size(); ++i)
+        {
+            EXPECT_EQ(results[i], i + 6) << "Value at index " << i << " should be " << (i + 6);
+        }
+    };
+
+    sync_wait(task_fn());
+}

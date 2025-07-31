@@ -121,4 +121,85 @@ namespace webcraft::async::io::adaptors
 
         return collect<void, T>(std::move(collector_func));
     }
-}
+
+    template <typename T>
+    auto filter(std::function<bool(const T &)> &&predicate)
+    {
+        return transform<T>([predicate = std::move(predicate)](async_generator<T> gen) -> async_generator<T>
+                            { for_each_async(value, gen,
+                                             {
+                                                 if (predicate(value))
+                                                 {
+                                                     co_yield std::move(value);
+                                                 }
+                                             }); });
+    }
+
+    template <typename T>
+    auto take(size_t count)
+    {
+        return transform<T>([count](async_generator<T> gen) -> async_generator<T>
+                            {
+                                size_t taken = 0;
+                                for_each_async(value, gen,
+                                               {
+                                                   if (taken < count)
+                                                   {
+                                                       co_yield std::move(value);
+                                                       ++taken;
+                                                   }
+                                               }); });
+    }
+
+    template <typename T>
+    auto drop(size_t count)
+    {
+        return transform<T>([count](async_generator<T> gen) -> async_generator<T>
+                            {
+                                size_t dropped = 0;
+                                for_each_async(value, gen,
+                                               {
+                                                   if (dropped < count)
+                                                   {
+                                                       ++dropped;
+                                                   }
+                                                   else
+                                                   {
+                                                       co_yield std::move(value);
+                                                   }
+                                               }); });
+    }
+
+    template <typename T>
+    auto take_while(std::function<bool(const T &)> &&predicate)
+    {
+        return transform<T>([predicate = std::move(predicate)](async_generator<T> gen) -> async_generator<T>
+                            { for_each_async(value, gen,
+                                             {
+                                                 if (predicate(value))
+                                                 {
+                                                     co_yield std::move(value);
+                                                 }
+                                                 else
+                                                 {
+                                                     co_return;
+                                                 }
+                                             }); });
+    }
+
+    template <typename T>
+    auto drop_while(std::function<bool(const T &)> &&predicate)
+    {
+        return transform<T>([predicate = std::move(predicate)](async_generator<T> gen) -> async_generator<T>
+                            { 
+                                bool should_drop = true;
+                                for_each_async(value, gen,
+                                             {
+                                                 if (should_drop && predicate(value))
+                                                 {
+                                                     continue; // Skip this value
+                                                 }
+                                                 should_drop = false;
+                                                 co_yield std::move(value);
+                                             }); });
+    }
