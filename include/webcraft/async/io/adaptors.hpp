@@ -107,4 +107,18 @@ namespace webcraft::async::io::adaptors
     {
         return detail::collector_stream_adaptor<ToType, StreamType, Collector>(std::move(collector_func));
     }
+
+    template <typename T>
+    auto forward_to(async_writable_stream<T> auto &stream)
+    {
+        auto collector_func = [&stream](async_generator<T> gen) -> task<void>
+        {
+            for_each_async(value, gen,
+                           {
+                               co_await stream.send(std::move(value));
+                           });
+        };
+
+        return collect<void, T>(std::move(collector_func));
+    }
 }

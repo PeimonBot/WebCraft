@@ -230,3 +230,24 @@ TEST_CASE(TestCollectorAdaptor)
 
     sync_wait(task_fn());
 }
+
+TEST_CASE(TestForwardToAdaptor)
+{
+    std::vector<int> values({1, 2, 3, 4, 5});
+
+    mock_readable_stream<int> rstream(values);
+    mock_writable_stream<int> wstream;
+
+    auto task_fn = [&]() -> task<void>
+    {
+        co_await (rstream | forward_to<int>(wstream));
+    };
+
+    sync_wait(task_fn());
+
+    EXPECT_EQ(values.size(), 5) << "Should have sent 5 values to the writable stream";
+    for (int val : values)
+    {
+        EXPECT_TRUE(wstream.received(val)) << "Should have received: " << val;
+    }
+}
