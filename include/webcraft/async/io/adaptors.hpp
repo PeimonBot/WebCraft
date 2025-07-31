@@ -31,6 +31,9 @@ namespace webcraft::async::io::adaptors
             Func transform_fn;
 
         public:
+            static_assert(std::is_invocable_r_v<async_generator<OutType>, Func, async_generator<InType>>,
+                          "Function must accept an async_generator<InType> and return an async_generator<OutType>");
+
             explicit transform_stream_adaptor(Func &&fn)
                 : transform_fn(std::move(fn)) {}
 
@@ -50,6 +53,16 @@ namespace webcraft::async::io::adaptors
                       "Function must accept an async_generator<InType> and return an async_generator<OutType>");
 
         return detail::transform_stream_adaptor<InType, Func>(std::move(fn));
+    }
+
+    template <typename InType, typename OutType>
+    auto map(std::function<OutType(InType)> &&fn)
+    {
+        return transform<InType>([fn = std::move(fn)](async_generator<InType> gen) -> async_generator<OutType>
+                                 { for_each_async(value, gen,
+                                                  {
+                                                      co_yield fn(std::move(value));
+                                                  }); });
     }
 
 }

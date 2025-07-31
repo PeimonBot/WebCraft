@@ -418,3 +418,16 @@ namespace webcraft::async
     using async_generator = cppcoro::async_generator<T>;
 
 }
+
+#define for_each_async(value, gen, code) \
+    auto _it = co_await gen.begin();     \
+    while (_it != gen.end())             \
+    {                                    \
+        auto &&value = std::move(*_it);  \
+        code;                            \
+        co_await ++_it;                  \
+    }
+
+namespace
+{
+}

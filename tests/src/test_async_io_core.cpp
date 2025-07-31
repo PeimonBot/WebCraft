@@ -107,10 +107,10 @@ TEST_CASE(TestGeneratorFromReadableStream)
         auto gen = to_async_generator<std::string>(std::move(stream));
         std::vector<std::string> results;
 
-        for (auto it = co_await gen.begin(); it != gen.end(); co_await ++it)
-        {
-            results.push_back(*it);
-        }
+        for_each_async(value, gen,
+                       {
+                           results.push_back(std::move(value));
+                       });
 
         EXPECT_EQ(results.size(), 3) << "Should yield three values from the generator";
         EXPECT_EQ(results[0], "Hello") << "First value should be 'Hello'";

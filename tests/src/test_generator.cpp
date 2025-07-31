@@ -542,13 +542,10 @@ TEST_CASE(TestAsyncGeneratorThroughput)
     auto consumer = [](async_generator<std::uint32_t> sequence) -> task<>
     {
         std::uint32_t expected = 0;
-        for (auto iter = co_await sequence.begin(); iter != sequence.end(); co_await ++iter)
-        {
-            EXPECT_TRUE(iter != sequence.end()) << "Iterator should not be at end";
-            std::uint32_t i = *iter;
-            // std::cout << "Test: " << std::addressof(i) << std::endl;
-            EXPECT_TRUE(i == expected++);
-        }
+        for_each_async(value, sequence,
+                       {
+                           EXPECT_TRUE(value == expected++);
+                       });
 
         EXPECT_TRUE(expected == 40'000u); // Updated expected count
     };
@@ -602,19 +599,18 @@ TEST_CASE(TestAsyncGeneratorBatchedProcessing)
         std::uint32_t total_count = 0;
         std::uint32_t batch_num = 0;
 
-        for (auto iter = co_await sequence.begin(); iter != sequence.end(); co_await ++iter)
-        {
-            EXPECT_TRUE(iter != sequence.end()) << "Iterator should not be at end";
-            const auto &batch = *iter;
+        for_each_async(it_value, sequence,
+                       {
+                           const auto &batch = it_value;
 
-            std::cout << "Processing batch " << batch_num++ << " with " << batch.size() << " items" << std::endl;
+                           std::cout << "Processing batch " << batch_num++ << " with " << batch.size() << " items" << std::endl;
 
-            for (std::uint32_t value : batch)
-            {
-                EXPECT_TRUE(value == expected++) << "Value mismatch: got " << value << ", expected " << (expected - 1);
-                ++total_count;
-            }
-        }
+                           for (std::uint32_t value : batch)
+                           {
+                               EXPECT_TRUE(value == expected++) << "Value mismatch: got " << value << ", expected " << (expected - 1);
+                               ++total_count;
+                           }
+                       });
 
         EXPECT_TRUE(total_count == expected_count) << "Expected " << expected_count << " but got " << total_count;
         std::cout << "Batched consumer finished. Total consumed: " << total_count << std::endl;
