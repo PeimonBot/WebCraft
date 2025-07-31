@@ -341,6 +341,7 @@ namespace cppcoro
     public:
         using promise_type = detail::async_generator_promise<T>;
         using iterator = detail::async_generator_iterator<T>;
+        using value_type = std::remove_reference_t<T>;
 
         async_generator() noexcept
             : m_coroutine(nullptr)

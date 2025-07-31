@@ -134,7 +134,7 @@ namespace webcraft::async::io
                 }
 
                 auto &itr = *it;
-                auto value = *itr;
+                std::optional<R> value = std::move(*itr);
                 co_await ++itr;
                 co_return std::move(value);
             }
