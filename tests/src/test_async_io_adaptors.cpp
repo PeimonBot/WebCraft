@@ -11,6 +11,7 @@
 #include <functional>
 #include <algorithm>
 #include <numeric>
+#include <sstream>
 
 using namespace webcraft::async;
 using namespace webcraft::async::io;
@@ -53,6 +54,11 @@ public:
 
     bool received(T value)
     {
+        if (received_values.empty())
+        {
+            throw std::logic_error("You're trying to check if a value is received from an empty queue. Try sending something first.");
+        }
+
         auto received = received_values.front();
         received_values.pop();
         return received == value;
@@ -132,6 +138,8 @@ TEST_CASE(TestTransformStreamAdaptorReturningString)
             EXPECT_EQ(results[i], std::to_string((i + 1) * 2)) << "Value at index " << i << " should be " << (i + 1) * 2;
         }
     };
+
+    sync_wait(task_fn());
 }
 
 TEST_CASE(TestMapStreamAdaptor)
@@ -158,6 +166,66 @@ TEST_CASE(TestMapStreamAdaptor)
         {
             EXPECT_EQ(results[i], "Value: " + std::to_string((i + 1) * 2)) << "Value at index " << i << " should be 'Value: " << (i + 1) * 2 << "'";
         }
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestPipeStreamAdaptor)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+    mock_writable_stream<int> wstream;
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto stream = rstream | pipe<int>(wstream);
+        std::vector<int> received_from_stream;
+
+        while (auto value = co_await stream.recv())
+        {
+            auto real_val = *value;
+            received_from_stream.push_back(real_val);
+        }
+
+        // Now check that all values were received by the writable stream
+        EXPECT_EQ(received_from_stream.size(), 5) << "Should have received 5 values from stream";
+        for (int expected_val : received_from_stream)
+        {
+            EXPECT_TRUE(wstream.received(expected_val)) << "Should have received: " << expected_val;
+        }
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestCollectorAdaptor)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto collector_func = [](async_generator<int> gen) -> task<std::string>
+    {
+        std::stringstream strstream;
+
+        strstream << "[";
+
+        auto itr = co_await gen.begin();
+        strstream << std::to_string(*itr);
+        co_await ++itr;
+
+        while (itr != gen.end())
+        {
+            strstream << "," << std::to_string(*itr);
+            co_await ++itr;
+        }
+
+        strstream << "]";
+        co_return strstream.str();
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto str = co_await (rstream | collect<std::string, int>(std::move(collector_func)));
+        EXPECT_EQ(str, "[1,2,3,4,5]");
     };
 
     sync_wait(task_fn());

@@ -13,12 +13,12 @@ namespace webcraft::async::io::adaptors
 
         friend auto operator|(async_readable_stream<T> auto &&stream, Derived &adaptor)
         {
-            return adaptor(std::move(stream));
+            return std::invoke(adaptor, std::move(stream));
         }
 
         friend auto operator|(async_readable_stream<T> auto &&stream, Derived &&adaptor)
         {
-            return std::move(adaptor)(std::forward<decltype(stream)>(stream));
+            return std::invoke(std::move(adaptor), std::forward<decltype(stream)>(stream));
         }
     };
 
@@ -44,6 +44,7 @@ namespace webcraft::async::io::adaptors
                 return to_readable_stream<OutType>(std::move(new_gen));
             }
         };
+
     }
 
     template <typename InType, typename Func>
@@ -65,4 +66,45 @@ namespace webcraft::async::io::adaptors
                                                   }); });
     }
 
+    template <typename T>
+        requires std::is_copy_assignable_v<T>
+    auto pipe(async_writable_stream<T> auto &str)
+    {
+        return transform<T>([&str](async_generator<T> gen) -> async_generator<T>
+                            { for_each_async(value, gen,
+                                             {
+                                                 T backup = value;
+                                                 co_await str.send(std::move(value)); // Send a copy of value
+                                                 co_yield std::move(backup);
+                                             }); });
+    }
+
+    template <typename Derived, typename ToType, typename StreamType>
+    concept collector = std::is_invocable_r_v<task<ToType>, Derived, async_generator<StreamType>>;
+
+    namespace detail
+    {
+
+        template <typename ToType, typename StreamType, collector<ToType, StreamType> Collector>
+        class collector_stream_adaptor : public async_readable_stream_adaptor<collector_stream_adaptor<ToType, StreamType, Collector>, StreamType>
+        {
+        private:
+            Collector collector_fn;
+
+        public:
+            explicit collector_stream_adaptor(Collector &&collector_fn) : collector_fn(std::move(collector_fn)) {}
+
+            task<ToType> operator()(async_readable_stream<StreamType> auto &&stream) const
+            {
+                auto &&gen = to_async_generator<StreamType>(std::move(stream));
+                co_return co_await collector_fn(std::move(gen));
+            }
+        };
+    }
+
+    template <typename ToType, typename StreamType, collector<ToType, StreamType> Collector>
+    auto collect(Collector &&collector_func)
+    {
+        return detail::collector_stream_adaptor<ToType, StreamType, Collector>(std::move(collector_func));
+    }
 }
