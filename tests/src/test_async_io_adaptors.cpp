@@ -289,7 +289,7 @@ TEST_CASE(TestTakeAdaptor)
 
     auto task_fn = [&]() -> task<void>
     {
-        auto taken_stream = rstream | take<int>(5);
+        auto taken_stream = rstream | limit<int>(5);
         std::vector<int> results;
 
         while (auto value = co_await taken_stream.recv())
@@ -314,7 +314,7 @@ TEST_CASE(TestDropAdaptor)
 
     auto task_fn = [&]() -> task<void>
     {
-        auto dropped_stream = rstream | drop<int>(5);
+        auto dropped_stream = rstream | skip<int>(5);
         std::vector<int> results;
 
         while (auto value = co_await dropped_stream.recv())
@@ -483,6 +483,66 @@ TEST_CASE(TestReduceCollector)
     {
         auto reduced_value = co_await (rstream | collect<int, int>(collectors::reduce<int>(std::move(reduce_fn))));
         EXPECT_EQ(reduced_value, 15) << "Should have reduced to the sum of all values";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestJoiningCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto joined_value = co_await (rstream | map<int, std::string>([](int value)
+                                                                      { return std::to_string(value); }) |
+                                      collect<std::string, std::string>(collectors::joining<std::string>(",", "[", "]")));
+        EXPECT_EQ(joined_value, "[1,2,3,4,5]") << "Should have joined all values";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestToVectorCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto vector_value = co_await (rstream | collect<std::vector<int>, int>(collectors::to_vector<int>()));
+        EXPECT_EQ(vector_value.size(), 5) << "Should have collected all values into a vector";
+        for (size_t i = 0; i < vector_value.size(); ++i)
+        {
+            EXPECT_EQ(vector_value[i], i + 1) << "Value at index " << i << " should be " << (i + 1);
+        }
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestGroupByCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+
+    auto group_by_fn = [](const int &value) -> int
+    {
+        return value % 3; // Group by remainder when divided by 3
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto grouped_map = co_await (rstream | collect<std::unordered_map<int, std::vector<int>>, int>(
+                                                   collectors::group_by<int, int>(std::move(group_by_fn))));
+
+        EXPECT_EQ(grouped_map.size(), 3) << "Should have three groups based on the grouping function";
+        for (const auto &[key, values] : grouped_map)
+        {
+            EXPECT_LE(values.size(), 4) << "Each group should have four values";
+            for (int value : values)
+            {
+                EXPECT_EQ(value % 3, key) << "Value " << value << " should belong to group " << key;
+            }
+        }
     };
 
     sync_wait(task_fn());

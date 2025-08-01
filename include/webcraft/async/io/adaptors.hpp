@@ -141,7 +141,7 @@ namespace webcraft::async::io::adaptors
     }
 
     template <typename T>
-    auto take(size_t count)
+    auto limit(size_t count)
     {
         return transform<T>([count](async_generator<T> gen) -> async_generator<T>
                             {
@@ -157,7 +157,7 @@ namespace webcraft::async::io::adaptors
     }
 
     template <typename T>
-    auto drop(size_t count)
+    auto skip(size_t count)
     {
         return transform<T>([count](async_generator<T> gen) -> async_generator<T>
                             {
@@ -272,6 +272,8 @@ namespace webcraft::async::io::adaptors
                 }
             };
 
+            static_assert(collector<detail::joining_collector<std::string>, std::string, std::string>,
+                          "Joining collector must accept a generator of strings and return a string");
             template <typename T>
             struct to_vector_collector
             {
@@ -286,6 +288,8 @@ namespace webcraft::async::io::adaptors
                 }
             };
 
+            static_assert(collector<detail::to_vector_collector<int>, std::vector<int>, int>,
+                          "To vector collector must accept a generator of ints and return a vector of ints");
             template <typename T, typename KeyType>
             struct group_by_collector
             {
@@ -307,6 +311,9 @@ namespace webcraft::async::io::adaptors
                     co_return groups;
                 }
             };
+
+            static_assert(collector<detail::group_by_collector<int, int>, std::unordered_map<int, std::vector<int>>, int>,
+                          "Group by collector must accept a generator of ints and return a map of ints to vectors of ints");
         }
 
         template <typename T>
