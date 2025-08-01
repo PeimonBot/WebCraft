@@ -124,6 +124,12 @@ namespace webcraft::async
             };
             return awaiter{std::move(event)};
         }
+
+        uint64_t get_native_handle();
+
+#ifdef __linux__
+        std::mutex &get_runtime_mutex();
+#endif
     };
 
     /// @brief  Acts as a context for the async runtime, managing the lifecycle of async operations.

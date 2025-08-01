@@ -60,6 +60,16 @@ void webcraft::async::detail::shutdown_runtime() noexcept
 static std::mutex io_uring_mutex;
 static io_uring global_ring;
 
+std::mutex &get_runtime_mutex()
+{
+    return io_uring_mutex;
+}
+
+uint64_t webcraft::async::runtime::detail::get_native_handle()
+{
+    return reinterpret_cast<uint64_t>(&global_ring);
+}
+
 void run_loop(std::stop_token token)
 {
     // perform the following when we're done with the io_uring loop
@@ -212,6 +222,11 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 static HANDLE iocp;
 static webcraft::async::runtime::detail::timer_manager timer_manager;
 
+uint64_t webcraft::async::runtime::detail::get_native_handle()
+{
+    return reinterpret_cast<uint64_t>(iocp);
+}
+
 struct overlapped_event : public OVERLAPPED
 {
     webcraft::async::detail::runtime_event *event;
@@ -359,6 +374,11 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 #include <unistd.h>
 
 static int queue;
+
+uint64_t webcraft::async::runtime::detail::get_native_handle()
+{
+    return reinterpret_cast<uint64_t>(queue);
+}
 
 bool start_runtime_async() noexcept
 {
