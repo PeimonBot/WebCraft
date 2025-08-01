@@ -191,15 +191,20 @@ namespace webcraft::async::io::adaptors
     auto drop_while(std::function<bool(const T &)> &&predicate)
     {
         return transform<T>([predicate = std::move(predicate)](async_generator<T> gen) -> async_generator<T>
-                            { 
+                            {
                                 bool should_drop = true;
                                 for_each_async(value, gen,
-                                             {
-                                                 if (should_drop && predicate(value))
-                                                 {
-                                                     continue; // Skip this value
-                                                 }
-                                                 should_drop = false;
-                                                 co_yield std::move(value);
-                                             }); });
+                                               {
+                                                   if (should_drop && predicate(value))
+                                                   {
+                                                       // Continue dropping values while the predicate is true
+                                                   }
+                                                   else
+                                                   {
+                                                       should_drop = false;
+                                                       co_yield std::move(value);
+                                                   }
+                                               }); });
     }
+
+}

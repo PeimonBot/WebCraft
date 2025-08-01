@@ -278,6 +278,8 @@ TEST_CASE(TestFilterAdaptor)
             EXPECT_EQ(results[i], (i + 1) * 2) << "Value at index " << i << " should be " << (i + 1) * 2;
         }
     };
+
+    sync_wait(task_fn());
 }
 
 TEST_CASE(TestTakeAdaptor)
