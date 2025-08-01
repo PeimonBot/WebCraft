@@ -469,3 +469,21 @@ TEST_CASE(TestAdaptorsWithChannel)
 
     sync_wait(task_fn());
 }
+
+TEST_CASE(TestReduceCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto reduce_fn = [](int a, int b) -> int
+    {
+        return a + b; // Reduce by summing all values
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto reduced_value = co_await (rstream | collect<int, int>(collectors::reduce<int>(std::move(reduce_fn))));
+        EXPECT_EQ(reduced_value, 15) << "Should have reduced to the sum of all values";
+    };
+
+    sync_wait(task_fn());
+}

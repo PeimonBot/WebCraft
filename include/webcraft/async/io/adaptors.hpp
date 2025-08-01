@@ -2,6 +2,11 @@
 
 #include <concepts>
 #include <type_traits>
+#include <unordered_map>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <functional>
 #include "core.hpp"
 
 namespace webcraft::async::io::adaptors
@@ -207,4 +212,126 @@ namespace webcraft::async::io::adaptors
                                                }); });
     }
 
+    namespace collectors
+    {
+
+        namespace detail
+        {
+            template <typename T>
+            struct reducer_collector
+            {
+                std::function<T(T, T)> func;
+
+                explicit reducer_collector(std::function<T(T, T)> &&f)
+                    : func(std::move(f)) {}
+
+                task<T> operator()(async_generator<T> gen) const
+                {
+                    auto itr = co_await gen.begin();
+
+                    if (itr == gen.end())
+                    {
+                        throw std::runtime_error("Cannot reduce an empty generator");
+                    }
+                    T result = *itr;
+                    co_await ++itr;
+
+                    while (itr != gen.end())
+                    {
+                        result = func(std::move(result), *itr);
+                        co_await ++itr;
+                    }
+
+                    co_return result;
+                }
+            };
+
+            static_assert(collector<detail::reducer_collector<int>, int, int>,
+                          "Reducer function must accept two arguments of type int and return a value of type int");
+            template <typename T>
+                requires std::is_convertible_v<T, std::string>
+            struct joining_collector
+            {
+            public:
+                std::string separator;
+                std::string prefix;
+                std::string suffix;
+
+                explicit joining_collector(std::string sep = "", std::string pre = "", std::string suf = "")
+                    : separator(std::move(sep)), prefix(std::move(pre)), suffix(std::move(suf)) {}
+
+                task<std::string> operator()(async_generator<T> gen) const
+                {
+                    std::string separator = this->separator;
+                    std::ostringstream ss;
+                    ss << prefix;
+                    ss << co_await detail::reducer_collector<T>([separator](T a, T b)
+                                                                { return a + separator + b; })(std::move(gen));
+                    ss << suffix;
+                    co_return ss.str();
+                }
+            };
+
+            template <typename T>
+            struct to_vector_collector
+            {
+                task<std::vector<T>> operator()(async_generator<T> gen) const
+                {
+                    std::vector<T> result;
+                    for_each_async(value, gen,
+                                   {
+                                       result.push_back(std::move(value));
+                                   });
+                    co_return result;
+                }
+            };
+
+            template <typename T, typename KeyType>
+            struct group_by_collector
+            {
+                std::function<KeyType(const T &)> key_fn;
+
+                explicit group_by_collector(std::function<KeyType(const T &)> key_function)
+                    : key_fn(std::move(key_function)) {}
+
+                task<std::unordered_map<KeyType, std::vector<T>>> operator()(async_generator<T> gen) const
+                {
+                    std::unordered_map<KeyType, std::vector<T>> groups;
+
+                    for_each_async(value, gen,
+                                   {
+                                       KeyType key = key_fn(value);
+                                       groups[key].push_back(std::move(value));
+                                   });
+
+                    co_return groups;
+                }
+            };
+        }
+
+        template <typename T>
+        auto reduce(std::function<T(T, T)> &&func)
+        {
+            return detail::reducer_collector<T>(std::move(func));
+        }
+
+        template <typename T>
+            requires std::is_convertible_v<T, std::string>
+        auto joining(std::string separator = "", std::string prefix = "", std::string suffix = "")
+        {
+            return detail::joining_collector<T>{std::move(separator), std::move(prefix), std::move(suffix)};
+        }
+
+        template <typename T>
+        auto to_vector()
+        {
+            return detail::to_vector_collector<T>{};
+        }
+
+        template <typename T, typename KeyType>
+        auto group_by(std::function<KeyType(const T &)> key_function)
+        {
+            return detail::group_by_collector<T, KeyType>{std::move(key_function)};
+        }
+    }
 }
