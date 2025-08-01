@@ -547,3 +547,222 @@ TEST_CASE(TestGroupByCollector)
 
     sync_wait(task_fn());
 }
+
+TEST_CASE(TestMinCollector)
+{
+    mock_readable_stream<int> rstream({5, 3, 8, 1, 4});
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto min_value = co_await (rstream | min<int>());
+        EXPECT_EQ(min_value, 1) << "Should have found the minimum value in the stream";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestMaxCollector)
+{
+    mock_readable_stream<int> rstream({5, 3, 8, 1, 4});
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto max_value = co_await (rstream | max<int>());
+        EXPECT_EQ(max_value, 8) << "Should have found the maximum value in the stream";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestSumCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto sum_value = co_await (rstream | sum<int>());
+        EXPECT_EQ(sum_value, 15) << "Should have summed all values in the stream";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestFindFirstCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto find_first_fn = [](const int &value) -> bool
+    {
+        return value > 3; // Find first value greater than 3
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto found_value = co_await (rstream | find_first<int>(std::move(find_first_fn)));
+        EXPECT_EQ(*found_value, 4) << "Should have found the first value greater than 3";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestEmptyFindFirstCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3});
+
+    auto find_first_fn = [](const int &value) -> bool
+    {
+        return value > 5; // No value greater than 5
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto found_value = co_await (rstream | find_first<int>(std::move(find_first_fn)));
+        EXPECT_FALSE(found_value.has_value()) << "Should not have found any value greater than 5";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestFindLastCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto find_last_fn = [](const int &value) -> bool
+    {
+        return value < 5; // Find last value less than 5
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto found_value = co_await (rstream | find_last<int>(std::move(find_last_fn)));
+        EXPECT_EQ(*found_value, 4) << "Should have found the last value less than 5";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestEmptyFindLastCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3});
+
+    auto find_last_fn = [](const int &value) -> bool
+    {
+        return value > 5; // No value greater than 5
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto found_value = co_await (rstream | find_last<int>(std::move(find_last_fn)));
+        EXPECT_FALSE(found_value.has_value()) << "Should not have found any value greater than 5";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestAnyMatchesCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto any_matches_fn = [](const int &value) -> bool
+    {
+        return value > 3; // Check if any value is greater than 3
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto check = co_await (rstream | any_matches<int>(std::move(any_matches_fn)));
+        EXPECT_TRUE(check) << "Should have found at least one value greater than 3";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestNegAnyMatchesCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3});
+
+    auto any_matches_fn = [](const int &value) -> bool
+    {
+        return value > 3; // Check if any value is greater than 3
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto check = co_await (rstream | any_matches<int>(std::move(any_matches_fn)));
+        EXPECT_FALSE(check) << "Should not have found any value greater than 3";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestAllMatchesCollector)
+{
+    mock_readable_stream<int> rstream({2, 4, 6, 8, 10});
+
+    auto all_matches_fn = [](const int &value) -> bool
+    {
+        return value % 2 == 0; // Check if all values are even
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto check = co_await (rstream | all_matches<int>(std::move(all_matches_fn)));
+        EXPECT_TRUE(check) << "Should have found all values to be even";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestNegAllMatchesCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto all_matches_fn = [](const int &value) -> bool
+    {
+        return value % 2 == 0; // Check if all values are even
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto check = co_await (rstream | all_matches<int>(std::move(all_matches_fn)));
+        EXPECT_FALSE(check) << "Should not have found all values to be even";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestNoneMatchesCollector)
+{
+    mock_readable_stream<int> rstream({1, 3, 5, 7, 9});
+
+    auto none_matches_fn = [](const int &value) -> bool
+    {
+        return value % 2 == 0; // Check if no values are even
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto check = co_await (rstream | none_matches<int>(std::move(none_matches_fn)));
+        EXPECT_TRUE(check) << "Should have found no even values in the stream";
+    };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestNegNoneMatchesCollector)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5});
+
+    auto none_matches_fn = [](const int &value) -> bool
+    {
+        return value % 2 == 0; // Check if no values are even
+    };
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto check = co_await (rstream | none_matches<int>(std::move(none_matches_fn)));
+        EXPECT_FALSE(check) << "Should not have found no even values in the stream";
+    };
+
+    sync_wait(task_fn());
+}

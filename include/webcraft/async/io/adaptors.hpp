@@ -341,4 +341,109 @@ namespace webcraft::async::io::adaptors
             return detail::group_by_collector<T, KeyType>{std::move(key_function)};
         }
     }
+
+    template <typename T>
+        requires std::totally_ordered<T>
+    auto min()
+    {
+        return collect<T, T>(collectors::reduce<T>([](T a, T b)
+                                                   { return std::min(std::move(a), std::move(b)); }));
+    }
+
+    template <typename T>
+        requires std::totally_ordered<T>
+    auto max()
+    {
+        return collect<T, T>(collectors::reduce<T>([](T a, T b)
+                                                   { return std::max(std::move(a), std::move(b)); }));
+    }
+
+    template <typename T>
+    concept closure_under_addition = requires(T a, T b) {
+        { a + b } -> std::convertible_to<T>;
+    };
+
+    template <typename T>
+        requires closure_under_addition<T>
+    auto sum()
+    {
+        return collect<T, T>(collectors::reduce<T>([](T a, T b)
+                                                   { return a + b; }));
+    }
+
+    template <typename T>
+    auto find_first(std::function<bool(const T &)> &&predicate)
+    {
+        return collect<std::optional<T>, T>([predicate = std::move(predicate)](async_generator<T> gen) -> task<std::optional<T>>
+                                            {
+                                 for_each_async(value, gen,
+                                                {
+                                                    if (predicate(value))
+                                                    {
+                                                        co_return std::make_optional(std::move(value));
+                                                    }
+                                                });
+                                 co_return std::nullopt; });
+    }
+
+    template <typename T>
+    auto find_last(std::function<bool(const T &)> &&predicate)
+    {
+        return collect<std::optional<T>, T>([predicate = std::move(predicate)](async_generator<T> gen) -> task<std::optional<T>>
+                                            {
+                                 std::optional<T> last_match;
+                                 for_each_async(value, gen,
+                                                {
+                                                    if (predicate(value))
+                                                    {
+                                                        last_match = std::move(value);
+                                                    }
+                                                });
+                                 co_return last_match; });
+    }
+
+    template <typename T>
+    auto any_matches(std::function<bool(const T &)> &&predicate)
+    {
+        return collect<bool, T>([predicate = std::move(predicate)](async_generator<T> gen) -> task<bool>
+                                {
+                                    for_each_async(value, gen,
+                                                   {
+                                                       if (predicate(value))
+                                                       {
+                                                           co_return true;
+                                                       }
+                                                   });
+                                    co_return false; });
+    }
+
+    template <typename T>
+    auto all_matches(std::function<bool(const T &)> &&predicate)
+    {
+        return collect<bool, T>([predicate = std::move(predicate)](async_generator<T> gen) -> task<bool>
+                                {
+                                    for_each_async(value, gen,
+                                                   {
+                                                       if (!predicate(value))
+                                                       {
+                                                           co_return false;
+                                                       }
+                                                   });
+                                    co_return true; });
+    }
+
+    template <typename T>
+    auto none_matches(std::function<bool(const T &)> &&predicate)
+    {
+        return collect<bool, T>([predicate = std::move(predicate)](async_generator<T> gen) -> task<bool>
+                                {
+                                    for_each_async(value, gen,
+                                                   {
+                                                       if (predicate(value))
+                                                       {
+                                                           co_return false;
+                                                       }
+                                                   });
+                                    co_return true; });
+    }
 }
