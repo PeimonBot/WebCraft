@@ -391,3 +391,37 @@ TEST_CASE(TestDropWhileAdaptor)
 
     sync_wait(task_fn());
 }
+
+TEST_CASE(TestComplexAdaptorExample)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    mock_writable_stream<std::string> wstream, piped_stream;
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto complex_stream = rstream | filter<int>([](int value)
+                                                    { return value % 2 == 0; }) // Filter even numbers
+                              | take_while<int>([](int value)
+                                                { return value < 8; }) // Take while less than 8
+                              | transform<int>([](async_generator<int> gen) -> async_generator<int>
+                                               { for_each_async(value, gen,
+                                                                {
+                                                                    co_yield value * 2 - 1; // Send the value multiplied by 2 minus 1
+                                                                    co_yield value * 2;     // Send the value multiplied by 2
+                                                                }); }) |
+                              drop_while<int>([](int value)
+                                              { return value < 5; }) // Drop while less than 5
+                              | map<int, std::string>([](int value)
+                                                      { return "Transformed: " + std::to_string(value); }) // Map to string
+                              | pipe<std::string>(piped_stream) | forward_to<std::string>(wstream);        // Forward to writable stream
+
+        co_await complex_stream;
+
+        // Now check that all values were received by the writable stream
+        std::vector<std::string> expected_values = {"Transformed: 5", "Transformed: 6"};
+        for (const std::string &expected_val : expected_values)
+        {
+            EXPECT_TRUE(wstream.received(expected_val)) << "Should have received: " << expected_val;
+        }
+    };
+}
