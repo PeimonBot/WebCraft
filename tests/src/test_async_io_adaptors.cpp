@@ -406,8 +406,8 @@ TEST_CASE(TestComplexAdaptorExample)
                               | transform<int>([](async_generator<int> gen) -> async_generator<int>
                                                { for_each_async(value, gen,
                                                                 {
-                                                                    co_yield value * 2 - 1; // Send the value multiplied by 2 minus 1
-                                                                    co_yield value * 2;     // Send the value multiplied by 2
+                                                                    co_yield value * 2 - 1;
+                                                                    co_yield value * 2;
                                                                 }); }) |
                               drop_while<int>([](int value)
                                               { return value < 5; }) // Drop while less than 5
@@ -418,10 +418,54 @@ TEST_CASE(TestComplexAdaptorExample)
         co_await complex_stream;
 
         // Now check that all values were received by the writable stream
-        std::vector<std::string> expected_values = {"Transformed: 5", "Transformed: 6"};
+        std::vector<std::string> expected_values = {"Transformed: 7", "Transformed: 8"};
         for (const std::string &expected_val : expected_values)
         {
             EXPECT_TRUE(wstream.received(expected_val)) << "Should have received: " << expected_val;
         }
     };
+
+    sync_wait(task_fn());
+}
+
+TEST_CASE(TestAdaptorsWithChannel)
+{
+    mock_readable_stream<int> rstream({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    auto [reader, writer] = make_mpsc_channel<std::string>();
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto complex_stream = rstream | filter<int>([](int value)
+                                                    { return value % 2 == 0; }) // Filter even numbers
+                              | take_while<int>([](int value)
+                                                { return value < 8; }) // Take while less than 8
+                              | transform<int>([](async_generator<int> gen) -> async_generator<int>
+                                               { for_each_async(value, gen,
+                                                                {
+                                                                    co_yield value * 2 - 1;
+                                                                    co_yield value * 2;
+                                                                }); }) |
+                              drop_while<int>([](int value)
+                                              { return value < 5; }) // Drop while less than 5
+                              | map<int, std::string>([](int value)
+                                                      { return "Transformed: " + std::to_string(value); }) // Map to string
+                              | forward_to<std::string>(writer);                                           // Forward to writable stream
+
+        co_await complex_stream;
+
+        // Now check that all values were received by the writable stream
+        std::vector<std::string> expected_values = {"Transformed: 7", "Transformed: 8"};
+        size_t count = 0;
+
+        for (const std::string &expected_val : expected_values)
+        {
+            if (auto value = co_await reader.recv())
+            {
+                EXPECT_EQ(*value, expected_val) << "Should have received: " << expected_val;
+                count++;
+            }
+        }
+    };
+
+    sync_wait(task_fn());
 }
