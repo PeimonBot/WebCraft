@@ -3,6 +3,14 @@
 using webcraft::async::io::socket::connection_info;
 using namespace webcraft::async;
 
+#ifdef __linux__
+
+
+
+#elif defined(_WIN32)
+#elif defined(__APPLE__)
+#else
+
 struct mock_tcp_client_descriptor : public webcraft::async::io::socket::tcp_client_descriptor
 {
     mock_tcp_client_descriptor(const webcraft::async::io::socket::connection_info &info)
@@ -89,3 +97,4 @@ std::shared_ptr<webcraft::async::io::socket::tcp_server_descriptor> webcraft::as
     // For this example, we return a mock descriptor.
     return std::make_shared<mock_tcp_server_descriptor>(info);
 }
+#endif
