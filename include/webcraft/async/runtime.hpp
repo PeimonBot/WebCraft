@@ -182,35 +182,4 @@ namespace webcraft::async
         return yield();
     }
 
-#ifdef WEBCRAFT_ASYNC_RUNTIME_MOCK
-    namespace detail
-    {
-        static void initialize_runtime() noexcept
-        {
-        }
-
-        static void shutdown_runtime() noexcept
-        {
-            // Perform any necessary cleanup for the runtime
-        }
-
-        static void post_yield_event(std::function<void()> func, int *)
-        {
-            // Post the yield event to the runtime
-            func();
-        }
-
-        static void post_sleep_event(std::function<void()> func, std::chrono::steady_clock::duration duration, std::stop_token token, int *)
-        {
-            // Post the sleep event to the runtime
-            if (token.stop_requested())
-                return;
-
-            // Simulate a sleep operation
-            std::this_thread::sleep_for(duration);
-            func();
-        }
-    }
-#endif
-
 }

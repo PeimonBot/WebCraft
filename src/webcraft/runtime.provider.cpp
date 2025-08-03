@@ -60,12 +60,12 @@ void webcraft::async::detail::shutdown_runtime() noexcept
 static std::mutex io_uring_mutex;
 static io_uring global_ring;
 
-std::mutex &get_runtime_mutex()
+std::mutex &webcraft::async::detail::get_runtime_mutex()
 {
     return io_uring_mutex;
 }
 
-uint64_t webcraft::async::runtime::detail::get_native_handle()
+uint64_t webcraft::async::detail::get_native_handle()
 {
     return reinterpret_cast<uint64_t>(&global_ring);
 }
@@ -222,7 +222,7 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 static HANDLE iocp;
 static webcraft::async::runtime::detail::timer_manager timer_manager;
 
-uint64_t webcraft::async::runtime::detail::get_native_handle()
+uint64_t webcraft::async::detail::get_native_handle()
 {
     return reinterpret_cast<uint64_t>(iocp);
 }
@@ -375,7 +375,7 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 
 static int queue;
 
-uint64_t webcraft::async::runtime::detail::get_native_handle()
+uint64_t webcraft::async::detail::get_native_handle()
 {
     return reinterpret_cast<uint64_t>(queue);
 }

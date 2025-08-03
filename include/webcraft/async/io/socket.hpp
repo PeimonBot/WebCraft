@@ -13,16 +13,16 @@ namespace webcraft::async::io::socket
     class tcp_descriptor
     {
     private:
-        std::optional<connection_info> connection_info;
+        std::optional<connection_info> info;
 
     public:
         tcp_descriptor() noexcept = default;
-        tcp_descriptor(tcp_descriptor &&other) noexcept : connection_info(std::move(other.connection_info)) {}
+        tcp_descriptor(tcp_descriptor &&other) noexcept : info(std::move(other.info)) {}
         tcp_descriptor &operator=(tcp_descriptor &&other) noexcept
         {
             if (this != &other)
             {
-                connection_info = std::exchange(other.connection_info, std::nullopt);
+                info = std::exchange(other.info, std::nullopt);
             }
             return *this;
         }
@@ -31,19 +31,19 @@ namespace webcraft::async::io::socket
         // common operations
         virtual void set_connection_options(const connection_info &info)
         {
-            connection_info = info;
+            this->info = info;
         }
 
         std::optional<std::string> get_host() const
         {
-            return connection_info.and_then([](const connection_info &info)
-                                            { return info.host; });
+            return info.transform([](const connection_info &info)
+                                  { return info.host; });
         }
 
         std::optional<std::uint16_t> get_port() const
         {
-            return connection_info.and_then([](const connection_info &info)
-                                            { return info.port; });
+            return info.transform([](const connection_info &info)
+                                  { return info.port; });
         }
 
         virtual void close() = 0;
@@ -62,6 +62,13 @@ namespace webcraft::async::io::socket
         virtual task<bool> connect() = 0;
     };
 
+    std::shared_ptr<tcp_client_descriptor> make_tcp_client_descriptor(const connection_info &info);
+    inline std::shared_ptr<tcp_client_descriptor> make_tcp_client_descriptor(const std::string &host, std::uint16_t port)
+    {
+        connection_info info{host, port};
+        return make_tcp_client_descriptor(info);
+    }
+
     class tcp_server_descriptor : public tcp_descriptor
     {
     public:
@@ -74,6 +81,13 @@ namespace webcraft::async::io::socket
         virtual task<std::shared_ptr<tcp_client_descriptor>> accept() = 0;
         virtual void listen(size_t backlog) = 0;
     };
+
+    std::shared_ptr<tcp_server_descriptor> make_tcp_server_descriptor(const connection_info &info);
+    inline std::shared_ptr<tcp_server_descriptor> make_tcp_server_descriptor(const std::string &host, std::uint16_t port)
+    {
+        connection_info info{host, port};
+        return make_tcp_server_descriptor(info);
+    }
 
     class tcp_readable_stream
     {
@@ -156,12 +170,14 @@ namespace webcraft::async::io::socket
     {
     private:
         std::shared_ptr<tcp_client_descriptor> descriptor;
-        std::optional<tcp_readable_stream> readable_stream;
-        std::optional<tcp_writable_stream> writable_stream;
+        std::unique_ptr<tcp_readable_stream> readable_stream;
+        std::unique_ptr<tcp_writable_stream> writable_stream;
 
     public:
         tcp_socket(std::shared_ptr<tcp_client_descriptor> descriptor) noexcept : descriptor(std::move(descriptor)) {}
-        tcp_socket(tcp_socket &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)) {}
+        tcp_socket(tcp_socket &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)),
+                                                  readable_stream(std::exchange(other.readable_stream, nullptr)),
+                                                  writable_stream(std::exchange(other.writable_stream, nullptr)) {}
         tcp_socket &operator=(tcp_socket &&other) noexcept
         {
             if (this != &other)
@@ -186,8 +202,8 @@ namespace webcraft::async::io::socket
 
             if (co_await descriptor->connect())
             {
-                readable_stream.emplace(descriptor);
-                writable_stream.emplace(descriptor);
+                readable_stream = std::make_unique<tcp_readable_stream>(descriptor);
+                writable_stream = std::make_unique<tcp_writable_stream>(descriptor);
                 co_return;
             }
             else
@@ -198,7 +214,7 @@ namespace webcraft::async::io::socket
 
         tcp_readable_stream &get_readable_stream() const
         {
-            if (!readable_stream.has_value())
+            if (!readable_stream)
                 throw std::runtime_error("Socket is not connected");
 
             return *readable_stream;
@@ -206,7 +222,7 @@ namespace webcraft::async::io::socket
 
         tcp_writable_stream &get_writable_stream() const
         {
-            if (!readable_stream.has_value())
+            if (!writable_stream)
                 throw std::runtime_error("Socket is not connected");
 
             return *writable_stream;
@@ -219,8 +235,8 @@ namespace webcraft::async::io::socket
         std::shared_ptr<tcp_server_descriptor> descriptor;
 
     public:
-        tcp_listener(std::shared_ptr<tcp_server_descriptor> descriptor);
-        tcp_listener(tcp_listener &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)) {};
+        tcp_listener(std::shared_ptr<tcp_server_descriptor> descriptor) : descriptor(std::move(descriptor)) {}
+        tcp_listener(tcp_listener &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)) {}
         tcp_listener &operator=(tcp_listener &&other) noexcept
         {
             if (this != &other)
@@ -254,7 +270,7 @@ namespace webcraft::async::io::socket
             auto client_descriptor = co_await descriptor->accept();
             if (client_descriptor)
             {
-                co_return tcp_socket(std::move(client_descriptor));
+                co_return {std::move(client_descriptor)};
             }
             else
             {
@@ -263,7 +279,33 @@ namespace webcraft::async::io::socket
         }
     };
 
-    tcp_socket make_socket(const std::string &host, std::uint16_t port);
-    tcp_listener make_server_socket(const std::string &host, std::uint16_t port);
+    inline tcp_socket make_tcp_socket(const connection_info &info)
+    {
+        auto descriptor = make_tcp_client_descriptor(info);
+        if (!descriptor)
+            throw std::runtime_error("Failed to create TCP client descriptor");
 
+        return tcp_socket(std::move(descriptor));
+    }
+
+    inline tcp_socket make_tcp_socket(const std::string &host, std::uint16_t port)
+    {
+        connection_info info{host, port};
+        return make_tcp_socket(info);
+    }
+
+    inline tcp_listener make_tcp_listener(const connection_info &info)
+    {
+        auto descriptor = make_tcp_server_descriptor(info);
+        if (!descriptor)
+            throw std::runtime_error("Failed to create TCP server descriptor");
+
+        return tcp_listener(std::move(descriptor));
+    }
+
+    inline tcp_listener make_tcp_listener(const std::string &host, std::uint16_t port)
+    {
+        connection_info info{host, port};
+        return make_tcp_listener(info);
+    }
 }

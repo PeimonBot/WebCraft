@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core.hpp"
+#include <fstream>
 #include <filesystem>
 
 namespace webcraft::async::io::fs
@@ -22,9 +23,9 @@ namespace webcraft::async::io::fs
         virtual void close() = 0;
 
         std::ios_base::openmode get_mode() const { return mode; }
-
-        static std::shared_ptr<file_descriptor> open(const std::filesystem::path &path, std::ios_base::openmode mode);
     };
+
+    std::shared_ptr<file_descriptor> open(const std::filesystem::path &path, std::ios_base::openmode mode);
 
     struct file_readable_stream
     {
@@ -76,37 +77,169 @@ namespace webcraft::async::io::fs
 
     struct file
     {
+    private:
+        std::filesystem::path file_path;
 
-        bool exists() const;
-        bool is_directory() const;
-        bool is_regular_file() const;
-        bool is_symlink() const;
+    public:
+        explicit file(const std::filesystem::path &path) : file_path(path) {}
 
-        std::uintmax_t size() const;
+        bool exists() const
+        {
+            return std::filesystem::exists(file_path);
+        }
+        bool is_directory() const
+        {
+            return std::filesystem::is_directory(file_path);
+        }
+        bool is_regular_file() const
+        {
+            return std::filesystem::is_regular_file(file_path);
+        }
+        bool is_symlink() const
+        {
+            return std::filesystem::is_symlink(file_path);
+        }
 
-        bool create_if_not_exists() const;
-        bool mkdir() const;
-        bool delete_file() const;
+        std::uintmax_t size() const
+        {
+            return std::filesystem::file_size(file_path);
+        }
 
-        std::filesystem::file_time_type last_write_time() const;
-        std::filesystem::file_time_type last_access_time() const;
-        std::filesystem::file_time_type creation_time() const;
-        std::filesystem::file_type type() const;
+        bool create_if_not_exists() const
+        {
+            if (!exists())
+            {
+                std::ofstream ofs(file_path);
+            }
+            return exists();
+        }
 
-        std::filesystem::path path() const;
+        bool mkdir() const
+        {
+            return std::filesystem::create_directory(file_path);
+        }
+        bool delete_file() const
+        {
+            return std::filesystem::remove(file_path);
+        }
 
-        file_readable_stream open_readable_stream() const;
-        file_writable_stream open_writable_stream(bool append) const;
+        std::filesystem::file_time_type last_write_time() const
+        {
+            return std::filesystem::last_write_time(file_path);
+        }
+
+        std::filesystem::file_type type() const
+        {
+            return std::filesystem::status(file_path).type();
+        }
+
+        std::filesystem::path path() const
+        {
+            return file_path;
+        }
+
+        file_readable_stream open_readable_stream() const
+        {
+            auto fd = open(file_path, std::ios_base::in);
+            if (!fd)
+                throw std::runtime_error("Failed to open file for reading: " + file_path.string());
+            return file_readable_stream(fd);
+        }
+        file_writable_stream open_writable_stream(bool append = false) const
+        {
+            auto mode = std::ios_base::out | (append ? std::ios_base::app : std::ios_base::trunc);
+            auto fd = open(file_path, mode);
+            if (!fd)
+                throw std::runtime_error("Failed to open file for writing: " + file_path.string());
+            return file_writable_stream(fd);
+        }
     };
 
-    file make_file(const std::filesystem::path &path);
+    inline file make_file(const std::filesystem::path &path)
+    {
+        return file(path);
+    }
 
-    task<std::string> read_file(const std::filesystem::path &path);
-    task<void> write_file(const std::filesystem::path &path, const std::string &content, bool append = false);
-    task<void> copy_file(const std::filesystem::path &source, const std::filesystem::path &destination);
+    inline task<std::string> read_file(const std::filesystem::path &path)
+    {
+        std::vector<char> source;
+        auto file = make_file(path);
+        if (!file.exists() || !file.is_regular_file())
+        {
+            throw std::runtime_error("File does not exist or is not a regular file: " + path.string());
+        }
+
+        auto readable_stream = file.open_readable_stream();
+        source.resize(file.size());
+        size_t bytes_read = 0;
+        while (bytes_read < source.size())
+        {
+            auto chunk = co_await readable_stream.recv(std::span<char>(source.data() + bytes_read, source.size() - bytes_read));
+            if (chunk == 0)
+            {
+                break; // EOF
+            }
+            bytes_read += chunk;
+        }
+        co_return std::string(source.data(), bytes_read);
+    }
+
+    inline task<void> write_file(const std::filesystem::path &path, const std::string &content, bool append = false)
+    {
+        auto file = make_file(path);
+
+        if (file.exists() && file.is_directory())
+        {
+            throw std::runtime_error("Cannot write to a directory: " + path.string());
+        }
+
+        auto writable_stream = file.open_writable_stream(append);
+        size_t bytes_written = 0;
+        while (bytes_written < content.size())
+        {
+            auto chunk = co_await writable_stream.send(std::span<const char>(content.data() + bytes_written, content.size() - bytes_written));
+            if (chunk == 0)
+            {
+                break; // EOF
+            }
+            bytes_written += chunk;
+        }
+        if (bytes_written < content.size())
+        {
+            throw std::runtime_error("Failed to write all bytes to file: " + path.string());
+        }
+    }
+
+    inline task<void> copy_file(const std::filesystem::path &source, const std::filesystem::path &destination)
+    {
+        auto source_file = make_file(source);
+        if (!source_file.exists() || !source_file.is_regular_file())
+        {
+            throw std::runtime_error("Source file does not exist or is not a regular file: " + source.string());
+        }
+
+        auto destination_file = make_file(destination);
+        if (destination_file.exists() && destination_file.is_directory())
+        {
+            throw std::runtime_error("Destination path is a directory: " + destination.string());
+        }
+
+        destination_file.create_if_not_exists();
+
+        auto readable_stream = source_file.open_readable_stream();
+        auto writable_stream = destination_file.open_writable_stream();
+
+        std::vector<char> buffer(8192); // 8 KB buffer
+        size_t bytes_read;
+        while ((bytes_read = co_await readable_stream.recv(std::span<char>(buffer))) > 0)
+        {
+            co_await writable_stream.send(std::span<const char>(buffer.data(), bytes_read));
+        }
+    }
+
     inline task<void> move_file(const std::filesystem::path &source, const std::filesystem::path &destination)
     {
-        co_await copy_file(source, destination);
+        co_await webcraft::async::io::fs::copy_file(source, destination);
         make_file(source).delete_file();
     }
 

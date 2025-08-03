@@ -126,7 +126,7 @@ namespace webcraft::async
         {
             if (coro.promise().exception)
                 std::rethrow_exception(coro.promise().exception);
-            return coro.promise().value.value();
+            return std::move(coro.promise().value.value());
         }
 
     private:
