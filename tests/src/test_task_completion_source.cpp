@@ -100,11 +100,9 @@ TEST_CASE(TestTaskCompletionSourceExceptionVoid)
     auto t = tcs.task();
 
     // Set an exception
-    auto exception = std::make_exception_ptr(std::logic_error("Void test exception"));
-
     try
     {
-        throw std::runtime_error("Test exception");
+        throw std::logic_error("Test exception");
     }
     catch (...)
     {
