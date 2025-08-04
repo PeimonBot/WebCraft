@@ -377,7 +377,7 @@ static int queue;
 
 uint64_t webcraft::async::detail::get_native_handle()
 {
-    return reinterpret_cast<uint64_t>(queue);
+    return static_cast<int>(queue);
 }
 
 bool start_runtime_async() noexcept

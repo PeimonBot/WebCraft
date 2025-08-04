@@ -13,7 +13,7 @@ namespace webcraft::async
         std::atomic<bool> flag{false};
 
     public:
-        constexpr bool await_ready() { return is_set(); }
+        bool await_ready() { return is_set(); }
         constexpr void await_suspend(std::coroutine_handle<> h)
         {
             this->handles.push_back(h);
