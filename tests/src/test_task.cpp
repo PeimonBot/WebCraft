@@ -218,6 +218,22 @@ TEST_CASE(TestTaskWithContinuation)
     EXPECT_TRUE(signal.is_set()) << "Signal should be set after the continuation is executed";
 }
 
+TEST_CASE(TestTaskWithErrorHandling)
+{
+    auto throws = []() -> task<int>
+    {
+        throw std::runtime_error("Test exception");
+        co_return 42; // This line should never be reached
+    };
+
+    EXPECT_THROW(sync_wait(throws()), std::runtime_error) << "sync_wait should throw std::runtime_error";
+
+    EXPECT_EQ(sync_wait(throws() | upon_error([](std::exception_ptr e)
+                                              { return -1; })),
+              -1)
+        << "Task should handle the error and return -1";
+}
+
 TEST_CASE(TestTaskEagerness)
 {
     event_signal signal;
