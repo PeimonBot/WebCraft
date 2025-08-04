@@ -100,9 +100,11 @@ TEST_CASE(TestTaskCompletionSourceExceptionVoid)
     auto t = tcs.task();
 
     // Set an exception
+    auto exception = std::make_exception_ptr(std::logic_error("Void test exception"));
+
     try
     {
-        throw std::logic_error("Void test exception");
+        throw std::runtime_error("Test exception");
     }
     catch (...)
     {
@@ -111,16 +113,6 @@ TEST_CASE(TestTaskCompletionSourceExceptionVoid)
 
     // The task should throw the exception
     EXPECT_THROW(sync_wait(t), std::logic_error) << "Void task should throw the set exception";
-}
-
-TEST_CASE(TestTaskCompletionSourceAsynchronousCompletion)
-catch (...)
-{
-    tcs.set_exception(std::current_exception());
-}
-
-// The task should throw the exception
-EXPECT_THROW(sync_wait(t), std::logic_error) << "Void task should throw the set exception";
 }
 
 TEST_CASE(TestTaskCompletionSourceAsynchronousCompletion)
