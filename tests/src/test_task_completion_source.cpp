@@ -81,8 +81,14 @@ TEST_CASE(TestTaskCompletionSourceException)
     auto t = tcs.task();
 
     // Set an exception
-    auto exception = std::make_exception_ptr(std::runtime_error("Test exception"));
-    tcs.set_exception(exception);
+    try
+    {
+        throw std::runtime_error("Test exception");
+    }
+    catch (...)
+    {
+        tcs.set_exception(std::current_exception());
+    }
 
     // The task should throw the exception
     EXPECT_THROW(sync_wait(t), std::runtime_error) << "Task should throw the set exception";
@@ -94,8 +100,14 @@ TEST_CASE(TestTaskCompletionSourceExceptionVoid)
     auto t = tcs.task();
 
     // Set an exception
-    auto exception = std::make_exception_ptr(std::logic_error("Void test exception"));
-    tcs.set_exception(exception);
+    try
+    {
+        throw std::logic_error("Test exception");
+    }
+    catch (...)
+    {
+        tcs.set_exception(std::current_exception());
+    }
 
     // The task should throw the exception
     EXPECT_THROW(sync_wait(t), std::logic_error) << "Void task should throw the set exception";
@@ -132,8 +144,11 @@ TEST_CASE(TestTaskCompletionSourceAsynchronousException)
     std::thread([&]()
                 {
         std::this_thread::sleep_for(test_timer_timeout);
-        auto exception = std::make_exception_ptr(std::invalid_argument("Async exception"));
-        tcs.set_exception(exception); })
+        try {
+            throw std::invalid_argument("Async exception");
+        } catch (...) {
+            tcs.set_exception(std::current_exception());
+        } })
         .detach();
 
     auto start = std::chrono::steady_clock::now();
@@ -223,8 +238,14 @@ TEST_CASE(TestTaskCompletionSourceCancellationScenario)
     auto waiter_task = waiter();
 
     // Simulate cancellation by setting an exception
-    auto cancellation_exception = std::make_exception_ptr(std::runtime_error("Operation cancelled"));
-    tcs.set_exception(cancellation_exception);
+    try
+    {
+        throw std::runtime_error("Operation cancelled");
+    }
+    catch (...)
+    {
+        tcs.set_exception(std::current_exception());
+    }
 
     sync_wait(waiter_task);
 
