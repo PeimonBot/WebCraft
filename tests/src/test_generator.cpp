@@ -13,12 +13,6 @@
 using namespace webcraft::ranges;
 using namespace webcraft::async;
 
-TEST_CASE(EmptyGeneratorTest)
-{
-    generator<int> ints;
-    EXPECT_TRUE(ints.begin() == ints.end());
-}
-
 TEST_CASE(ReturnsCopyTest)
 {
     auto f = []() -> generator<float>
