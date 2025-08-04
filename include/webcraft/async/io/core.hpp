@@ -47,7 +47,7 @@ namespace webcraft::async::io
     {
         if constexpr (async_buffered_readable_stream<RStream, R>)
         {
-            return co_await stream.recv(buffer);
+            co_return co_await stream.recv(buffer);
         }
         else
         {
@@ -69,7 +69,7 @@ namespace webcraft::async::io
     template <typename R, async_writable_stream<R> WStream>
     task<bool> send(WStream &stream, R &&value)
     {
-        co_return co_await stream.send(std::forward<R>(value));
+        co_co_return co_await stream.send(std::forward<R>(value));
     }
 
     template <typename R, async_writable_stream<R> WStream, size_t BufferSize>
@@ -77,7 +77,7 @@ namespace webcraft::async::io
     {
         if constexpr (async_buffered_writable_stream<WStream, R>)
         {
-            co_return co_await stream.send(buffer);
+            co_co_return co_await stream.send(buffer);
         }
         else
         {
@@ -177,7 +177,7 @@ namespace webcraft::async::io
                     }
                 };
 
-                co_return co_await awaitable{*this};
+                co_co_return co_await awaitable{*this};
             }
 
             task<bool> send(T &&val)
