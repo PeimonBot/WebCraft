@@ -61,8 +61,8 @@ namespace webcraft::async::io::adaptors
         return detail::transform_stream_adaptor<InType, Func>(std::move(fn));
     }
 
-    template <typename InType, typename OutType>
-    auto map(std::function<OutType(InType)> &&fn)
+    template <typename InType, typename Func, typename OutType = std::invoke_result_t<Func, InType>>
+    auto map(Func &&fn)
     {
         return transform<InType>([fn = std::move(fn)](async_generator<InType> gen) -> async_generator<OutType>
                                  { for_each_async(value, gen,
@@ -127,9 +127,11 @@ namespace webcraft::async::io::adaptors
         return collect<void, T>(std::move(collector_func));
     }
 
-    template <typename T>
-    auto filter(std::function<bool(const T &)> &&predicate)
+    template <typename T, typename Func>
+    auto filter(Func &&predicate)
     {
+        static_assert(std::is_invocable_r_v<bool, Func, const T &>,
+                      "Predicate must accept a const reference to T and return a bool");
         return transform<T>([predicate = std::move(predicate)](async_generator<T> gen) -> async_generator<T>
                             { for_each_async(value, gen,
                                              {
@@ -175,9 +177,11 @@ namespace webcraft::async::io::adaptors
                                                }); });
     }
 
-    template <typename T>
-    auto take_while(std::function<bool(const T &)> &&predicate)
+    template <typename T, typename Func>
+    auto take_while(Func &&predicate)
     {
+        static_assert(std::is_invocable_r_v<bool, Func, const T &>,
+                      "Predicate must accept a const reference to T and return a bool");
         return transform<T>([predicate = std::move(predicate)](async_generator<T> gen) -> async_generator<T>
                             { for_each_async(value, gen,
                                              {
@@ -192,9 +196,11 @@ namespace webcraft::async::io::adaptors
                                              }); });
     }
 
-    template <typename T>
-    auto drop_while(std::function<bool(const T &)> &&predicate)
+    template <typename T, typename Func>
+    auto drop_while(Func &&predicate)
     {
+        static_assert(std::is_invocable_r_v<bool, Func, const T &>,
+                      "Predicate must accept a const reference to T and return a bool");
         return transform<T>([predicate = std::move(predicate)](async_generator<T> gen) -> async_generator<T>
                             {
                                 bool should_drop = true;

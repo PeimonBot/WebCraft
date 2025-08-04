@@ -169,9 +169,9 @@ namespace webcraft::async::io
                         sub.continuation = h;
                     }
 
-                    T &&await_resume() noexcept
+                    T await_resume() noexcept
                     {
-                        auto &&value = std::move(sub.values.front());
+                        auto value = std::move(sub.values.front());
                         sub.values.pop();
                         return std::move(value);
                     }

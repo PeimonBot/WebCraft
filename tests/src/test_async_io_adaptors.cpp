@@ -153,7 +153,7 @@ TEST_CASE(TestMapStreamAdaptor)
 
     auto task_fn = [&]() -> task<void>
     {
-        auto mapped_stream = stream | map<int, std::string>(std::move(map_fn));
+        auto mapped_stream = stream | map<int>(std::move(map_fn));
         std::vector<std::string> results;
 
         while (auto value = co_await mapped_stream.recv())
@@ -411,9 +411,9 @@ TEST_CASE(TestComplexAdaptorExample)
                                                                 }); }) |
                               drop_while<int>([](int value)
                                               { return value < 5; }) // Drop while less than 5
-                              | map<int, std::string>([](int value)
-                                                      { return "Transformed: " + std::to_string(value); }) // Map to string
-                              | pipe<std::string>(piped_stream) | forward_to<std::string>(wstream);        // Forward to writable stream
+                              | map<int>([](int value)
+                                         { return "Transformed: " + std::to_string(value); })       // Map to string
+                              | pipe<std::string>(piped_stream) | forward_to<std::string>(wstream); // Forward to writable stream
 
         co_await complex_stream;
 
@@ -447,9 +447,12 @@ TEST_CASE(TestAdaptorsWithChannel)
                                                                 }); }) |
                               drop_while<int>([](int value)
                                               { return value < 5; }) // Drop while less than 5
-                              | map<int, std::string>([](int value)
-                                                      { return "Transformed: " + std::to_string(value); }) // Map to string
-                              | forward_to<std::string>(writer);                                           // Forward to writable stream
+                              | map<int>([](int value)
+                                         { 
+                                            std::string mapped = "Transformed: " + std::to_string(value);
+                                            std::cout << "Mapping value: " << value << ", To: \"" << mapped << "\"" << std::endl;
+                                            return mapped; })                    // Map to string
+                              | forward_to<std::string>(writer); // Forward to writable stream
 
         co_await complex_stream;
 
@@ -494,8 +497,8 @@ TEST_CASE(TestJoiningCollector)
 
     auto task_fn = [&]() -> task<void>
     {
-        auto joined_value = co_await (rstream | map<int, std::string>([](int value)
-                                                                      { return std::to_string(value); }) |
+        auto joined_value = co_await (rstream | map<int>([](int value)
+                                                         { return std::to_string(value); }) |
                                       collect<std::string, std::string>(collectors::joining<std::string>(",", "[", "]")));
         EXPECT_EQ(joined_value, "[1,2,3,4,5]") << "Should have joined all values";
     };
