@@ -103,6 +103,10 @@ public:
         {
             auto ev = as_awaitable(std::make_unique<io_uring_file_read>(fd, buffer, std::stop_token{}));
             co_await ev;
+            if (ev.get_result() < 0)
+            {
+                throw std::runtime_error("Failed to read from file: " + std::string(std::strerror(-ev.get_result())));
+            }
             co_return ev.get_result();
         }
         else
@@ -117,6 +121,10 @@ public:
         {
             auto ev = as_awaitable(std::make_unique<io_uring_file_write>(fd, buffer, std::stop_token{}));
             co_await ev;
+            if (ev.get_result() < 0)
+            {
+                throw std::runtime_error("Failed to write to file: " + std::string(std::strerror(-ev.get_result())));
+            }
             co_return ev.get_result();
         }
         else
