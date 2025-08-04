@@ -451,8 +451,7 @@ TEST_CASE(TestAdaptorsWithChannel)
                                          { 
                                             std::string mapped = "Transformed: " + std::to_string(value);
                                             std::cout << "Mapping value: " << value << ", To: \"" << mapped << "\"" << std::endl;
-                                            return mapped;
-                                         })                    // Map to string
+                                            return mapped; })                    // Map to string
                               | forward_to<std::string>(writer); // Forward to writable stream
 
         co_await complex_stream;
