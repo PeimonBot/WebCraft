@@ -169,9 +169,10 @@ namespace webcraft::async::io
                         sub.continuation = h;
                     }
 
-                    T &&await_resume() noexcept
+                    T await_resume() noexcept
                     {
-                        auto &&value = std::move(sub.values.front());
+                        auto value = std::move(sub.values.front());
+                        std::cout << "Received value: " << value << std::endl;
                         sub.values.pop();
                         return std::move(value);
                     }

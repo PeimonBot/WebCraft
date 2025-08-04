@@ -120,6 +120,7 @@ namespace webcraft::async::io::adaptors
         {
             for_each_async(value, gen,
                            {
+                               std::cout << "Forwarding value: " << value << " to writable stream." << std::endl;
                                co_await stream.send(std::move(value));
                            });
         };

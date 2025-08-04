@@ -448,8 +448,12 @@ TEST_CASE(TestAdaptorsWithChannel)
                               drop_while<int>([](int value)
                                               { return value < 5; }) // Drop while less than 5
                               | map<int>([](int value)
-                                         { return "Transformed: " + std::to_string(value); }) // Map to string
-                              | forward_to<std::string>(writer);                              // Forward to writable stream
+                                         { 
+                                            std::string mapped = "Transformed: " + std::to_string(value);
+                                            std::cout << "Mapping value: " << value << ", To: \"" << mapped << "\"" << std::endl;
+                                            return mapped;
+                                         })                    // Map to string
+                              | forward_to<std::string>(writer); // Forward to writable stream
 
         co_await complex_stream;
 
