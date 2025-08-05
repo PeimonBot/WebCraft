@@ -2,6 +2,13 @@
 
 This readme will go over how WebCraft handles **Asynchronous I/O** powered with the latest C++ coroutine features.
 
+Table of Contents:
+
+1. [Async Streams](#async-streams)
+2. [Async Readable Stream Adaptors](#async-readable-stream-adaptors)
+3. [Async File I/O](#async-file-io)
+4. [Async Socket I/O](#async-socket-io)
+
 ## Async Streams
 
 Async I/O in webcraft is implemented using the concept of Streams (similar to Java Streams API and Java Input and Output Streams).
@@ -95,6 +102,7 @@ You can create an MPSC channel as shown below (NOTE: you have to specify data ty
 auto [rstream, wstream] = make_mpsc_channel<int>();
 ```
 The type of `rstream` satisfies `async_readable_stream` and the type of `wstream` satisfies `async_writable_stream`. This effectively is an asynchronous pipe. Concurrency here is not required to be a concern since whenever the "send()" on the writeable stream occurs, we resume the existing read.
+
 **NOTE: DO NOT TRY AND PIPE `rstream` into `wstream` as it will cause an infinite loop (more so a stackoverflow exception) since all values received from read will be sent into write which will be sent into read and you get the rest.**
 
 Working with this becomes really useful as you can build highly scalable Publisher Subscriber Applications based off of channels as your data sending medium. Most microservices use this message queues which internally uses channels since it makes working with event streams a lot easier.
@@ -647,3 +655,5 @@ async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>>
 
 
 ## Async File I/O
+
+## Async Socket I/O
