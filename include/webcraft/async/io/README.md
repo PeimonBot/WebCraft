@@ -261,35 +261,225 @@ while (auto opt = co_await new_stream.recv()) {
 }
 ```
 
-#### Forward To adaptor
-
 #### Filter adaptor
+
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto filter(Func &&predicate) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to filter out values in the streams which you do want to retain. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+async_readable_stream<int> auto new_stream = stream | filter([](int value) { return value % 2 == 0; });
+// streams returned is [2,4]
+```
 
 #### Limit adaptor
 
+Definition is shown below:
+```cpp
+template <typename T>
+auto limit(size_t size) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to limit the amount of values sent through the stream. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+async_readable_stream<int> auto new_stream = stream | limit(3);
+// streams returned is [1,2,3]
+```
+
 #### Skip adaptor
+
+Definition is shown below:
+```cpp
+template <typename T>
+auto skip(size_t size) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to skip the amount of values sent through the stream. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+async_readable_stream<int> auto new_stream = stream | skip(2);
+// streams returned is [3,4,5]
+```
 
 #### Take while adaptor
 
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto take_while(Func&& func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to take the values sent through the stream while the predicate defined by `Func` yields true. `Func` must have the following type signature `bool(const T&)`. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+async_readable_stream<int> auto new_stream = stream | take_while([](int i) { return i < 2; });
+// streams returned is [1,2]
+```
+
 #### Drop while adaptor
+
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto drop_while(Func&& func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to drop the values sent through the stream while the predicate defined by `Func` yields true. `Func` must have the following type signature `bool(const T&)`. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+async_readable_stream<int> auto new_stream = stream | drop_while([](int i) { return i < 2; });
+// streams returned is [3,4,5]
+```
+
+#### Collect adaptor
+
+#### Forward To adaptor
 
 #### Min adaptor
 
+Definition is shown below:
+```cpp
+template <typename T>
+    requires std::totally_ordered<T>
+auto min() -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to find the minimum value sent through the stream. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+int min_value = co_await (stream | min());
+assert(min_value == 1);
+```
+
 #### Max adaptor
+
+Definition is shown below:
+```cpp
+template <typename T>
+    requires std::totally_ordered<T>
+auto max() -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to find the maximum value sent through the stream. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+int max_value = co_await (stream | max());
+assert(max_value == 5);
+```
 
 #### Sum adaptor
 
+Definition is shown below:
+```cpp
+template <typename T>
+concept closure_under_addition = requires(T a, T b) {
+    { a + b } -> std::convertible_to<T>;
+};
+
+template <typename T>
+    requires closure_under_addition<T>
+auto sum() -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to find the sum of the values sent through the stream. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+int sum = co_await (stream | sum());
+assert(sum == 15);
+```
+
 #### Find first adaptor
+
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto find_first(Func&& func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to find the first value sent through the stream which matches the following predicate. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+int value = co_await (stream | find_first([](int value) { return value % 2 == 0; }));
+assert(value == 2);
+```
 
 #### Find last adaptor
 
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto find_last(Func&& func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to find the last value sent through the stream which matches the following predicate. An example is shown below:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+int value = co_await (stream | find_last([](int value) { return value % 2 == 0; }));
+assert(value == 4);
+```
+
 #### Any matches adaptor
+
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto any_matches(Func&& func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to check if there are any values which match the predicate. An example is shown below:
+```cpp
+mock_readable_stream<int> stream_1({2,4,3,5});
+mock_readable_stream<int> stream_2({1,3,5});
+bool check1 = co_await (stream_1 | any_matches([](int value) { return value % 2 == 0; }));
+assert(check1);
+
+bool check2 = co_await (stream_2 | any_matches([](int value) { return value % 2 == 0; }));
+assert(!check2);
+```
 
 #### All matches adaptor
 
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto all_matches(Func&& func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to check if all values which match the predicate. An example is shown below:
+```cpp
+mock_readable_stream<int> stream_1({2,4,6,8});
+mock_readable_stream<int> stream_2({2,4,6,7});
+bool check1 = co_await (stream_1 | all_matches([](int value) { return value % 2 == 0; }));
+assert(check1);
+
+bool check2 = co_await (stream_2 | all_matches([](int value) { return value % 2 == 0; }));
+assert(!check2);
+```
+
 #### None matches adaptor
 
-#### Collect adaptor
+Definition is shown below:
+```cpp
+template <typename T, typename Func>
+auto any_matches(Func&& func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'd be able to check if all values do not match the predicate. An example is shown below:
+```cpp
+mock_readable_stream<int> stream_1({2,4,3,5});
+mock_readable_stream<int> stream_2({1,3,5});
+bool check1 = co_await (stream_1 | none_matches([](int value) { return value % 2 == 0; }));
+assert(!check1);
+
+bool check2 = co_await (stream_2 | none_matches([](int value) { return value % 2 == 0; }));
+assert(check2);
+```
+
 
 ### Some of the adaptors are planned to be implemented in this framework:
 
@@ -364,3 +554,6 @@ auto mapper = [](std::string value) -> std::string { // groups it by the first l
 std::unordered_map<std::string, std::vector<std::string>> map = co_await (stream | group_by(mapper));
 //  returns a { {"A", ["AB","AC"]}, {"B", ["BC","BD"]}, {"C", ["CD"]} }
 ```
+
+
+## Async File I/O
