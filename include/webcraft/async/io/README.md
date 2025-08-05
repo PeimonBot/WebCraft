@@ -89,7 +89,16 @@ This will allow us to add a powerful set of adaptors onto async streams similar 
 
 ### Channels
 
-// TODO: add the section on channels
+Channels are a mechanism to transfer data from a publisher to a subscriber. The model that we have implemented our channels is through MPSC (multiple publishers to a single consumer - since it only makes sense to deal with one event at a time).
+You can create an MPSC channel as shown below (NOTE: you have to specify data type of channel otherwise what data will you be sending over in the first place):
+```cpp
+auto [rstream, wstream] = make_mpsc_channel<int>();
+```
+The type of `rstream` satisfies `async_readable_stream` and the type of `wstream` satisfies `async_writable_stream`. This effectively is an asynchronous pipe. Concurrency here is not required to be a concern since whenever the "send()" on the writeable stream occurs, we resume the existing read.
+**NOTE: DO NOT TRY AND PIPE `rstream` into `wstream` as it will cause an infinite loop (more so a stackoverflow exception) since all values received from read will be sent into write which will be sent into read and you get the rest.**
+
+Working with this becomes really useful as you can build highly scalable Publisher Subscriber Applications based off of channels as your data sending medium. Most microservices use this message queues which internally uses channels since it makes working with event streams a lot easier.
+I myself am planning on using channels for managing async socket I/O and async file I/O.
 
 ## Async Readable Stream Adaptors
 
