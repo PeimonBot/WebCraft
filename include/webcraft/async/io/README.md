@@ -87,3 +87,209 @@ while (auto opt = co_await rstream.next()) {
 
 This will allow us to add a powerful set of adaptors onto async streams similar to the adaptors added with the ranges library onto iterables. From this, we can build powerful stream processing and pub/sub systems which can do a variety of processing without ever requiring us to have to manually process the stream ourselves
 
+### Channels
+
+// TODO: add the section on channels
+
+## Async Readable Stream Adaptors
+
+### Introductions
+
+Stream's aren't really useful by themselves. Most of the time, we want to turn our raw data into something useful to then deal with it. This is the idea of a **stream adaptor**. We take a readable stream of one data type, then we apply some kind of operation on it (mapping, filtering, transforming), then we get a stream of another data type, something more useful to deal with.
+
+Here is an example:
+
+Suppose, we want to group the students into a map where we assign a lesson grade (A for 80-100, B for 70-80, C for 60-70, and D for 50-60) as showing and get rid of any students which are failing and have the students sorted in each grouping in order:
+```cpp
+struct student {
+    std::string name;
+    std::vector<double> marks;
+    std::string grade;
+};
+```
+
+The non-adaptor based solution would look something like this:
+```cpp
+task<std::unordered_map<std::string, std::vector<student>>> get_student_grade_groupings(async_readable_stream<student> students) {
+    std::unordered_map<std::string, student> map;
+    map["A"] = {};
+    map["B"] = {};
+    map["C"] = {};
+    map["D"] = {};
+    while (auto st = co_await students)
+    {
+        std::vector<double> marks = st.marks;
+        double sum_of_marks = std::accumulate(marks.begin(), marks.end(), 0.0));
+        size_t num_of_marks = marks.size();
+        double average = sum_of_marks / num_of_marks;
+
+        if (average >= 80.0) {
+            map["A"].push_back(*st);
+        } else if (average >= 70.0) {
+            map["B"].push_back(*st);
+        } else if (average >= 60.0) {
+            map["C"].push_back(*st);
+        } else if (average >= 50.0) {
+            map["D"].push_back(*st);
+        }
+    }
+
+    std::sort(map["A"]);
+    std::sort(map["B"]);
+    std::sort(map["C"]);
+    std::sort(map["D"]);
+
+    return map;
+}
+```
+
+The adaptor based solution would be as follows:
+```cpp
+std::string average_to_grade(double average) {
+    if (average >= 80.0) {
+        return "A";
+    } else if (average >= 70.0) {
+        return "B";
+    } else if (average >= 60.0) {
+        return "C";
+    } else if (average >= 50) {
+        return "D";
+    } else {
+        return "F";
+    }
+}
+
+double get_average(student st) {
+    std::vector<double> marks = st.marks;
+    double sum_of_marks = std::accumulate(marks.begin(), marks.end(), 0.0));
+    size_t num_of_marks = marks.size();
+    double average = sum_of_marks / num_of_marks;
+    return average;
+}
+
+
+task<std::unordered_map<std::string, std::vector<student>>> get_student_grade_groupings(async_readable_stream<student> students) {
+    return students | filter([](auto st) {
+        return get_average(st) >= 50;
+    }) | sorted([](auto pair) {
+        return pair.key; 
+    }) | group_by([](auto st) {
+        return average_to_grade(get_average(st));
+    });
+}
+```
+
+This is just one example which would greatly reduce the amount of code and logic involved to write a program. There are many other uses for having async streams including when dealing with pub/sub streams.
+
+### Some of the adaptors have already been implemented in this framework:
+
+#### Transform adaptor
+
+#### Map adaptor
+
+#### Pipe adaptor
+
+#### Forward To adaptor
+
+#### Filter adaptor
+
+#### Limit adaptor
+
+#### Skip adaptor
+
+#### Take while adaptor
+
+#### Drop while adaptor
+
+#### Min adaptor
+
+#### Max adaptor
+
+#### Sum adaptor
+
+#### Find first adaptor
+
+#### Find last adaptor
+
+#### Any matches adaptor
+
+#### All matches adaptor
+
+#### None matches adaptor
+
+#### Collect adaptor
+
+### Some of the adaptors are planned to be implemented in this framework:
+
+#### Sorted adaptor
+
+Definition is as shown below:
+```cpp
+template<typename T>
+requires std::totally_ordered<T>
+auto sorted() -> std::is_derived_from<async_readable_stream_adaptor>;
+
+template<typename T, typename R>
+requires std::totally_ordered<R>
+auto sorted(std::function<R(T)> comparator) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor on a readable stream will create a new sorted readable stream from the old stream (all values will be sorted in the order specified). An example of the usage is shown below:
+
+```cpp
+mock_readable_stream<int> values_1({5,1,3,6,4,2});
+auto new_stream_1 = values_1 | sorted(); // 1,2,3,4,5,6
+// the new steam satisfies async_readable_stream<1>
+
+// another example
+mock_readable_stream<std::pair<int, std::string>> values_2({{5,"5"}, {1,"1"}, {"3",3}, {6,"6"}, {4,"4"},{2,"2"}});
+auto new_stream_2 = values_2 | sorted([](auto value) { return value.key; }); // {1,"1"},{2,"2"},{3,"3"},{4,"4"},{5,"5"},{6,"6"}
+// the new steam satisfies async_readable_stream<std::pair<int, std::string>>
+```
+
+#### Zip adaptor
+
+```cpp
+template<typename T, typename R>
+auto zip_inner(async_readable_stream<R> str) -> std::is_derived_from<async_readable_stream_adaptor>;
+
+template<typename T, typename R>
+auto zip_left(async_readable_stream<R> str) -> std::is_derived_from<async_readable_stream_adaptor>;
+
+template<typename T, typename R>
+auto zip_right(async_readable_stream<R> str) -> std::is_derived_from<async_readable_stream_adaptor>;
+
+template<typename T, typename R>
+auto zip_full(async_readable_stream<R> str) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor you'll be able to group 2 streams together into one. An example of this is shown below:
+
+```cpp
+mock_readable_stream<int> stream1({1,2,3,4,5});
+mock_readable_stream<std::string> stream2({"1","2","3","4","5"});
+
+auto new_stream = stream1 | zip_full(stream2); // {1,"1"},{2,"2"},{3,"3"},{4,"4"},{5,"5"},{6,"6"}
+// the new steam satisfies async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>>
+```
+
+
+### Group adaptor
+
+Definition is as shown below:
+```cpp
+template<typename T, typename R>
+auto group_by(std::function<R(T)> keyFunc) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you will be able to group the values of the stream into a key and value pair. When the value returned is `co_await`'ed it will return an `std::unordered_map<R, std::vector<T>>`. An example of this is shown below:
+
+```cpp
+mock_readable_stream<std::string> stream({"AB", "BC", "AC", "BD", "CD"});
+auto mapper = [](std::string value) -> std::string { // groups it by the first letter
+    return std::string(value[0]); // A* -> A, B* -> B
+}
+
+std::unordered_map<std::string, std::vector<std::string>> map = co_await (stream | group_by(mapper));
+//  returns a { {"A", ["AB","AC"]}, {"B", ["BC","BD"]}, {"C", ["CD"]} }
+```
