@@ -338,7 +338,109 @@ async_readable_stream<int> auto new_stream = stream | drop_while([](int i) { ret
 
 #### Collect adaptor
 
+Definition is shown below:
+
+```cpp
+template <typename Derived, typename ToType, typename StreamType>
+concept collector = std::is_invocable_r_v<task<ToType>, Derived, async_generator<StreamType>>;
+
+template <typename ToType, typename StreamType, collector<ToType, StreamType> Collector>
+auto collect(Collector &&collector_func) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this adaptor, you'll be able to convert the readable stream into something more tangible like another object or a `std::vector` of an object. This would be really useful especially for processing of REST requests when they give you a stream of bytes, you'll be able to collect it into a JSON object.
+
+There are many ways to create your own collector, you can create your own, for example to convert a stream of bytes into a JSON object, or you can use some of the in-built ones:
+ - reduce
+ - joining
+ - to_vector
+ - group_by
+
+##### Reduce collector
+
+Defined as shown:
+```cpp
+template <typename T>
+auto reduce(std::function<T(T, T)> &&func);
+```
+
+When collected, this will return a `task<T>` which can be awaited to give you the result. For example:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+int values = co_await (stream | collect(collectors::reduce([](int first, int second) { return first + second; })));
+assert(values == 15);
+```
+
+##### Joining collector
+
+Defined as shown:
+```cpp
+template <typename T>
+    requires std::is_convertible_v<T, std::string>
+auto joining(std::string separator = "", std::string prefix = "", std::string suffix = "")
+```
+
+When collected, this will return a `task<std::string>` which can be awaited to give you the result. For example:
+```cpp
+mock_readable_stream<int> stream({"1","2","3","4","5"});
+std::string values = co_await (stream | collect(collectors::joinin(",")));
+assert(values == "1,2,3,4,5");
+```
+
+##### To Vector collector
+
+Defined as shown:
+```cpp
+template <typename T>
+auto to_vector();
+```
+
+When collected, this will return a `task<std::vector<T>>` which can be awaited to give you the result. For example:
+```cpp
+mock_readable_stream<int> stream({1,2,3,4,5});
+std::vector<int> values = co_await (stream | collect(collectors::to_vector()));
+for (int i = 0; i < values.size(); i++) {
+    assert(values[i] == i + 1);
+}
+```
+
+##### Group By collector
+
+Defined as shown:
+```cpp
+template <typename T, typename KeyType>
+auto group_by(std::function<KeyType(const T &)> key_function);
+```
+
+When collected, this will return a `task<std::unordered_map<KeyType, std::vector<T>>>` which can be awaited to give you the result. Example:
+```cpp
+mock_readable_stream<std::string> stream({"AB", "BC", "AC", "BD", "CD"});
+auto mapper = [](std::string value) -> std::string { // groups it by the first letter
+    return std::string(value[0]); // A* -> A, B* -> B
+}
+
+std::unordered_map<std::string, std::vector<std::string>> map = co_await (stream | collect(collectors::group_by(mapper)));
+//  returns a { {"A", ["AB","AC"]}, {"B", ["BC","BD"]}, {"C", ["CD"]} }
+```
+
 #### Forward To adaptor
+
+Definition is shown below:
+```cpp
+template <typename T>
+auto forward_to(async_writable_stream<T> auto &stream) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+Using this adaptor, you'll be able to forward all objects coming from the readable stream into the output stream passed. When applied, the adaptor will return a `task<void>` which you can await for all the values to be sent into the stream. An example of this is shown below:
+
+```cpp
+mock_readable_stream<int> rstream({1,2,3,4,5});
+mock_writable_stream<int> wstream;
+
+co_await (rstream | forward_to(wstream));
+for (int i = 1; i <= 5; i++) {
+    assert(wstream.received(i));
+}
+```
 
 #### Min adaptor
 
@@ -532,27 +634,6 @@ mock_readable_stream<std::string> stream2({"1","2","3","4","5"});
 
 async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>> auto new_stream = stream1 | zip_full(stream2); // {1,"1"},{2,"2"},{3,"3"},{4,"4"},{5,"5"},{6,"6"}
 // the new steam satisfies async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>>
-```
-
-
-#### Group adaptor
-
-Definition is as shown below:
-```cpp
-template<typename T, typename R>
-auto group_by(std::function<R(T)> keyFunc) -> std::is_derived_from<async_readable_stream_adaptor>;
-```
-
-Using this adaptor, you will be able to group the values of the stream into a key and value pair. When the value returned is `co_await`'ed it will return an `std::unordered_map<R, std::vector<T>>`. An example of this is shown below:
-
-```cpp
-mock_readable_stream<std::string> stream({"AB", "BC", "AC", "BD", "CD"});
-auto mapper = [](std::string value) -> std::string { // groups it by the first letter
-    return std::string(value[0]); // A* -> A, B* -> B
-}
-
-std::unordered_map<std::string, std::vector<std::string>> map = co_await (stream | group_by(mapper));
-//  returns a { {"A", ["AB","AC"]}, {"B", ["BC","BD"]}, {"C", ["CD"]} }
 ```
 
 
