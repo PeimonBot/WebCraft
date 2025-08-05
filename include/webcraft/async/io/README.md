@@ -93,8 +93,6 @@ This will allow us to add a powerful set of adaptors onto async streams similar 
 
 ## Async Readable Stream Adaptors
 
-### Introductions
-
 Stream's aren't really useful by themselves. Most of the time, we want to turn our raw data into something useful to then deal with it. This is the idea of a **stream adaptor**. We take a readable stream of one data type, then we apply some kind of operation on it (mapping, filtering, transforming), then we get a stream of another data type, something more useful to deal with.
 
 Here is an example:
@@ -183,11 +181,85 @@ This is just one example which would greatly reduce the amount of code and logic
 
 ### Some of the adaptors have already been implemented in this framework:
 
+All stream adaptors have to inherit the `async_readable_stream_adaptor`. The definition of it is shown below:
+
+```cpp
+template <typename Derived, typename T>
+struct async_readable_stream_adaptor
+{
+
+    friend auto operator|(async_readable_stream<T> auto &&stream, Derived &adaptor)
+    {
+        return std::invoke(adaptor, std::move(stream));
+    }
+
+    friend auto operator|(async_readable_stream<T> auto &&stream, Derived &&adaptor)
+    {
+        return std::invoke(std::move(adaptor), std::forward<decltype(stream)>(stream));
+    }
+};
+```
+
 #### Transform adaptor
+
+Definition is shown below:
+```cpp
+template <typename InType, typename Func>
+auto transform(Func &&fn) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+
+Using this you'll be able transform the existing async_readable_stream to another async_readable_stream. The function that is passed has to be of signature `async_generator<OutType>(async_generator<InType>)` where `OutType` is the transformed readable stream passed from the `transform` function. Some examples of this are shown below:
+
+```cpp
+mock_readable_stream stream({1,2,3,4,5});
+
+async_readable_stream<std::string> auto new_stream = stream | transform([](async_generator<int> gen) {
+    for_each_async(value, gen, {
+        co_yield std::to_string(value);
+        co_yield std::to_string(value * 2);
+    });
+});
+// the value of this is ["1", "2", "2", "4", "3", "6", "4", "8", "5", "10"]
+```
 
 #### Map adaptor
 
+Definition is shown below:
+```cpp
+template <typename InType, typename Func, typename OutType = std::invoke_result_t<Func, InType>>
+auto map(Func &&fn) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+Using this adaptor, you create a new readable stream which has the values from the old stream mapped using the function passed. An example of this is shown below:
+
+```cpp
+mock_readable_stream stream({1,2,3,4,5});
+
+async_readable_stream<std::string> auto new_stream = stream | map([](int value) {
+    return std::to_string(value);
+});
+// the value of this is ["1", "2", "3", "4", "5"]
+```
+
 #### Pipe adaptor
+
+Definition is shown below:
+```cpp
+template <typename T>
+    requires std::is_copy_assignable_v<T>
+auto pipe(async_writable_stream<T> auto &str) -> std::is_derived_from<async_readable_stream_adaptor>;
+```
+Using this adaptor, you create a new readable stream on which when read, also forwards the read value into the writable stream provided. An example is shown below:
+
+```cpp
+mock_readable_stream<int> rstream({1,2,3,4,5});
+mock_writable_stream<int> wstream;
+
+async_readable_stream<int> auto new_stream = rstream | pipe(wstream);
+
+while (auto opt = co_await new_stream.recv()) {
+    assert(wstream.received_value(*opt));
+}
+```
 
 #### Forward To adaptor
 
@@ -238,13 +310,12 @@ Using this adaptor on a readable stream will create a new sorted readable stream
 
 ```cpp
 mock_readable_stream<int> values_1({5,1,3,6,4,2});
-auto new_stream_1 = values_1 | sorted(); // 1,2,3,4,5,6
+async_readable_stream<int> auto new_stream_1 = values_1 | sorted(); // 1,2,3,4,5,6
 // the new steam satisfies async_readable_stream<1>
 
 // another example
 mock_readable_stream<std::pair<int, std::string>> values_2({{5,"5"}, {1,"1"}, {"3",3}, {6,"6"}, {4,"4"},{2,"2"}});
-auto new_stream_2 = values_2 | sorted([](auto value) { return value.key; }); // {1,"1"},{2,"2"},{3,"3"},{4,"4"},{5,"5"},{6,"6"}
-// the new steam satisfies async_readable_stream<std::pair<int, std::string>>
+async_readable_stream<std::pair<int, std::string>> auto new_stream_2 = values_2 | sorted([](auto value) { return value.key; }); // {1,"1"},{2,"2"},{3,"3"},{4,"4"},{5,"5"},{6,"6"}
 ```
 
 #### Zip adaptor
@@ -269,12 +340,12 @@ Using this adaptor you'll be able to group 2 streams together into one. An examp
 mock_readable_stream<int> stream1({1,2,3,4,5});
 mock_readable_stream<std::string> stream2({"1","2","3","4","5"});
 
-auto new_stream = stream1 | zip_full(stream2); // {1,"1"},{2,"2"},{3,"3"},{4,"4"},{5,"5"},{6,"6"}
+async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>> auto new_stream = stream1 | zip_full(stream2); // {1,"1"},{2,"2"},{3,"3"},{4,"4"},{5,"5"},{6,"6"}
 // the new steam satisfies async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>>
 ```
 
 
-### Group adaptor
+#### Group adaptor
 
 Definition is as shown below:
 ```cpp
