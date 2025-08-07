@@ -662,7 +662,10 @@ Async File I/O is handled differently on different platforms. Here are some of t
 |  --- | --- | --- | --- | --- | --- | --- |
 | IO Completion Ports | Windows Only (`<windows.h>`) | Synchronous but sets up async IO: [`CreateFileEx`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea) + [`CreateIOCompletionPort`](https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport) | [`ReadFile`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile) | [`WriteFile`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-writefile) | No Async Version. Just [`CloseHandle`](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle) | **Summary:** Synchronous create and close and async read and write but only for windows. |
 | io_uring | Linux Only (`<liburing.h>`) | [`io_uring_prep_open`](https://man7.org/linux/man-pages/man3/io_uring_prep_open.3.html) | [`io_uring_prep_read`](https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html) | [`io_uring_prep_write`](https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | **Summary:** Has async support for all file functions but only for linux |
-| kqueue + aio | BSD-based systems like MacOS (`<sys/event.h>` + `<aio.h>`) | Synchronous: Use POSIX `open` | Use `aio_read` with kqueue | Use `aio_write` with kqueue | Synchronous: Use POSIX `close` | **NOTE: Make sure when the kqueue result has returned to call `aio_return`.** |
-
+| kqueue + aio | Pure BSD-based systems like FreeBSD (`<sys/event.h>` + `<aio.h>`) | Synchronous: Use POSIX `open` | Use `aio_read` with kqueue | Use `aio_write` with kqueue | Synchronous: Use POSIX `close` | **NOTE: Make sure when the kqueue result has returned to call `aio_return`.** |
+| Thread pool | MacOS or any other system which does not support Async File I/O natively | Synchronous: Use POSIX `open` | Use `read` on thread pool | Use `write` on thread pool | Synchronous `close` | Use a thread pool |
+| GCD | MacOS Only - plan on implementing this in the next PR | tbd | tdb | tdb | tdb | Need to look into this more |
 
 ## Async Socket I/O
+
+Async Socket I/O is handled differently on different platforms. 
