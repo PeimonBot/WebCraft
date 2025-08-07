@@ -3,6 +3,9 @@
 #define TEST_SUITE_NAME KqueueTestSuite
 #include "test_suite.hpp"
 #include <sys/event.h>
+#include <aio.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 using namespace std::chrono_literals;
 
@@ -215,6 +218,50 @@ TEST_CASE(kqueue_test_timer)
 
     EXPECT_GE(elapsed_time, test_timer_timeout) << "Timer event did not complete after the expected duration";
 
+    destroy_kqueue(queue);
+}
+
+TEST_CASE(kqueue_read_hello_world)
+{
+    int queue = initialize_kqueue();
+
+    // Open the file
+    int fd = open("hello_world.txt", O_RDONLY);
+    EXPECT_GT(fd, 0) << "Failed to open file: hello_world.txt";
+
+    char buffer[1024];
+    memset(buffer, 0, sizeof(buffer));
+
+    struct aiocb aio_req;
+    memset(&aio_req, 0, sizeof(aio_req));
+    aio_req.aio_fildes = fd;
+    aio_req.aio_buf = buffer;
+    aio_req.aio_nbytes = sizeof(buffer) - 1; // Leave space for null terminator
+    aio_req.aio_offset = 0;
+
+    aio_req.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+    aio_req.aio_sigevent.sigev_notify_kqueue = queue;
+    aio_req.aio_sigevent.sigev_value.sival_ptr = &aio_req;
+
+    int result = aio_read(&aio_req);
+    EXPECT_EQ(result, 0) << "Failed to initiate aio_read: " << strerror(errno);
+
+    struct kevent event;
+    int num_events = kevent(queue, nullptr, 0, &event, 1, nullptr);
+    EXPECT_GE(num_events, 0) << "Failed to wait for kevent: " << strerror(errno);
+
+    size_t bytes_read = aio_return(&aio_req);
+    EXPECT_GT(bytes_read, 0) << "Failed to read from file: " << strerror(errno);
+
+    int error = aio_error(&aio_req);
+    EXPECT_EQ(error, 0) << "AIO error occurred: " << strerror(error);
+
+    buffer[bytes_read] = '\0'; // Null-terminate the string
+    std::string content(buffer, bytes_read);
+    EXPECT_EQ(content, "Hello World!") << "File content does not match expected value";
+
+    // Cleanup
+    close(fd);
     destroy_kqueue(queue);
 }
 
