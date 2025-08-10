@@ -713,17 +713,13 @@ async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>>
 Async File I/O is handled differently on different platforms. Here are some of the provided features of these on the different platforms by the different frameworks:
 
 
-| Library             | Platforms Supported                                                      | Special Create?                                                                                                                                                                                                                                   | Async Read?                                                                                   | Async Write?                                                                                    | Async Close?                                                                                                                  | Notes                                                                                    |
-| --------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| IO Completion Ports | Windows Only (`<windows.h>`)                                             | Synchronous but sets up async IO:[`CreateFileEx`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea) + [`CreateIOCompletionPort`](https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport) | [`ReadFile`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile) | [`WriteFile`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-writefile) | No Async Version. Just[`CloseHandle`](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle) | **Summary:** Synchronous create and close and async read and write but only for windows. |
-| io_uring            | Linux Only (`<liburing.h>`)                                              | [`io_uring_prep_open`](https://man7.org/linux/man-pages/man3/io_uring_prep_open.3.html)                                                                                                                                                           | [`io_uring_prep_read`](https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html)       | [`io_uring_prep_write`](https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html)       | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html)                                     | **Summary:** Has async support for all file functions but only for linux                 |
-| kqueue + aio        | Pure BSD-based systems like FreeBSD (`<sys/event.h>` + `<aio.h>`)        | Synchronous: Use POSIX`open`                                                                                                                                                                                                                      | Use`aio_read` with kqueue                                                                     | Use`aio_write` with kqueue                                                                      | Synchronous: Use POSIX`close`                                                                                                 | **NOTE: Make sure when the kqueue result has returned to call `aio_return`.**            |
-| Thread pool         | MacOS or any other system which does not support Async File I/O natively | Synchronous: Use POSIX`open`                                                                                                                                                                                                                      | Use`read` on thread pool                                                                      | Use`write` on thread pool                                                                       | Synchronous`close`                                                                                                            | Use a thread pool                                                                        |
-| GCD                 | MacOS Only - plan on implementing this in the next PR                    | tbd                                                                                                                                                                                                                                               | tdb                                                                                           | tdb                                                                                             | tdb                                                                                                                           | Need to look into this more                                                              |
-
-### Planned implementation:
-
-Async Read & Async Write will be based on what's in the **Async Read** and **Async Write** columns. Closing will still happen with RAII (which would be a synchronous close on everything but linux) but on linux we'll send a fire-and-forget request with `io_uring_prep_close`. For async creation it can either be with synchronous or asynchronous, the bottleneck wouldn't be too big of an issue.
+| Library | Platforms Supported | Special Create? | Async Read? | Async Write? | Async Close? | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| IO Completion Ports | Windows Only (`<windows.h>`) | Synchronous but sets up async IO:[`CreateFileEx`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea) + [`CreateIOCompletionPort`](https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport) | [`ReadFile`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile) | [`WriteFile`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-writefile) | No Async Version. Just [`CloseHandle`](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle) | **Summary:** Synchronous create and close and async read and write but only for windows. |
+| io_uring | Linux Only (`<liburing.h>`) | [`io_uring_prep_open`](https://man7.org/linux/man-pages/man3/io_uring_prep_open.3.html) | [`io_uring_prep_read`](https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html) | [`io_uring_prep_write`](https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | **Summary:** Has async support for all file functions but only for linux |
+| kqueue + aio | Pure BSD-based systems like FreeBSD (`<sys/event.h>` + `<aio.h>`) | Synchronous: Use POSIX`open` | Use`aio_read` with kqueue | Use`aio_write` with | Synchronous: Use `close` | **NOTE: Make sure when the kqueue result has returned to call `aio_return`.** |
+| Thread pool | MacOS or any other system which does not support Async File I/O natively | Synchronous: Use POSIX`open` | Use`read` on thread pool | Use`write` on thread | Synchronous: Use`close` | Use a thread pool |
+| GCD | MacOS Only - plan on implementing this in the next PR | tbd | tdb | tdb | tdb | Need to look into this more |
 
 ## Async Socket I/O
 
@@ -732,13 +728,114 @@ Async Socket I/O is handled differently on different platforms.
 ### TCP Sockets
 
 
-| Library  | Platforms Supported | Special Create?                                                                             | Async Connect?                                                                                | Async Read?                                                                             | Async Write?                                                                              | Async Close?                                                                              | Async Shutdown?                                                                                 | Notes |
-| ---------- | --------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------- |
-| io_uring | Linux               | [`io_uring_prep_socket`](https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html) | [`io_uring_prep_connect`](https://man7.org/linux/man-pages/man3/io_uring_prep_connect.3.html) | [`io_uring_prep_read`](https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html) | [`io_uring_prep_write`](https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | [`io_uring_prep_shutdown`](https://man7.org/linux/man-pages/man3/io_uring_prep_shutdown.3.html) |       |
+| Library  | Platforms Supported | Special Create? | Async Connect? | Async Read? | Async Write? | Async Close? | Async Shutdown? | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| io_uring | Linux | [`io_uring_prep_socket`](https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html) | [`io_uring_prep_connect`](https://man7.org/linux/man-pages/man3/io_uring_prep_connect.3.html) | [`io_uring_prep_read`](https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html) | [`io_uring_prep_write`](https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | [`io_uring_prep_shutdown`](https://man7.org/linux/man-pages/man3/io_uring_prep_shutdown.3.html) | **NOTE: All the functions are async just linux only.** |
 
 ### TCP Listeners
 
 
-| Library  | Platforms Supported | Special Create?                                                                             | Async Bind?          | Async Listen?          | Async Accept           | Async Close?                                                                              | Notes |
-| ---------- | --------------------- | --------------------------------------------------------------------------------------------- | ---------------------- | ------------------------ | ------------------------ | ------------------------------------------------------------------------------------------- | ------- |
-| io_uring | Linux               | [`io_uring_prep_socket`](https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html) | [`io_uring_prep_bind`](https://man7.org/linux/man-pages/man3/io_uring_prep_bind.3.html)| [`io_uring_prep_listen`](https://man7.org/linux/man-pages/man3/io_uring_prep_listen.3.html) | [`io_uring_prep_accept`](https://man7.org/linux/man-pages/man3/io_uring_prep_accept.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) |       |
+| Library  | Platforms Supported | Special Create? | Async Bind? | Async Listen? | Async Accept | Async Close? | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| io_uring | Linux | [`io_uring_prep_socket`](https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html) | [`io_uring_prep_bind`](https://man7.org/linux/man-pages/man3/io_uring_prep_bind.3.html)| [`io_uring_prep_listen`](https://man7.org/linux/man-pages/man3/io_uring_prep_listen.3.html) | [`io_uring_prep_accept`](https://man7.org/linux/man-pages/man3/io_uring_prep_accept.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | **NOTE: All the functions are async just linux only.** |
+
+## Planned implementation:
+
+Async Read & Async Write will be based on what's in the **Async Read** and **Async Write** columns. Closing will still happen with RAII (which would be a synchronous close on everything but linux) but on linux we'll send a fire-and-forget request with `io_uring_prep_close`. For async creation it can either be with synchronous or asynchronous, the bottleneck wouldn't be too big of an issue. 
+
+This is the following specification for using the **Async File I/O** API:
+```cpp
+namespace detail {
+
+    class file_descriptor {
+    protected:
+        std::ios_base::openmode mode;
+    public:
+        file_descriptor(std::ios_base::openmode mode) : mode(mode) {}
+        virtual ~file_descriptor() = default;
+
+        // virtual because we want to allow platform specific implementation
+        virtual task<size_t> read(std::span<char> buffer) = 0; // internally should check if openmode is for read
+        virtual task<size_t> write(std::span<char> buffer) = 0; // internally should check if openmode is for write or append
+        virtual task<void> close() = 0; // will spawn a fire and forget task (essentially use async apis but provide null callback)
+    };
+
+    task<std::shared_ptr<file_descriptor>> make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode); 
+}
+
+class file_rstream {
+private:
+    std::shared_ptr<file_descriptor> fd;
+public:
+    file_rstream(std::shared_ptr<file_descriptor> fd) : fd(fd) {}
+    ~file_rstream() {
+        if (fd) sync_wait(fd->close());
+    }
+
+    file_rstream(file_rstream&&) noexcept = default;
+    file_rstream& operator=(file_rstream&&) noexcept = default;
+    
+    task<void> close() {
+        return fd->close();
+    }
+
+    task<size_t> recv(std::span<char> buffer) {
+        return fd->read(buffer);
+    }
+
+    task<char> recv() {
+        std::array<char, 1> buf;
+        co_await recv(buf);
+        co_return buf[0];
+    }
+};
+
+static_assert(async_readable_stream<file_rstream, char>);
+static_assert(async_buffered_readable_stream<file_rstream, char>);
+
+class file_wstream {
+private:
+    std::shared_ptr<file_descriptor> fd;
+public:
+    explicit file_wstream(std::shared_ptr<file_descriptor> fd) : fd(fd) {}
+    ~file_wstream() {
+        if (fd) sync_wait(fd->close());
+    }
+
+    file_wstream(file_wstream&&) noexcept = default;
+    file_wstream& operator=(file_wstream&&) noexcept = default;
+
+    task<void> close() {
+        return fd->close();
+    }
+    
+    task<size_t> send(std::span<char> buffer) {
+        return fd->write(buffer);
+    }
+
+    task<bool> send(char b) {
+        std::array<char, 1> buf;
+        buf[0] = b;
+        co_await send(buf);
+        co_return true;
+    }
+};
+
+static_assert(async_writable_stream<file_wstream, char>);
+static_assert(async_buffered_writable_stream<file_wstream, char>);
+
+class file {
+private:
+    std::filesystem::path p;
+public:
+    file(std::filesystem::path p) : p(std::move(p)) {}
+    ~file() = default;
+
+    task<file_rstream> open_readable_stream();
+    task<file_wstream> open_writable_stream(bool append);
+
+    constexpr const std::filesystem::path get_path() const { return p; }
+    constexpr operator const std::filesystem::path&() const { return p; }
+};
+```
+

@@ -36,6 +36,11 @@ namespace webcraft::async::io
         { stream.send(buffer) } -> std::same_as<task<size_t>>;
     };
 
+    template <typename Derived, typename R>
+    concept async_closeable_stream = (async_readable_stream<Derived, R> || async_writable_stream<Derived, R>) && requires(Derived t) {
+        { t.close() } -> std::same_as<task<void>>;
+    };
+
     template <typename R>
     auto recv(async_readable_stream<R> auto &stream)
     {
