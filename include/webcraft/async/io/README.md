@@ -745,45 +745,67 @@ Async Read & Async Write will be based on what's in the **Async Read** and **Asy
 
 This is the following specification for using the **Async File I/O** API:
 ```cpp
-namespace detail {
+namespace detail
+{
 
-    class file_descriptor {
+    class file_descriptor
+    {
     protected:
         std::ios_base::openmode mode;
+
     public:
         file_descriptor(std::ios_base::openmode mode) : mode(mode) {}
         virtual ~file_descriptor() = default;
 
         // virtual because we want to allow platform specific implementation
-        virtual task<size_t> read(std::span<char> buffer) = 0; // internally should check if openmode is for read
+        virtual task<size_t> read(std::span<char> buffer) = 0;  // internally should check if openmode is for read
         virtual task<size_t> write(std::span<char> buffer) = 0; // internally should check if openmode is for write or append
-        virtual task<void> close() = 0; // will spawn a fire and forget task (essentially use async apis but provide null callback)
+        virtual task<void> close() = 0;                         // will spawn a fire and forget task (essentially use async apis but provide null callback)
     };
 
-    task<std::shared_ptr<file_descriptor>> make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode); 
+    task<std::shared_ptr<file_descriptor>> make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode);
+
+    class file_stream
+    {
+    protected:
+        std::shared_ptr<file_descriptor> fd;
+        std::atomic<bool> closed{false};
+
+    public:
+        explicit file_stream(std::shared_ptr<file_descriptor> fd) : fd(std::move(fd)) {}
+        virtual ~file_stream() noexcept
+        {
+            if (fd)
+                sync_wait(close());
+        }
+
+        task<void> close() noexcept
+        {
+            bool expected = false;
+            if (closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                co_await fd->close();
+            }
+        }
+    };
 }
 
-class file_rstream {
-private:
-    std::shared_ptr<file_descriptor> fd;
+class file_rstream : public detail::file_stream
+{
 public:
-    file_rstream(std::shared_ptr<file_descriptor> fd) : fd(fd) {}
-    ~file_rstream() {
-        if (fd) sync_wait(fd->close());
-    }
+    file_rstream(std::shared_ptr<detail::file_descriptor> fd) : detail::file_stream(std::move(fd)) {}
+    ~file_rstream() noexcept = default;
 
-    file_rstream(file_rstream&&) noexcept = default;
-    file_rstream& operator=(file_rstream&&) noexcept = default;
-    
-    task<void> close() {
-        return fd->close();
-    }
+    file_rstream(file_rstream &&) noexcept = default;
+    file_rstream &operator=(file_rstream &&) noexcept = default;
 
-    task<size_t> recv(std::span<char> buffer) {
+    task<size_t> recv(std::span<char> buffer)
+    {
         return fd->read(buffer);
     }
 
-    task<char> recv() {
+    task<char> recv()
+    {
         std::array<char, 1> buf;
         co_await recv(buf);
         co_return buf[0];
@@ -792,28 +814,24 @@ public:
 
 static_assert(async_readable_stream<file_rstream, char>);
 static_assert(async_buffered_readable_stream<file_rstream, char>);
+static_assert(async_closeable_stream<file_rstream, char>);
 
-class file_wstream {
-private:
-    std::shared_ptr<file_descriptor> fd;
+class file_wstream : public detail::file_stream
+{
 public:
-    explicit file_wstream(std::shared_ptr<file_descriptor> fd) : fd(fd) {}
-    ~file_wstream() {
-        if (fd) sync_wait(fd->close());
-    }
+    explicit file_wstream(std::shared_ptr<file_descriptor> fd) : detail::file_stream(std::move(fd)) {}
+    ~file_wstream() noexcept = default;
 
-    file_wstream(file_wstream&&) noexcept = default;
-    file_wstream& operator=(file_wstream&&) noexcept = default;
+    file_wstream(file_wstream &&) noexcept = default;
+    file_wstream &operator=(file_wstream &&) noexcept = default;
 
-    task<void> close() {
-        return fd->close();
-    }
-    
-    task<size_t> send(std::span<char> buffer) {
+    task<size_t> send(std::span<char> buffer)
+    {
         return fd->write(buffer);
     }
 
-    task<bool> send(char b) {
+    task<bool> send(char b)
+    {
         std::array<char, 1> buf;
         buf[0] = b;
         co_await send(buf);
@@ -823,19 +841,261 @@ public:
 
 static_assert(async_writable_stream<file_wstream, char>);
 static_assert(async_buffered_writable_stream<file_wstream, char>);
+static_assert(async_closeable_stream<file_wstream, char>);
 
-class file {
+class file
+{
 private:
     std::filesystem::path p;
+
 public:
     file(std::filesystem::path p) : p(std::move(p)) {}
     ~file() = default;
 
-    task<file_rstream> open_readable_stream();
-    task<file_wstream> open_writable_stream(bool append);
+    task<file_rstream> open_readable_stream()
+    {
+        auto descriptor = co_await detail::make_file_descriptor(p, std::ios_base::in);
+        co_return file_rstream(descriptor);
+    }
+
+    task<file_wstream> open_writable_stream(bool append)
+    {
+        auto descriptor = co_await detail::make_file_descriptor(p, append ? std::ios_base::app : std::ios_base::out);
+        co_return file_wstream(std::move(descriptor));
+    }
 
     constexpr const std::filesystem::path get_path() const { return p; }
-    constexpr operator const std::filesystem::path&() const { return p; }
+    constexpr operator const std::filesystem::path &() const { return p; }
 };
+
+file make_file(std::filesystem::path p)
+{
+    return file(p);
+}
 ```
 
+This is the following specification for using the **Async TCP Socket and Listener I/O** API:
+```cpp
+struct connection_info
+{
+    std::string host;
+    uint16_t port;
+};
+
+enum class socket_stream_mode
+{
+    READ,
+    WRITE
+};
+
+namespace detail
+{
+
+    class tcp_descriptor_base
+    {
+    public:
+        tcp_descriptor_base() = default;
+        virtual ~tcp_descriptor_base() = default;
+
+        virtual task<void> close() = 0; // Close the socket
+    };
+
+    class tcp_socket_descriptor : public tcp_descriptor_base
+    {
+    public:
+        tcp_socket_descriptor() = default;
+        virtual ~tcp_socket_descriptor() = default;
+
+        virtual task<void> connect(const connection_info &info) = 0;  // Connect to a server
+        virtual task<size_t> read(std::span<char> buffer) = 0;        // Read data from the socket
+        virtual task<size_t> write(std::span<const char> buffer) = 0; // Write data to the socket
+        virtual task<void> shutdown(socket_stream_mode mode) = 0;     // Shutdown the socket
+    };
+
+    class tcp_listener_descriptor : public tcp_descriptor_base
+    {
+    public:
+        tcp_listener_descriptor() = default;
+        virtual ~tcp_listener_descriptor() = default;
+
+        virtual task<void> bind(const connection_info &info) = 0;          // Bind the listener to an address
+        virtual task<void> listen(int backlog) = 0;                        // Start listening for incoming connections
+        virtual task<std::unique_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
+    };
+
+    task<std::shared_ptr<tcp_socket_descriptor>> make_tcp_socket_descriptor();
+    task<std::shared_ptr<tcp_listener_descriptor>> make_tcp_listener_descriptor();
+
+}
+
+class tcp_rstream
+{
+private:
+    std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
+
+public:
+    tcp_rstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+    ~tcp_rstream() = default;
+
+    task<size_t> recv(std::span<char> buffer)
+    {
+        return descriptor->read(buffer);
+    }
+
+    task<char> recv()
+    {
+        std::array<char, 1> buf;
+        co_await recv(buf);
+        co_return buf[0];
+    }
+
+    task<void> close()
+    {
+        co_await descriptor->shutdown(socket_stream_mode::READ);
+    }
+};
+
+static_assert(async_writable_stream<tcp_rstream, char>);
+static_assert(async_buffered_writable_stream<tcp_rstream, char>);
+static_assert(async_closeable_stream<tcp_rstream, char>);
+
+class tcp_wstream
+{
+private:
+    std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
+
+public:
+    tcp_wstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+    ~tcp_wstream() = default;
+
+    task<size_t> send(std::span<const char> buffer)
+    {
+        return descriptor->write(buffer);
+    }
+
+    task<bool> send(char b)
+    {
+        std::array<char, 1> buf;
+        buf[0] = b;
+        co_await send(buf);
+        co_return true;
+    }
+
+    task<void> close()
+    {
+        co_await descriptor->shutdown(socket_stream_mode::WRITE);
+    }
+};
+
+static_assert(async_writable_stream<tcp_wstream, char>);
+static_assert(async_buffered_writable_stream<tcp_wstream, char>);
+static_assert(async_closeable_stream<tcp_wstream, char>);
+
+class tcp_socket
+{
+private:
+    std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
+    std::unique_ptr<tcp_rstream> read_stream;
+    std::unique_ptr<tcp_wstream> write_stream;
+
+public:
+    tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+    ~tcp_socket()
+    {
+        if (read_stream)
+        {
+            read_stream->close();
+        }
+        if (write_stream)
+        {
+            write_stream->close();
+        }
+
+        if (descriptor)
+        {
+            sync_wait(descriptor->close());
+        }
+    }
+
+    task<void> connect(const connection_info &info)
+    {
+        co_await descriptor->connect(info);
+        read_stream = std::make_unique<tcp_rstream>(descriptor);
+        write_stream = std::make_unique<tcp_wstream>(descriptor);
+    }
+
+    tcp_rstream &get_readable_stream()
+    {
+        if (!read_stream)
+        {
+            throw std::runtime_error("Read stream is not initialized.");
+        }
+        return *read_stream;
+    }
+
+    tcp_wstream &get_writable_stream()
+    {
+        if (!write_stream)
+        {
+            throw std::runtime_error("Write stream is not initialized.");
+        }
+        return *write_stream;
+    }
+
+    task<void> shutdown_channel(socket_stream_mode mode)
+    {
+        if (mode == socket_stream_mode::READ && read_stream)
+        {
+            co_await read_stream->close();
+        }
+        else if (mode == socket_stream_mode::WRITE && write_stream)
+        {
+            co_await write_stream->close();
+        }
+    }
+};
+
+class tcp_listener
+{
+private:
+    std::shared_ptr<detail::tcp_listener_descriptor> descriptor;
+
+public:
+    tcp_listener(std::shared_ptr<detail::tcp_listener_descriptor> desc) : descriptor(std::move(desc)) {}
+    ~tcp_listener()
+    {
+        if (descriptor)
+        {
+            sync_wait(descriptor->close());
+        }
+    }
+
+    task<void> bind(const connection_info &info)
+    {
+        return descriptor->bind(info);
+    }
+
+    task<void> listen(int backlog)
+    {
+        return descriptor->listen(backlog);
+    }
+
+    task<std::unique_ptr<tcp_socket>> accept()
+    {
+        auto client_desc = co_await descriptor->accept();
+        co_return std::make_unique<tcp_socket>(std::move(client_desc));
+    }
+};
+
+task<tcp_socket> make_tcp_socket()
+{
+    auto descriptor = co_await detail::make_tcp_socket_descriptor();
+    co_return tcp_socket(std::move(descriptor));
+}
+
+task<tcp_listener> make_tcp_listener()
+{
+    auto descriptor = co_await detail::make_tcp_listener_descriptor();
+    co_return tcp_listener(std::move(descriptor));
+}
+```
