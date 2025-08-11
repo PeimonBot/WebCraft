@@ -731,6 +731,14 @@ Async Socket I/O is handled differently on different platforms.
 | Library  | Platforms Supported | Special Create? | Async Connect? | Async Read? | Async Write? | Async Close? | Async Shutdown? | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | io_uring | Linux | [`io_uring_prep_socket`](https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html) | [`io_uring_prep_connect`](https://man7.org/linux/man-pages/man3/io_uring_prep_connect.3.html) | [`io_uring_prep_read`](https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html) | [`io_uring_prep_write`](https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | [`io_uring_prep_shutdown`](https://man7.org/linux/man-pages/man3/io_uring_prep_shutdown.3.html) | **NOTE: All the functions are async just linux only.** |
+| IOCP | Windows | [`socket`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-socket) + [`CreateIOCompletionPort`](https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport) | [`ConnectEx`](https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_connectex) | [`WSARecv`](https://learn.microsoft.com/en-gb/windows/win32/api/winsock2/nf-winsock2-wsarecv) | [`WSASend`](https://learn.microsoft.com/en-gb/windows/win32/api/winsock2/nf-winsock2-wsasend) | [`closesocket`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-closesocket) | [`shutdown`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-shutdown) | **NOTE: A call to `bind()` must be made before calling ConnectEx otherwise socket will be invalid.** |
+| kqueue | BSD based systems | `socket` | `connect` | `read` | `write` | `close` | `shutdown` | **NOTE: It seems like it's all just synchronous API calls but kqueue lets us know when to call what under the hood. Kqueue will be our notification agent and we'll use channels and other forms of asynchronous delivery to let us know when to resume. Refer to the kqueue example below.** |
+
+
+Some docs: 
+- https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_connectex
+- https://gist.github.com/joeyadams/4158972
+- https://stackoverflow.com/questions/13598530/connectex-requires-the-socket-to-be-initially-bound-but-to-what
 
 ### TCP Listeners
 
@@ -738,6 +746,13 @@ Async Socket I/O is handled differently on different platforms.
 | Library  | Platforms Supported | Special Create? | Async Bind? | Async Listen? | Async Accept | Async Close? | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | io_uring | Linux | [`io_uring_prep_socket`](https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html) | [`io_uring_prep_bind`](https://man7.org/linux/man-pages/man3/io_uring_prep_bind.3.html)| [`io_uring_prep_listen`](https://man7.org/linux/man-pages/man3/io_uring_prep_listen.3.html) | [`io_uring_prep_accept`](https://man7.org/linux/man-pages/man3/io_uring_prep_accept.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | **NOTE: All the functions are async just linux only.** |
+| IOCP | Windows | [`socket`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-socket) + [`CreateIOCompletionPort`](https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport) | [`bind`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-bind) | [`listen`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen) | [`AcceptEx`](https://learn.microsoft.com/en-gb/windows/win32/api/mswsock/nf-mswsock-acceptex) | [`closesocket`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-closesocket) | |
+| kqueue | BSD based systems | `socket` | `bind` | `listen` | `accept` | `close` | **NOTE: It seems like it's all just synchronous API calls but kqueue lets us know when to call what under the hood. Kqueue will be our notification agent and we'll use channels and other forms of asynchronous delivery to let us know when to resume. Refer to the kqueue example below.** |
+
+Examples:
+- https://learn.microsoft.com/en-gb/windows/win32/api/mswsock/nf-mswsock-acceptex#example-code
+- https://gist.github.com/josephg/6c078a241b0e9e538ac04ef28be6e787
+- KQUEUE Example: https://dev.to/frevib/a-tcp-server-with-kqueue-527
 
 ## Planned implementation:
 
@@ -1099,3 +1114,5 @@ task<tcp_listener> make_tcp_listener()
     co_return tcp_listener(std::move(descriptor));
 }
 ```
+
+The platform will implement `make_file_descriptor`, `make_tcp_socket_descriptor`, and `make_tcp_socket_descriptor` while also making their own implementations of the socket and file descriptors and returning a shared pointer via the functions mentioned.
