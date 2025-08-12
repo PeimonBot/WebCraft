@@ -57,6 +57,28 @@ namespace webcraft::async::detail::linux
 
         virtual void perform_io_uring_operation(struct io_uring_sqe *sqe) = 0;
     };
-}
 
+    using io_uring_operation = std::function<void(struct io_uring_sqe *)>;
+
+    auto create_io_uring_event(io_uring_operation op, std::stop_token token)
+    {
+        struct io_uring_runtime_event_impl : public io_uring_runtime_event
+        {
+            io_uring_runtime_event_impl(io_uring_operation op, std::stop_token token)
+                : io_uring_runtime_event(token), operation(std::move(op))
+            {
+            }
+
+            void perform_io_uring_operation(struct io_uring_sqe *sqe) override
+            {
+                operation(sqe);
+            }
+
+        private:
+            io_uring_operation operation;
+        };
+
+        return std::make_unique<io_uring_runtime_event_impl>(std::move(op), token);
+    }
+}
 #endif

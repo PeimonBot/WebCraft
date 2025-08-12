@@ -38,6 +38,9 @@ namespace webcraft::async::io::socket
             virtual task<size_t> read(std::span<char> buffer) = 0;        // Read data from the socket
             virtual task<size_t> write(std::span<const char> buffer) = 0; // Write data to the socket
             virtual task<void> shutdown(socket_stream_mode mode) = 0;     // Shutdown the socket
+
+            virtual std::string get_remote_host() = 0;
+            virtual uint16_t get_remote_port() = 0;
         };
 
         class tcp_listener_descriptor : public tcp_descriptor_base
@@ -130,19 +133,7 @@ namespace webcraft::async::io::socket
         tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
         ~tcp_socket()
         {
-            if (read_stream)
-            {
-                read_stream->close();
-            }
-            if (write_stream)
-            {
-                write_stream->close();
-            }
-
-            if (descriptor)
-            {
-                sync_wait(descriptor->close());
-            }
+            sync_wait(close());
         }
 
         task<void> connect(const connection_info &info)
@@ -179,6 +170,23 @@ namespace webcraft::async::io::socket
             else if (mode == socket_stream_mode::WRITE && write_stream)
             {
                 co_await write_stream->close();
+            }
+        }
+
+        task<void> close()
+        {
+            if (read_stream)
+            {
+                co_await read_stream->close();
+            }
+            if (write_stream)
+            {
+                co_await write_stream->close();
+            }
+
+            if (descriptor)
+            {
+                co_await descriptor->close();
             }
         }
     };
