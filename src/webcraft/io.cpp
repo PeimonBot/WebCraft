@@ -451,12 +451,12 @@ public:
     }
 };
 
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> make_tcp_socket_descriptor()
+task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
 {
     co_return std::make_shared<io_uring_tcp_socket_descriptor>();
 }
 
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor>> make_tcp_listener_descriptor()
+task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
 {
     co_return std::make_shared<io_uring_tcp_listener_descriptor>();
 }
