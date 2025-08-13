@@ -420,6 +420,7 @@ void run_loop(std::stop_token token)
         // Process the completion event
         auto user_data = event.udata;
 
+        // TODO: get rid of this since not all things that listen need to be deleted immediately, consider moving it to the destructor for one-shot events
         // remove yield event listener
         EV_SET(&event, event.ident, event.filter, EV_DELETE, 0, 0, nullptr);
         ret = kevent(queue, &event, 1, nullptr, 0, nullptr);

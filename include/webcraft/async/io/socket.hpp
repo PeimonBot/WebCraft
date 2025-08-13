@@ -1,312 +1,237 @@
 #pragma once
 
-#include "core.hpp"
+// #include "core.hpp"
 
-namespace webcraft::async::io::socket
-{
+// namespace webcraft::async::io::socket
+// {
+//     struct connection_info
+//     {
+//         std::string host;
+//         uint16_t port;
+//     };
 
-    // struct connection_info
-    // {
-    //     std::string host;
-    //     std::uint16_t port;
-    // };
+//     enum class socket_stream_mode
+//     {
+//         READ,
+//         WRITE
+//     };
 
-    // class tcp_descriptor
-    // {
-    // private:
-    //     std::optional<connection_info> info;
+//     namespace detail
+//     {
 
-    // public:
-    //     tcp_descriptor() noexcept = default;
-    //     tcp_descriptor(tcp_descriptor &&other) noexcept : info(std::move(other.info)) {}
-    //     tcp_descriptor &operator=(tcp_descriptor &&other) noexcept
-    //     {
-    //         if (this != &other)
-    //         {
-    //             info = std::exchange(other.info, std::nullopt);
-    //         }
-    //         return *this;
-    //     }
-    //     virtual ~tcp_descriptor() = default;
+//         class tcp_descriptor_base
+//         {
+//         public:
+//             tcp_descriptor_base() = default;
+//             virtual ~tcp_descriptor_base() = default;
 
-    //     // common operations
-    //     virtual void set_connection_options(const connection_info &info)
-    //     {
-    //         this->info = info;
-    //     }
+//             virtual task<void> close() = 0; // Close the socket
+//         };
 
-    //     std::optional<std::string> get_host() const
-    //     {
-    //         return info.transform([](const connection_info &info)
-    //                               { return info.host; });
-    //     }
+//         class tcp_socket_descriptor : public tcp_descriptor_base
+//         {
+//         public:
+//             tcp_socket_descriptor() = default;
+//             virtual ~tcp_socket_descriptor() = default;
 
-    //     std::optional<std::uint16_t> get_port() const
-    //     {
-    //         return info.transform([](const connection_info &info)
-    //                               { return info.port; });
-    //     }
+//             virtual task<void> connect(const connection_info &info) = 0;  // Connect to a server
+//             virtual task<size_t> read(std::span<char> buffer) = 0;        // Read data from the socket
+//             virtual task<size_t> write(std::span<const char> buffer) = 0; // Write data to the socket
+//             virtual task<void> shutdown(socket_stream_mode mode) = 0;     // Shutdown the socket
 
-    //     virtual void close() = 0;
-    // };
+//             virtual std::string get_remote_host() = 0;
+//             virtual uint16_t get_remote_port() = 0;
+//         };
 
-    // class tcp_client_descriptor : public tcp_descriptor
-    // {
-    // public:
-    //     tcp_client_descriptor() noexcept : tcp_descriptor() {}
-    //     tcp_client_descriptor(tcp_client_descriptor &&) noexcept = default;
-    //     tcp_client_descriptor &operator=(tcp_client_descriptor &&) noexcept = default;
-    //     virtual ~tcp_client_descriptor() = default;
+//         class tcp_listener_descriptor : public tcp_descriptor_base
+//         {
+//         public:
+//             tcp_listener_descriptor() = default;
+//             virtual ~tcp_listener_descriptor() = default;
 
-    //     virtual task<size_t> read_bytes(std::span<char> buffer) = 0;
-    //     virtual task<size_t> write_bytes(std::span<const char> buffer) = 0;
-    //     virtual task<bool> connect() = 0;
-    // };
+//             virtual task<void> bind(const connection_info &info) = 0;          // Bind the listener to an address
+//             virtual task<void> listen(int backlog) = 0;                        // Start listening for incoming connections
+//             virtual task<std::unique_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
+//         };
 
-    // std::shared_ptr<tcp_client_descriptor> make_tcp_client_descriptor(const connection_info &info);
-    // inline std::shared_ptr<tcp_client_descriptor> make_tcp_client_descriptor(const std::string &host, std::uint16_t port)
-    // {
-    //     connection_info info{host, port};
-    //     return make_tcp_client_descriptor(info);
-    // }
+//         task<std::shared_ptr<tcp_socket_descriptor>> make_tcp_socket_descriptor();
+//         task<std::shared_ptr<tcp_listener_descriptor>> make_tcp_listener_descriptor();
 
-    // class tcp_server_descriptor : public tcp_descriptor
-    // {
-    // public:
-    //     tcp_server_descriptor() noexcept : tcp_descriptor() {}
-    //     tcp_server_descriptor(tcp_server_descriptor &&) noexcept = default;
-    //     tcp_server_descriptor &operator=(tcp_server_descriptor &&) noexcept = default;
-    //     virtual ~tcp_server_descriptor() = default;
+//     }
 
-    //     // server related operations
-    //     virtual task<std::shared_ptr<tcp_client_descriptor>> accept() = 0;
-    //     virtual void listen(size_t backlog) = 0;
-    // };
+//     class tcp_rstream
+//     {
+//     private:
+//         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
 
-    // std::shared_ptr<tcp_server_descriptor> make_tcp_server_descriptor(const connection_info &info);
-    // inline std::shared_ptr<tcp_server_descriptor> make_tcp_server_descriptor(const std::string &host, std::uint16_t port)
-    // {
-    //     connection_info info{host, port};
-    //     return make_tcp_server_descriptor(info);
-    // }
+//     public:
+//         tcp_rstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+//         ~tcp_rstream() = default;
 
-    // class tcp_readable_stream
-    // {
-    // private:
-    //     std::shared_ptr<tcp_client_descriptor> descriptor;
+//         task<size_t> recv(std::span<char> buffer)
+//         {
+//             return descriptor->read(buffer);
+//         }
 
-    // public:
-    //     explicit tcp_readable_stream(std::shared_ptr<tcp_client_descriptor> descriptor) : descriptor(std::move(descriptor)) {}
-    //     tcp_readable_stream(tcp_readable_stream &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)) {}
-    //     tcp_readable_stream &operator=(tcp_readable_stream &&other) noexcept
-    //     {
-    //         if (this != &other)
-    //         {
-    //             descriptor = std::exchange(other.descriptor, nullptr);
-    //         }
-    //         return *this;
-    //     }
-    //     tcp_readable_stream(const tcp_readable_stream &) = delete;
-    //     tcp_readable_stream &operator=(const tcp_readable_stream &) = delete;
+//         task<char> recv()
+//         {
+//             std::array<char, 1> buf;
+//             co_await recv(buf);
+//             co_return buf[0];
+//         }
 
-    //     task<std::optional<char>> recv()
-    //     {
-    //         std::array<char, 1> buffer;
-    //         auto bytes_read = co_await recv(buffer);
-    //         if (bytes_read == 0)
-    //         {
-    //             co_return std::nullopt;
-    //         }
-    //         co_return buffer[0];
-    //     }
+//         task<void> close()
+//         {
+//             co_await descriptor->shutdown(socket_stream_mode::READ);
+//         }
+//     };
 
-    //     task<size_t> recv(std::span<char> buffer)
-    //     {
-    //         if (!descriptor)
-    //             throw std::runtime_error("Descriptor is not initialized");
+//     static_assert(async_writable_stream<tcp_rstream, char>);
+//     static_assert(async_buffered_writable_stream<tcp_rstream, char>);
+//     static_assert(async_closeable_stream<tcp_rstream, char>);
 
-    //         return descriptor->read_bytes(buffer);
-    //     }
-    // };
+//     class tcp_wstream
+//     {
+//     private:
+//         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
 
-    // class tcp_writable_stream
-    // {
-    // private:
-    //     std::shared_ptr<tcp_client_descriptor> descriptor;
+//     public:
+//         tcp_wstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+//         ~tcp_wstream() = default;
 
-    // public:
-    //     explicit tcp_writable_stream(std::shared_ptr<tcp_client_descriptor> descriptor) : descriptor(std::move(descriptor)) {}
-    //     tcp_writable_stream(tcp_writable_stream &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)) {}
-    //     tcp_writable_stream &operator=(tcp_writable_stream &&other) noexcept
-    //     {
-    //         if (this != &other)
-    //         {
-    //             descriptor = std::exchange(other.descriptor, nullptr);
-    //         }
-    //         return *this;
-    //     }
-    //     tcp_writable_stream(const tcp_writable_stream &) = delete;
-    //     tcp_writable_stream &operator=(const tcp_writable_stream &) = delete;
+//         task<size_t> send(std::span<const char> buffer)
+//         {
+//             return descriptor->write(buffer);
+//         }
 
-    //     task<bool> send(char c)
-    //     {
-    //         std::array<char, 1> buffer = {c};
-    //         size_t sent = co_await send(buffer);
-    //         co_return sent == 1;
-    //     }
+//         task<bool> send(char b)
+//         {
+//             std::array<char, 1> buf;
+//             buf[0] = b;
+//             co_await send(buf);
+//             co_return true;
+//         }
 
-    //     task<size_t> send(std::span<const char> buffer)
-    //     {
-    //         if (!descriptor)
-    //             throw std::runtime_error("Descriptor is not initialized");
+//         task<void> close()
+//         {
+//             co_await descriptor->shutdown(socket_stream_mode::WRITE);
+//         }
+//     };
 
-    //         return descriptor->write_bytes(buffer);
-    //     }
-    // };
+//     static_assert(async_writable_stream<tcp_wstream, char>);
+//     static_assert(async_buffered_writable_stream<tcp_wstream, char>);
+//     static_assert(async_closeable_stream<tcp_wstream, char>);
 
-    // static_assert(async_buffered_readable_stream<tcp_readable_stream, char>, "tcp_readable_stream should be an async buffered readable stream");
-    // static_assert(async_buffered_writable_stream<tcp_writable_stream, char>, "tcp_writable_stream should be an async buffered writable stream");
+//     class tcp_socket
+//     {
+//     private:
+//         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
+//         std::unique_ptr<tcp_rstream> read_stream;
+//         std::unique_ptr<tcp_wstream> write_stream;
 
-    // class tcp_socket
-    // {
-    // private:
-    //     std::shared_ptr<tcp_client_descriptor> descriptor;
-    //     std::unique_ptr<tcp_readable_stream> readable_stream;
-    //     std::unique_ptr<tcp_writable_stream> writable_stream;
+//     public:
+//         tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+//         ~tcp_socket()
+//         {
+//             sync_wait(close());
+//         }
 
-    // public:
-    //     tcp_socket(std::shared_ptr<tcp_client_descriptor> descriptor) noexcept : descriptor(std::move(descriptor)) {}
-    //     tcp_socket(tcp_socket &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)),
-    //                                               readable_stream(std::exchange(other.readable_stream, nullptr)),
-    //                                               writable_stream(std::exchange(other.writable_stream, nullptr)) {}
-    //     tcp_socket &operator=(tcp_socket &&other) noexcept
-    //     {
-    //         if (this != &other)
-    //         {
-    //             descriptor = std::exchange(other.descriptor, nullptr);
-    //         }
-    //         return *this;
-    //     }
-    //     tcp_socket(const tcp_socket &) = delete;
-    //     tcp_socket &operator=(const tcp_socket &) = delete;
+//         task<void> connect(const connection_info &info)
+//         {
+//             co_await descriptor->connect(info);
+//             read_stream = std::make_unique<tcp_rstream>(descriptor);
+//             write_stream = std::make_unique<tcp_wstream>(descriptor);
+//         }
 
-    //     virtual ~tcp_socket()
-    //     {
-    //         if (descriptor)
-    //             descriptor->close();
-    //     }
+//         tcp_rstream &get_readable_stream()
+//         {
+//             if (!read_stream)
+//             {
+//                 throw std::runtime_error("Read stream is not initialized.");
+//             }
+//             return *read_stream;
+//         }
 
-    //     task<void> connect()
-    //     {
-    //         if (!descriptor)
-    //             throw std::runtime_error("Socket descriptor is not initialized");
+//         tcp_wstream &get_writable_stream()
+//         {
+//             if (!write_stream)
+//             {
+//                 throw std::runtime_error("Write stream is not initialized.");
+//             }
+//             return *write_stream;
+//         }
 
-    //         if (co_await descriptor->connect())
-    //         {
-    //             readable_stream = std::make_unique<tcp_readable_stream>(descriptor);
-    //             writable_stream = std::make_unique<tcp_writable_stream>(descriptor);
-    //             co_return;
-    //         }
-    //         else
-    //         {
-    //             throw std::runtime_error("Failed to connect to the server");
-    //         }
-    //     }
+//         task<void> shutdown_channel(socket_stream_mode mode)
+//         {
+//             if (mode == socket_stream_mode::READ && read_stream)
+//             {
+//                 co_await read_stream->close();
+//             }
+//             else if (mode == socket_stream_mode::WRITE && write_stream)
+//             {
+//                 co_await write_stream->close();
+//             }
+//         }
 
-    //     tcp_readable_stream &get_readable_stream() const
-    //     {
-    //         if (!readable_stream)
-    //             throw std::runtime_error("Socket is not connected");
+//         task<void> close()
+//         {
+//             if (read_stream)
+//             {
+//                 co_await read_stream->close();
+//             }
+//             if (write_stream)
+//             {
+//                 co_await write_stream->close();
+//             }
 
-    //         return *readable_stream;
-    //     }
+//             if (descriptor)
+//             {
+//                 co_await descriptor->close();
+//             }
+//         }
+//     };
 
-    //     tcp_writable_stream &get_writable_stream() const
-    //     {
-    //         if (!writable_stream)
-    //             throw std::runtime_error("Socket is not connected");
+//     class tcp_listener
+//     {
+//     private:
+//         std::shared_ptr<detail::tcp_listener_descriptor> descriptor;
 
-    //         return *writable_stream;
-    //     }
-    // };
+//     public:
+//         tcp_listener(std::shared_ptr<detail::tcp_listener_descriptor> desc) : descriptor(std::move(desc)) {}
+//         ~tcp_listener()
+//         {
+//             if (descriptor)
+//             {
+//                 sync_wait(descriptor->close());
+//             }
+//         }
 
-    // class tcp_listener
-    // {
-    // private:
-    //     std::shared_ptr<tcp_server_descriptor> descriptor;
+//         task<void> bind(const connection_info &info)
+//         {
+//             return descriptor->bind(info);
+//         }
 
-    // public:
-    //     tcp_listener(std::shared_ptr<tcp_server_descriptor> descriptor) : descriptor(std::move(descriptor)) {}
-    //     tcp_listener(tcp_listener &&other) noexcept : descriptor(std::exchange(other.descriptor, nullptr)) {}
-    //     tcp_listener &operator=(tcp_listener &&other) noexcept
-    //     {
-    //         if (this != &other)
-    //         {
-    //             descriptor = std::exchange(other.descriptor, nullptr);
-    //         }
-    //         return *this;
-    //     }
-    //     tcp_listener(const tcp_listener &) = delete;
-    //     tcp_listener &operator=(const tcp_listener &) = delete;
+//         task<void> listen(int backlog)
+//         {
+//             return descriptor->listen(backlog);
+//         }
 
-    //     virtual ~tcp_listener()
-    //     {
-    //         if (descriptor)
-    //             descriptor->close();
-    //     }
+//         task<std::unique_ptr<tcp_socket>> accept()
+//         {
+//             auto client_desc = co_await descriptor->accept();
+//             co_return std::make_unique<tcp_socket>(std::move(client_desc));
+//         }
+//     };
 
-    //     void listen(size_t backlog)
-    //     {
-    //         if (!descriptor)
-    //             throw std::runtime_error("Listener descriptor is not initialized");
+//     task<tcp_socket> make_tcp_socket()
+//     {
+//         auto descriptor = co_await detail::make_tcp_socket_descriptor();
+//         co_return tcp_socket(std::move(descriptor));
+//     }
 
-    //         descriptor->listen(backlog);
-    //     }
-
-    //     task<tcp_socket> accept()
-    //     {
-    //         if (!descriptor)
-    //             throw std::runtime_error("Listener descriptor is not initialized");
-
-    //         auto client_descriptor = co_await descriptor->accept();
-    //         if (client_descriptor)
-    //         {
-    //             co_return {std::move(client_descriptor)};
-    //         }
-    //         else
-    //         {
-    //             throw std::runtime_error("Failed to accept connection");
-    //         }
-    //     }
-    // };
-
-    // inline tcp_socket make_tcp_socket(const connection_info &info)
-    // {
-    //     auto descriptor = make_tcp_client_descriptor(info);
-    //     if (!descriptor)
-    //         throw std::runtime_error("Failed to create TCP client descriptor");
-
-    //     return tcp_socket(std::move(descriptor));
-    // }
-
-    // inline tcp_socket make_tcp_socket(const std::string &host, std::uint16_t port)
-    // {
-    //     connection_info info{host, port};
-    //     return make_tcp_socket(info);
-    // }
-
-    // inline tcp_listener make_tcp_listener(const connection_info &info)
-    // {
-    //     auto descriptor = make_tcp_server_descriptor(info);
-    //     if (!descriptor)
-    //         throw std::runtime_error("Failed to create TCP server descriptor");
-
-    //     return tcp_listener(std::move(descriptor));
-    // }
-
-    // inline tcp_listener make_tcp_listener(const std::string &host, std::uint16_t port)
-    // {
-    //     connection_info info{host, port};
-    //     return make_tcp_listener(info);
-    // }
-}
+//     task<tcp_listener> make_tcp_listener()
+//     {
+//         auto descriptor = co_await detail::make_tcp_listener_descriptor();
+//         co_return tcp_listener(std::move(descriptor));
+//     }
+// }

@@ -97,11 +97,11 @@ namespace webcraft::async
             { t.is_cancelled() } -> std::convertible_to<bool>;
         };
 
-        inline awaitable_event_t auto as_awaitable(std::unique_ptr<runtime_event> event)
+        inline awaitable_event_t auto as_awaitable(std::unique_ptr<runtime_event> &event)
         {
             struct awaiter
             {
-                std::unique_ptr<runtime_event> event;
+                std::unique_ptr<runtime_event> &event;
                 bool cancelled;
 
                 bool await_ready() const noexcept { return false; }
@@ -122,7 +122,7 @@ namespace webcraft::async
                     return event->is_cancelled();
                 }
             };
-            return awaiter{std::move(event)};
+            return awaiter{event};
         }
 
         uint64_t get_native_handle();

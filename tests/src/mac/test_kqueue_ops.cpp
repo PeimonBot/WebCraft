@@ -3,6 +3,9 @@
 #define TEST_SUITE_NAME KqueueTestSuite
 #include "test_suite.hpp"
 #include <sys/event.h>
+#include <aio.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 using namespace std::chrono_literals;
 
