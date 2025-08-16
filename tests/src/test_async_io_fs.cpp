@@ -5,6 +5,7 @@
 #include <webcraft/async/io/core.hpp>
 #include <webcraft/async/io/adaptors.hpp>
 #include <webcraft/async/io/fs.hpp>
+#include <webcraft/async/runtime.hpp>
 #include <filesystem>
 #include <sstream>
 
@@ -42,6 +43,8 @@ void cleanup_test_file()
 
 TEST_CASE(TestFileReadAll)
 {
+    runtime_context context;
+
     create_and_populate_test_file();
 
     auto f = make_file(test_file_path);
@@ -52,7 +55,7 @@ TEST_CASE(TestFileReadAll)
         std::vector<char> content = co_await (stream | collect<std::vector<char>>(collectors::to_vector<char>()));
 
         std::string_view str(content.begin(), content.end());
-        ASSERT_EQ(str, test_data);
+        ASSERT_EQ(str, test_data) << "File contents should be the same";
     };
 
     sync_wait(task_fn());
@@ -62,6 +65,8 @@ TEST_CASE(TestFileReadAll)
 
 TEST_CASE(TestFileWriteAll)
 {
+    runtime_context context;
+
     auto f = make_file(test_file_path);
 
     auto task_fn = [&]() -> task<void>
@@ -78,7 +83,7 @@ TEST_CASE(TestFileWriteAll)
     buffer << ifs.rdbuf();
     std::string content = buffer.str();
 
-    ASSERT_EQ(content, test_data);
+    ASSERT_EQ(content, test_data) << "File contents should be the same";
 
     cleanup_test_file();
 }

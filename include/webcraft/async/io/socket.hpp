@@ -189,6 +189,14 @@ namespace webcraft::async::io::socket
                 co_await descriptor->close();
             }
         }
+    
+        inline std::string get_remote_host() {
+            return descriptor->get_remote_host();
+        }
+
+        inline uint16_t get_remote_port() {
+            return descriptor->get_remote_port();
+        }
     };
 
     class tcp_listener
@@ -216,10 +224,10 @@ namespace webcraft::async::io::socket
             return descriptor->listen(backlog);
         }
 
-        task<std::unique_ptr<tcp_socket>> accept()
+        task<tcp_socket> accept()
         {
             auto client_desc = co_await descriptor->accept();
-            co_return std::make_unique<tcp_socket>(std::move(client_desc));
+            co_return tcp_socket(std::move(client_desc));
         }
     };
 
