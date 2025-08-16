@@ -125,6 +125,34 @@ namespace webcraft::async
             return awaiter{event};
         }
 
+        inline awaitable_event_t auto as_awaitable(std::unique_ptr<runtime_event> &&event)
+        {
+            struct awaiter
+            {
+                std::unique_ptr<runtime_event> event;
+                bool cancelled;
+
+                bool await_ready() const noexcept { return false; }
+                void await_suspend(std::coroutine_handle<> h) noexcept
+                {
+                    event->start_async([h]
+                                       { h.resume(); });
+                }
+                void await_resume() noexcept {}
+
+                int get_result()
+                {
+                    return event->get_result();
+                }
+
+                bool is_cancelled()
+                {
+                    return event->is_cancelled();
+                }
+            };
+            return awaiter{std::move(event)};
+        }
+
         uint64_t get_native_handle();
 
 #ifdef __linux__

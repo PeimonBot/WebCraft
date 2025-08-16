@@ -1,0 +1,84 @@
+#define TEST_SUITE_NAME AsyncFSTestSuite
+
+#include "test_suite.hpp"
+#include <webcraft/async/async.hpp>
+#include <webcraft/async/io/core.hpp>
+#include <webcraft/async/io/adaptors.hpp>
+#include <webcraft/async/io/fs.hpp>
+#include <filesystem>
+#include <sstream>
+
+using namespace webcraft::async;
+using namespace webcraft::async::io::adaptors;
+using namespace webcraft::async::io::fs;
+
+TEST_CASE(TestFilePathComplatibility)
+{
+    std::filesystem::path p1("/path/to/file");
+
+    auto f = make_file(p1);
+
+    ASSERT_EQ(p1, f.get_path());
+
+    std::filesystem::path p2 = f;
+
+    ASSERT_EQ(p2, p1);
+}
+
+const std::string test_data = "Hello, World!\r\nThis is some test data that is in the file\r\nWe need to use some kind of test procedure so we decided to go with this.\r\n";
+const std::filesystem::path test_file_path = "test_file.txt";
+
+void create_and_populate_test_file()
+{
+    std::ofstream ofs(test_file_path);
+    ofs << test_data;
+    ofs.close();
+}
+
+void cleanup_test_file()
+{
+    std::filesystem::remove(test_file_path);
+}
+
+TEST_CASE(TestFileReadAll)
+{
+    create_and_populate_test_file();
+
+    auto f = make_file(test_file_path);
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto stream = co_await f.open_readable_stream();
+        std::vector<char> content = co_await (stream | collect<std::vector<char>>(collectors::to_vector<char>()));
+
+        std::string_view str(content.begin(), content.end());
+        ASSERT_EQ(str, test_data);
+    };
+
+    sync_wait(task_fn());
+
+    cleanup_test_file();
+}
+
+TEST_CASE(TestFileWriteAll)
+{
+    auto f = make_file(test_file_path);
+
+    auto task_fn = [&]() -> task<void>
+    {
+        auto stream = co_await f.open_writable_stream();
+        std::string data = test_data;
+        stream.send(data);
+    };
+
+    sync_wait(task_fn());
+
+    std::ifstream ifs(test_file_path);
+    std::stringstream buffer;
+    buffer << ifs.rdbuf();
+    std::string content = buffer.str();
+
+    ASSERT_EQ(content, test_data);
+
+    cleanup_test_file();
+}
