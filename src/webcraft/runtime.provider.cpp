@@ -56,6 +56,7 @@ void webcraft::async::detail::shutdown_runtime() noexcept
 
 #ifdef __linux__
 #include <liburing.h>
+#include <webcraft/async/runtime/linux.event.hpp>
 
 static std::mutex io_uring_mutex;
 static io_uring global_ring;
@@ -125,90 +126,18 @@ bool start_runtime_async() noexcept
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
 {
-    // Directly call the function to simulate posting a yield event
-    struct yield_event final : webcraft::async::detail::runtime_event
-    {
-
-    public:
-        yield_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token) {}
-
-        void try_native_cancel() override
-        {
-        }
-
-        void try_start() override
-        {
-            std::lock_guard<std::mutex> lock(io_uring_mutex);
-            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
-            if (!sqe)
-            {
-                throw std::runtime_error("Failed to get SQE from io_uring");
-            }
-
-            // Prepare a NOP operation to signal the completion of the task
-            io_uring_prep_nop(sqe);
-            io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(this));
-            int ret = io_uring_submit(&global_ring);
-            if (ret < 0)
-            {
-                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
-            }
-        }
-    };
-
-    return std::make_unique<yield_event>();
+    return webcraft::async::detail::linux::create_io_uring_event([](struct io_uring_sqe *sqe)
+                                                                 { io_uring_prep_nop(sqe); }, {});
 }
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
 {
-
-    struct sleep_event final : webcraft::async::detail::runtime_event
-    {
-    private:
-        std::chrono::steady_clock::duration duration;
-
-    public:
-        sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token) : runtime_event(token), duration(duration) {}
-
-        void try_native_cancel() override
-        {
-            std::lock_guard<std::mutex> lock(io_uring_mutex);
-            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
-            if (!sqe)
-            {
-                throw std::runtime_error("Failed to get SQE from io_uring");
-            }
-            io_uring_prep_cancel64(sqe, reinterpret_cast<uint64_t>(this), IORING_ASYNC_CANCEL_USERDATA);
-            int ret = io_uring_submit(&global_ring);
-            if (ret < 0)
-            {
-                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
-            }
-        }
-
-        void try_start() override
-        {
-            std::lock_guard<std::mutex> lock(io_uring_mutex);
-            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
-            if (!sqe)
-            {
-                throw std::runtime_error("Failed to get SQE from io_uring");
-            }
-
-            __kernel_timespec its;
-            its.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-            its.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(duration % std::chrono::seconds(1)).count();
-            io_uring_prep_timeout(sqe, &its, 0, 0);
-            io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(this));
-            int ret = io_uring_submit(&global_ring);
-            if (ret < 0)
-            {
-                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::string(std::strerror(-ret)));
-            }
-        }
-    };
-
-    return std::make_unique<sleep_event>(duration, token);
+    return webcraft::async::detail::linux::create_io_uring_event([duration](struct io_uring_sqe *sqe)
+                                                                 {
+                                                                     __kernel_timespec its;
+                                                                     its.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+                                                                     its.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(duration % std::chrono::seconds(1)).count();
+                                                                     io_uring_prep_timeout(sqe, &its, 0, 0); }, token);
 }
 
 #elif defined(_WIN32)
