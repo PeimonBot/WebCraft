@@ -50,10 +50,10 @@ TEST_CASE(TestFileReadAll)
     auto task_fn = [&]() -> task<void>
     {
         auto stream = co_await f.open_readable_stream();
-        std::vector<char> content = co_await (stream | collect<std::vector<char>>(collectors::to_vector<char>()));
+        std::vector<char> content = co_await (stream | collect<std::vector<char>, char>(collectors::to_vector<char>()));
 
         std::string_view str(content.begin(), content.end());
-        ASSERT_EQ(str, test_data) << "File contents should be the same";
+        EXPECT_EQ(str, test_data) << "File contents should be the same";
     };
 
     sync_wait(task_fn());
@@ -71,7 +71,7 @@ TEST_CASE(TestFileWriteAll)
     {
         auto stream = co_await f.open_writable_stream();
         std::string data = test_data;
-        stream.send(data);
+        co_await stream.send(data);
     };
 
     sync_wait(task_fn());

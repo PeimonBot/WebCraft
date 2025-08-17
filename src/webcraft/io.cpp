@@ -8,6 +8,7 @@
 using namespace webcraft::async;
 using namespace webcraft::async::io::fs;
 using namespace webcraft::async::io::fs::detail;
+using namespace webcraft::async::io::socket::detail;
 
 #if defined(WEBCRAFT_MOCK_TESTS)
 
@@ -17,21 +18,21 @@ private:
     std::FILE *file;
 
 public:
-    sync_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
+    sync_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode) : file_descriptor(mode)
     {
         if (mode & std::ios::in)
         {
-            file = std::fopen(p.string(), "r");
+            file = std::fopen(p.string().c_str(), "r");
         }
         else if (mode & std::ios::out)
         {
             if (mode & std::ios::app)
             {
-                file = std::fopen(p.string(), "a");
+                file = std::fopen(p.string().c_str(), "a");
             }
             else
             {
-                file = std::fopen(p.string(), "w");
+                file = std::fopen(p.string().c_str(), "w");
             }
         }
     }
@@ -63,12 +64,25 @@ public:
             std::fclose(file);
             file = nullptr;
         }
+        co_return;
     }
 };
 
 task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
 {
     co_return std::make_shared<sync_file_descriptor>(p, mode);
+}
+
+task<std::shared_ptr<tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+{
+    throw std::runtime_error("TCP socket descriptor not implemented in mock tests");
+    co_return nullptr;
+}
+
+task<std::shared_ptr<tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
+{
+    throw std::runtime_error("TCP listener descriptor not implemented in mock tests");
+    co_return nullptr;
 }
 
 #elif defined(__linux__) && defined(WEBCRAFT_USE_IO_URING)

@@ -45,6 +45,16 @@ namespace webcraft::async
             value = std::move(v);
         }
 
+        // void return_value(const T &v) noexcept(std::is_nothrow_copy_constructible_v<T>)
+        // {
+        //     value = v;
+        // }
+
+        // void return_value(T &&v) noexcept(std::is_nothrow_move_constructible_v<T>)
+        // {
+        //     value = std::move(v);
+        // }
+
         void unhandled_exception() noexcept
         {
             exception = std::current_exception();

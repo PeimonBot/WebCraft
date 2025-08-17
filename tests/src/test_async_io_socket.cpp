@@ -22,7 +22,7 @@ struct connection_results
 
 connection_results get_google_results_sync();
 
-task<connection_results> get_google_results_async(tcp_rstream rstream, tcp_wstream &wstream);
+task<connection_results> get_google_results_async(tcp_rstream& rstream, tcp_wstream &wstream);
 
 TEST_CASE(TestSocketConnection)
 {
@@ -38,16 +38,16 @@ TEST_CASE(TestSocketConnection)
 
         co_await socket.connect({host, port});
 
-        ASSERT_EQ(host, socket.get_remote_host()) << "Remote host should match";
-        ASSERT_EQ(port, socket.get_remote_port()) << "Remote port should match";
+        EXPECT_EQ(host, socket.get_remote_host()) << "Remote host should match";
+        EXPECT_EQ(port, socket.get_remote_port()) << "Remote port should match";
 
         auto &socket_rstream = socket.get_readable_stream();
         auto &socket_wstream = socket.get_writable_stream();
 
         connection_results async_results = co_await get_google_results_async(socket_rstream, socket_wstream);
 
-        ASSERT_EQ(async_results.status_code, sync_results.status_code) << "Status codes should be the same";
-        ASSERT_EQ(async_results.response, sync_results.response) << "Responses should be the same";
+        EXPECT_EQ(async_results.status_code, sync_results.status_code) << "Status codes should be the same";
+        EXPECT_EQ(async_results.response, sync_results.response) << "Responses should be the same";
     };
 
     sync_wait(task_fn());
@@ -92,8 +92,8 @@ TEST_CASE(TestSocketPubSub)
         co_await signal;
 
         co_await client.connect({localhost, port});
-        ASSERT_EQ(localhost, client.get_remote_host()) << "Remote host should match";
-        ASSERT_EQ(port, client.get_remote_port()) << "Remote port should match";
+        EXPECT_EQ(localhost, client.get_remote_host()) << "Remote host should match";
+        EXPECT_EQ(port, client.get_remote_port()) << "Remote port should match";
 
         co_await handle_client_side_async(client);
     };
@@ -106,7 +106,7 @@ connection_results get_google_results_sync()
     return connection_results();
 }
 
-task<connection_results> get_google_results_async(tcp_rstream rstream, tcp_wstream &wstream)
+task<connection_results> get_google_results_async(tcp_rstream& rstream, tcp_wstream &wstream)
 {
     co_return {"", 200};
 }

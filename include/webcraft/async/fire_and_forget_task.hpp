@@ -24,7 +24,7 @@ namespace webcraft::async
         };
     };
 
-    fire_and_forget_task fire_and_forget(task<void> t)
+    inline fire_and_forget_task fire_and_forget(task<void> t)
     {
         co_await t;
         co_return;

@@ -52,7 +52,7 @@ namespace webcraft::async::io::socket
 
             virtual task<void> bind(const connection_info &info) = 0;          // Bind the listener to an address
             virtual task<void> listen(int backlog) = 0;                        // Start listening for incoming connections
-            virtual task<std::unique_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
+            virtual task<std::shared_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
         };
 
         task<std::shared_ptr<tcp_socket_descriptor>> make_tcp_socket_descriptor();
@@ -66,19 +66,26 @@ namespace webcraft::async::io::socket
         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
 
     public:
-        tcp_rstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+        explicit tcp_rstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
         ~tcp_rstream() = default;
+        tcp_rstream(tcp_rstream &) = delete;
+        tcp_rstream &operator=(tcp_rstream &) = delete;
+        tcp_rstream(tcp_rstream &&) = default;
+        tcp_rstream &operator=(tcp_rstream &&) = default;
 
         task<size_t> recv(std::span<char> buffer)
         {
             return descriptor->read(buffer);
         }
 
-        task<char> recv()
+        task<std::optional<char>> recv()
         {
             std::array<char, 1> buf;
-            co_await recv(buf);
-            co_return buf[0];
+            if (co_await recv(buf))
+            {
+                co_return buf[0];
+            }
+            co_return std::nullopt;
         }
 
         task<void> close()
@@ -87,8 +94,8 @@ namespace webcraft::async::io::socket
         }
     };
 
-    static_assert(async_writable_stream<tcp_rstream, char>);
-    static_assert(async_buffered_writable_stream<tcp_rstream, char>);
+    static_assert(async_readable_stream<tcp_rstream, char>);
+    static_assert(async_buffered_readable_stream<tcp_rstream, char>);
     static_assert(async_closeable_stream<tcp_rstream, char>);
 
     class tcp_wstream
@@ -97,8 +104,12 @@ namespace webcraft::async::io::socket
         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
 
     public:
-        tcp_wstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+        explicit tcp_wstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
         ~tcp_wstream() = default;
+        tcp_wstream(tcp_wstream &) = delete;
+        tcp_wstream &operator=(tcp_wstream &) = delete;
+        tcp_wstream(tcp_wstream &&) = default;
+        tcp_wstream &operator=(tcp_wstream &&) = default;
 
         task<size_t> send(std::span<const char> buffer)
         {
@@ -109,8 +120,11 @@ namespace webcraft::async::io::socket
         {
             std::array<char, 1> buf;
             buf[0] = b;
-            co_await send(buf);
-            co_return true;
+            if (co_await send(buf))
+            {
+                co_return true;
+            }
+            co_return false;
         }
 
         task<void> close()
@@ -127,63 +141,67 @@ namespace webcraft::async::io::socket
     {
     private:
         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
-        std::unique_ptr<tcp_rstream> read_stream;
-        std::unique_ptr<tcp_wstream> write_stream;
+        tcp_rstream read_stream;
+        tcp_wstream write_stream;
 
     public:
-        tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+        tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(desc), read_stream(descriptor), write_stream(descriptor)
+        {
+        }
         ~tcp_socket()
         {
             fire_and_forget(close());
         }
 
+        tcp_socket(tcp_socket&& other) noexcept
+            : descriptor(std::move(other.descriptor)),
+              read_stream(std::move(other.read_stream)),
+              write_stream(std::move(other.write_stream))
+        {
+        }
+
+        tcp_socket &operator=(tcp_socket &&other) noexcept
+        {
+            if (this != &other)
+            {
+                descriptor = std::move(other.descriptor);
+                read_stream = std::move(other.read_stream);
+                write_stream = std::move(other.write_stream);
+            }
+            return *this;
+        }
+
         task<void> connect(const connection_info &info)
         {
             co_await descriptor->connect(info);
-            read_stream = std::make_unique<tcp_rstream>(descriptor);
-            write_stream = std::make_unique<tcp_wstream>(descriptor);
         }
 
         tcp_rstream &get_readable_stream()
         {
-            if (!read_stream)
-            {
-                throw std::runtime_error("Read stream is not initialized.");
-            }
-            return *read_stream;
+            return read_stream;
         }
 
         tcp_wstream &get_writable_stream()
         {
-            if (!write_stream)
-            {
-                throw std::runtime_error("Write stream is not initialized.");
-            }
-            return *write_stream;
+            return write_stream;
         }
 
         task<void> shutdown_channel(socket_stream_mode mode)
         {
-            if (mode == socket_stream_mode::READ && read_stream)
+            if (mode == socket_stream_mode::READ)
             {
-                co_await read_stream->close();
+                co_await read_stream.close();
             }
-            else if (mode == socket_stream_mode::WRITE && write_stream)
+            else if (mode == socket_stream_mode::WRITE)
             {
-                co_await write_stream->close();
+                co_await write_stream.close();
             }
         }
 
         task<void> close()
         {
-            if (read_stream)
-            {
-                co_await read_stream->close();
-            }
-            if (write_stream)
-            {
-                co_await write_stream->close();
-            }
+            co_await read_stream.close();
+            co_await write_stream.close();
 
             if (descriptor)
             {
@@ -229,20 +247,19 @@ namespace webcraft::async::io::socket
 
         task<tcp_socket> accept()
         {
-            auto client_desc = co_await descriptor->accept();
-            co_return tcp_socket(std::move(client_desc));
+            co_return co_await descriptor->accept();
         }
     };
 
-    task<tcp_socket> make_tcp_socket()
+    inline task<tcp_socket> make_tcp_socket()
     {
         auto descriptor = co_await detail::make_tcp_socket_descriptor();
-        co_return tcp_socket(std::move(descriptor));
+        co_return tcp_socket(descriptor);
     }
 
-    task<tcp_listener> make_tcp_listener()
+    inline task<tcp_listener> make_tcp_listener()
     {
         auto descriptor = co_await detail::make_tcp_listener_descriptor();
-        co_return tcp_listener(std::move(descriptor));
+        co_return tcp_listener(descriptor);
     }
 }

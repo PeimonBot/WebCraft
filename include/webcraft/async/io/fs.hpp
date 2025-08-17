@@ -36,6 +36,16 @@ namespace webcraft::async::io::fs
 
         public:
             explicit file_stream(std::shared_ptr<file_descriptor> fd) : fd(std::move(fd)) {}
+            file_stream(file_stream &&other) noexcept : fd(std::exchange(other.fd, nullptr)), closed(other.closed.exchange(true)) {}
+            file_stream &operator=(file_stream &&other) noexcept
+            {
+                if (this != &other)
+                {
+                    fd = std::exchange(other.fd, nullptr);
+                    closed = other.closed.exchange(true);
+                }
+                return *this;
+            }
             virtual ~file_stream() noexcept
             {
                 if (fd)
@@ -56,22 +66,27 @@ namespace webcraft::async::io::fs
     class file_rstream : public detail::file_stream
     {
     public:
-        file_rstream(std::shared_ptr<detail::file_descriptor> fd) : detail::file_stream(std::move(fd)) {}
+        explicit file_rstream(std::shared_ptr<detail::file_descriptor> fd) : detail::file_stream(std::move(fd)) {}
         ~file_rstream() noexcept = default;
 
-        file_rstream(file_rstream &&) noexcept = default;
+        file_rstream(file_rstream &&rstream) noexcept = default;
         file_rstream &operator=(file_rstream &&) noexcept = default;
+        file_rstream(const file_rstream &) = delete;
+        file_rstream &operator=(const file_rstream &) = delete;
 
         task<size_t> recv(std::span<char> buffer)
         {
             return fd->read(buffer);
         }
 
-        task<char> recv()
+        task<std::optional<char>> recv()
         {
             std::array<char, 1> buf;
-            co_await recv(buf);
-            co_return buf[0];
+            if (co_await recv(buf))
+            {
+                co_return buf[0];
+            }
+            co_return std::nullopt;
         }
     };
 
@@ -82,11 +97,13 @@ namespace webcraft::async::io::fs
     class file_wstream : public detail::file_stream
     {
     public:
-        explicit file_wstream(std::shared_ptr<file_descriptor> fd) : detail::file_stream(std::move(fd)) {}
+        explicit file_wstream(std::shared_ptr<detail::file_descriptor> fd) : detail::file_stream(std::move(fd)) {}
         ~file_wstream() noexcept = default;
 
         file_wstream(file_wstream &&) noexcept = default;
         file_wstream &operator=(file_wstream &&) noexcept = default;
+        file_wstream(const file_wstream &) = delete;
+        file_wstream &operator=(const file_wstream &) = delete;
 
         task<size_t> send(std::span<char> buffer)
         {
@@ -97,8 +114,11 @@ namespace webcraft::async::io::fs
         {
             std::array<char, 1> buf;
             buf[0] = b;
-            co_await send(buf);
-            co_return true;
+            if (co_await send(buf))
+            {
+                co_return true;
+            }
+            co_return false;
         }
     };
 
@@ -121,17 +141,17 @@ namespace webcraft::async::io::fs
             co_return file_rstream(descriptor);
         }
 
-        task<file_wstream> open_writable_stream(bool append)
+        task<file_wstream> open_writable_stream(bool append = false)
         {
             auto descriptor = co_await detail::make_file_descriptor(p, append ? std::ios_base::app : std::ios_base::out);
-            co_return file_wstream(std::move(descriptor));
+            co_return file_wstream(descriptor);
         }
 
         constexpr const std::filesystem::path get_path() const { return p; }
         constexpr operator const std::filesystem::path &() const { return p; }
     };
 
-    file make_file(std::filesystem::path p)
+    inline file make_file(std::filesystem::path p)
     {
         return file(p);
     }
