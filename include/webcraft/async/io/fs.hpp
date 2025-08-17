@@ -4,6 +4,7 @@
 #include <fstream>
 #include <filesystem>
 #include <atomic>
+#include <webcraft/async/fire_and_forget_task.hpp>
 
 namespace webcraft::async::io::fs
 {
@@ -38,7 +39,7 @@ namespace webcraft::async::io::fs
             virtual ~file_stream() noexcept
             {
                 if (fd)
-                    sync_wait(close());
+                    fire_and_forget(close());
             }
 
             task<void> close() noexcept

@@ -2,9 +2,7 @@
 
 #include "test_suite.hpp"
 #include <webcraft/async/async.hpp>
-#include <webcraft/async/io/core.hpp>
-#include <webcraft/async/io/adaptors.hpp>
-#include <webcraft/async/io/socket.hpp>
+#include <webcraft/async/io/io.hpp>
 #include <filesystem>
 #include <sstream>
 
@@ -28,6 +26,8 @@ task<connection_results> get_google_results_async(tcp_rstream rstream, tcp_wstre
 
 TEST_CASE(TestSocketConnection)
 {
+    throw std::logic_error("not implemented yet");
+
     runtime_context context;
 
     connection_results sync_results = get_google_results_sync();
@@ -60,6 +60,9 @@ task<void> handle_client_side_async(tcp_socket &client);
 
 TEST_CASE(TestSocketPubSub)
 {
+
+    throw std::logic_error("not implemented yet");
+
     runtime_context context;
 
     async_event signal;
@@ -96,4 +99,24 @@ TEST_CASE(TestSocketPubSub)
     };
 
     sync_wait(when_all(listener_fn(), socket_fn()));
+}
+
+connection_results get_google_results_sync()
+{
+    return connection_results();
+}
+
+task<connection_results> get_google_results_async(tcp_rstream rstream, tcp_wstream &wstream)
+{
+    co_return {"", 200};
+}
+
+task<void> handle_server_side_async(tcp_socket &client_peer)
+{
+    co_return;
+}
+
+task<void> handle_client_side_async(tcp_socket &client)
+{
+    co_return;
 }

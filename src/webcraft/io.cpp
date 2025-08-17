@@ -1,13 +1,77 @@
-#include <webcraft/async/io/fs.hpp>
-#include <webcraft/async/io/socket.hpp>
+#include <webcraft/async/io/io.hpp>
 #include <webcraft/async/runtime.hpp>
 #include <webcraft/async/runtime/windows.event.hpp>
 #include <webcraft/async/runtime/macos.event.hpp>
 #include <webcraft/async/runtime/linux.event.hpp>
+#include <cstdio>
 
 using namespace webcraft::async;
+using namespace webcraft::async::io::fs;
+using namespace webcraft::async::io::fs::detail;
 
-#ifdef __linux__
+#if defined(WEBCRAFT_MOCK_TESTS)
+
+class sync_file_descriptor : public file_descriptor
+{
+private:
+    std::FILE *file;
+
+public:
+    sync_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
+    {
+        if (mode & std::ios::in)
+        {
+            file = std::fopen(p.string(), "r");
+        }
+        else if (mode & std::ios::out)
+        {
+            if (mode & std::ios::app)
+            {
+                file = std::fopen(p.string(), "a");
+            }
+            else
+            {
+                file = std::fopen(p.string(), "w");
+            }
+        }
+    }
+
+    ~sync_file_descriptor()
+    {
+        if (file)
+        {
+            fire_and_forget(close());
+            file = nullptr;
+        }
+    }
+
+    // virtual because we want to allow platform specific implementation
+    task<size_t> read(std::span<char> buffer)
+    {
+        co_return std::fread(buffer.data(), sizeof(char), buffer.size(), file);
+    }
+
+    task<size_t> write(std::span<char> buffer)
+    {
+        co_return std::fwrite(buffer.data(), sizeof(char), buffer.size(), file);
+    }
+
+    task<void> close()
+    {
+        if (file)
+        {
+            std::fclose(file);
+            file = nullptr;
+        }
+    }
+};
+
+task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
+{
+    co_return std::make_shared<sync_file_descriptor>(p, mode);
+}
+
+#elif defined(__linux__) && defined(WEBCRAFT_USE_IO_URING)
 #include <unistd.h>
 #include <arpa/inet.h>  // inet_ntop, ntohs, htons
 #include <netdb.h>      // getaddrinfo, getnameinfo

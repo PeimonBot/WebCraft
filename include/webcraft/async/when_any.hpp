@@ -3,50 +3,12 @@
 #include <coroutine>
 #include <webcraft/async/async_event.hpp>
 #include <webcraft/async/when_all.hpp>
+#include <webcraft/async/fire_and_forget_task.hpp>
 
 namespace webcraft::async
 {
     namespace detail
     {
-
-        class self_deleting_task
-        {
-        public:
-            class promise_type
-            {
-            public:
-                self_deleting_task get_return_object()
-                {
-                    return self_deleting_task{this};
-                }
-
-                std::suspend_always initial_suspend() noexcept { return {}; }
-                std::suspend_never final_suspend() noexcept { return {}; }
-
-                void return_void() noexcept {}
-                void unhandled_exception() noexcept {}
-            };
-
-            self_deleting_task(promise_type *p) : m_promise(p) {}
-
-            auto promise() const noexcept
-            {
-                return *m_promise;
-            }
-
-            bool resume()
-            {
-                auto h = std::coroutine_handle<promise_type>::from_promise(*m_promise);
-                if (!h.done())
-                {
-                    h.resume();
-                }
-                return !h.done();
-            }
-
-        private:
-            promise_type *m_promise = nullptr;
-        };
 
         template <awaitable_t Awaitable>
             requires std::same_as<awaitable_resume_t<Awaitable>, void>
@@ -65,7 +27,7 @@ namespace webcraft::async
                   typename T = std::ranges::range_value_t<Range>,
                   typename Result = awaitable_resume_t<T>>
             requires awaitable_t<T> && std::same_as<Result, void>
-        self_deleting_task when_any_controller(Range &&tasks, async_event &event)
+        fire_and_forget_task when_any_controller(Range &&tasks, async_event &event)
         {
             std::atomic<bool> winner = false;
             std::vector<task<void>> wait_tasks;
@@ -97,7 +59,7 @@ namespace webcraft::async
                   typename T = std::ranges::range_value_t<Range>,
                   typename Result = awaitable_resume_t<T>>
             requires awaitable_t<T> && (!std::same_as<Result, void>)
-        self_deleting_task when_any_controller(Range &&tasks, async_event &event, std::optional<Result> &opt)
+        fire_and_forget_task when_any_controller(Range &&tasks, async_event &event, std::optional<Result> &opt)
         {
             std::atomic<bool> winner = false;
             std::vector<task<void>> wait_tasks;
@@ -112,7 +74,7 @@ namespace webcraft::async
         }
 
         template <awaitable_t... Awaitable>
-        self_deleting_task when_any_controller_tuple(async_event &event, std::optional<std::variant<normalized_result_t<Awaitable>...>> &opt, Awaitable &&...t)
+        fire_and_forget_task when_any_controller_tuple(async_event &event, std::optional<std::variant<normalized_result_t<Awaitable>...>> &opt, Awaitable &&...t)
         {
             std::atomic<bool> winner = false;
             std::vector<task<void>> wait_tasks;
@@ -157,8 +119,7 @@ namespace webcraft::async
 
         if constexpr (std::is_void_v<Result>)
         {
-            auto task = detail::when_any_controller(std::forward<Range>(tasks), event);
-            task.resume();
+            detail::when_any_controller(std::forward<Range>(tasks), event);
 
             co_await event;
             co_return;
@@ -167,8 +128,7 @@ namespace webcraft::async
         {
             std::optional<Result> result;
 
-            auto task = detail::when_any_controller(std::forward<Range>(tasks), event, result);
-            task.resume();
+            detail::when_any_controller(std::forward<Range>(tasks), event, result);
             co_await event;
 
             co_return result.value();
@@ -182,8 +142,7 @@ namespace webcraft::async
 
         async_event event;
         std::optional<result_variant_t> result;
-        auto task = detail::when_any_controller_tuple(event, result, std::forward<Tasks>(tasks)...);
-        task.resume();
+        detail::when_any_controller_tuple(event, result, std::forward<Tasks>(tasks)...);
         co_await event;
         co_return std::move(result.value());
     }

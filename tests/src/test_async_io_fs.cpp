@@ -2,9 +2,7 @@
 
 #include "test_suite.hpp"
 #include <webcraft/async/async.hpp>
-#include <webcraft/async/io/core.hpp>
-#include <webcraft/async/io/adaptors.hpp>
-#include <webcraft/async/io/fs.hpp>
+#include <webcraft/async/io/io.hpp>
 #include <webcraft/async/runtime.hpp>
 #include <filesystem>
 #include <sstream>

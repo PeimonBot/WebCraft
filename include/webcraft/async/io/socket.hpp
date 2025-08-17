@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core.hpp"
+#include <webcraft/async/fire_and_forget_task.hpp>
 
 namespace webcraft::async::io::socket
 {
@@ -133,7 +134,7 @@ namespace webcraft::async::io::socket
         tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
         ~tcp_socket()
         {
-            sync_wait(close());
+            fire_and_forget(close());
         }
 
         task<void> connect(const connection_info &info)
@@ -189,12 +190,14 @@ namespace webcraft::async::io::socket
                 co_await descriptor->close();
             }
         }
-    
-        inline std::string get_remote_host() {
+
+        inline std::string get_remote_host()
+        {
             return descriptor->get_remote_host();
         }
 
-        inline uint16_t get_remote_port() {
+        inline uint16_t get_remote_port()
+        {
             return descriptor->get_remote_port();
         }
     };
@@ -210,7 +213,7 @@ namespace webcraft::async::io::socket
         {
             if (descriptor)
             {
-                sync_wait(descriptor->close());
+                fire_and_forget(descriptor->close());
             }
         }
 

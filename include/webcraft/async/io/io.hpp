@@ -4,3 +4,5 @@
 #include "adaptors.hpp"
 #include "fs.hpp"
 #include "socket.hpp"
+
+#define WEBCRAFT_MOCK_TESTS
