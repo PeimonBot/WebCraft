@@ -75,6 +75,8 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 
 #elif defined(__linux__)
 
+// TODO: implement internal buffering for recv() for files so it doesn't just read one byte at a time
+
 int ios_to_posix(std::ios_base::openmode mode)
 {
     int flags = 0;
