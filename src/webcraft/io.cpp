@@ -10,7 +10,7 @@ using namespace webcraft::async::io::fs;
 using namespace webcraft::async::io::fs::detail;
 using namespace webcraft::async::io::socket::detail;
 
-#if defined(WEBCRAFT_MOCK_TESTS)
+#if defined(WEBCRAFT_MOCK_FS_TESTS)
 
 class sync_file_descriptor : public file_descriptor
 {
@@ -73,24 +73,7 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
     co_return std::make_shared<sync_file_descriptor>(p, mode);
 }
 
-task<std::shared_ptr<tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
-{
-    throw std::runtime_error("TCP socket descriptor not implemented in mock tests");
-    co_return nullptr;
-}
-
-task<std::shared_ptr<tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
-{
-    throw std::runtime_error("TCP listener descriptor not implemented in mock tests");
-    co_return nullptr;
-}
-
-#elif defined(__linux__) && defined(WEBCRAFT_USE_IO_URING)
-#include <unistd.h>
-#include <arpa/inet.h>  // inet_ntop, ntohs, htons
-#include <netdb.h>      // getaddrinfo, getnameinfo
-#include <netinet/in.h> // sockaddr_in, sockaddr_in6
-#include <sys/socket.h> // socket functions, sockaddr_storage
+#elif defined(__linux__)
 
 int ios_to_posix(std::ios_base::openmode mode)
 {
@@ -127,6 +110,111 @@ int ios_to_posix(std::ios_base::openmode mode)
     return flags;
 }
 
+class io_uring_file_descriptor : public webcraft::async::io::fs::detail::file_descriptor
+{
+private:
+    int fd;
+    bool closed{false};
+
+public:
+    io_uring_file_descriptor(int fd, std::ios_base::openmode mode) : file_descriptor(mode), fd(fd)
+    {
+    }
+
+    ~io_uring_file_descriptor()
+    {
+        if (!closed)
+        {
+            fire_and_forget(close());
+        }
+    }
+
+    // virtual because we want to allow platform specific implementation
+    task<size_t> read(std::span<char> buffer) override
+    {
+        if ((mode & std::ios::in) != std::ios::in)
+        {
+            throw std::ios_base::failure("File not open for reading");
+        }
+
+        int fd = this->fd;
+        auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
+                                                                                                                 { io_uring_prep_read(sqe, fd, buffer.data(), buffer.size(), -1); }, {}));
+
+        co_await event;
+
+        co_return event.get_result();
+    }
+
+    task<size_t> write(std::span<char> buffer) override
+    {
+        if ((mode & std::ios::out) != std::ios::out)
+        {
+            throw std::ios_base::failure("File not open for writing");
+        }
+
+        int fd = this->fd;
+        auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
+                                                                                                                 { io_uring_prep_write(sqe, fd, buffer.data(), buffer.size(), 0); }, {}));
+
+        co_await event;
+
+        co_return event.get_result();
+    }
+
+    task<void> close() override
+    {
+        if (closed)
+            co_return;
+
+        int fd = this->fd;
+
+        co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
+                                                                                                             { io_uring_prep_close(sqe, fd); }, {}));
+
+        closed = true;
+    }
+};
+
+task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
+{
+    int flags = ios_to_posix(mode);
+
+    auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([flags, p](struct io_uring_sqe *sqe)
+                                                                                                             { io_uring_prep_open(sqe, p.c_str(), flags, 0644); }, {}));
+
+    co_await event;
+
+    int fd = event.get_result();
+    if (fd < 0)
+    {
+        throw std::ios_base::failure("Failed to open file");
+    }
+
+    co_return std::make_shared<io_uring_file_descriptor>(fd, mode);
+}
+
+#elif defined(_WIN32)
+#elif defined(__APPLE__)
+#else
+#endif
+
+#if defined(WEBCRAFT_MOCK_SOCKET_TESTS)
+
+task<std::shared_ptr<tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+{
+    throw std::runtime_error("TCP socket descriptor not implemented in mock tests");
+    co_return nullptr;
+}
+
+task<std::shared_ptr<tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
+{
+    throw std::runtime_error("TCP listener descriptor not implemented in mock tests");
+    co_return nullptr;
+}
+
+#elif defined(__linux__)
+
 std::pair<std::string, uint16_t> addr_to_host_port(
     const struct sockaddr_storage &addr)
 {
@@ -142,84 +230,6 @@ std::pair<std::string, uint16_t> addr_to_host_port(
     }
 
     return {std::string(host), static_cast<uint16_t>(std::stoi(service))};
-}
-
-class io_uring_file_descriptor : public webcraft::async::io::fs::detail::file_descriptor
-{
-private:
-    int fd;
-    bool closed{false};
-
-public:
-    io_uring_file_descriptor(int fd, std::ios_base::openmode mode) : file_descriptor(mode), fd(fd)
-    {
-    }
-
-    ~io_uring_file_descriptor() = default;
-
-    // virtual because we want to allow platform specific implementation
-    task<size_t> read(std::span<char> buffer) override
-    {
-        if ((mode & std::ios::in) != std::ios::in)
-        {
-            throw std::ios_base::failure("File not open for reading");
-        }
-
-        int fd = this->fd;
-        auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_read(sqe, fd, buffer.data(), buffer.size(), 0); }));
-
-        co_await event;
-
-        co_return event->get_result();
-    }
-
-    task<size_t> write(std::span<char> buffer) override
-    {
-        if ((mode & std::ios::out) != std::ios::out)
-        {
-            throw std::ios_base::failure("File not open for writing");
-        }
-
-        int fd = this->fd;
-        auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_write(sqe, fd, buffer.data(), buffer.size(), 0); }));
-
-        co_await event;
-
-        co_return event->get_result();
-    }
-
-    task<void> close() override
-    {
-        if (closed)
-            return;
-
-        int fd = this->fd;
-
-        co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                             { io_uring_prep_close(sqe, fd); }));
-
-        closed = true;
-    }
-};
-
-task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
-{
-    int flags = ios_to_posix(mode);
-
-    auto event = webcraft::async::detail::linux::create_io_uring_event([flags, p](struct io_uring_sqe *sqe)
-                                                                       { io_uring_prep_open(sqe, p.c_str(), flags, 0644); });
-
-    co_await webcraft::async::detail::as_awaitable(event);
-
-    int fd = event->get_result();
-    if (fd < 0)
-    {
-        throw std::ios_base::failure("Failed to open file");
-    }
-
-    co_return std::make_shared<io_uring_file_descriptor>(fd, mode);
 }
 
 class io_uring_tcp_socket_descriptor : public tcp_socket_descriptor
@@ -538,9 +548,5 @@ task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descripto
 {
     co_return std::make_shared<io_uring_tcp_listener_descriptor>();
 }
-
-#elif defined(_WIN32)
-#elif defined(__APPLE__)
-#else
 
 #endif

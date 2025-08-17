@@ -97,11 +97,13 @@ namespace webcraft::async
             { t.is_cancelled() } -> std::convertible_to<bool>;
         };
 
-        inline awaitable_event_t auto as_awaitable(std::unique_ptr<runtime_event> &event)
+        template <typename T>
+            requires std::is_base_of_v<runtime_event, T>
+        awaitable_event_t auto as_awaitable(std::unique_ptr<T> &event)
         {
             struct awaiter
             {
-                std::unique_ptr<runtime_event> &event;
+                std::unique_ptr<T> &event;
                 bool cancelled;
 
                 bool await_ready() const noexcept { return false; }
@@ -125,11 +127,13 @@ namespace webcraft::async
             return awaiter{event};
         }
 
-        inline awaitable_event_t auto as_awaitable(std::unique_ptr<runtime_event> &&event)
+        template <typename T>
+            requires std::is_base_of_v<runtime_event, T>
+        awaitable_event_t auto as_awaitable(std::unique_ptr<T> &&event)
         {
             struct awaiter
             {
-                std::unique_ptr<runtime_event> event;
+                std::unique_ptr<T> event;
                 bool cancelled;
 
                 bool await_ready() const noexcept { return false; }

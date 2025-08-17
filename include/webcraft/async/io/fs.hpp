@@ -143,7 +143,7 @@ namespace webcraft::async::io::fs
 
         task<file_wstream> open_writable_stream(bool append = false)
         {
-            auto descriptor = co_await detail::make_file_descriptor(p, append ? std::ios_base::app : std::ios_base::out);
+            auto descriptor = co_await detail::make_file_descriptor(p, std::ios_base::out | (append ? std::ios_base::app : std::ios_base::trunc));
             co_return file_wstream(descriptor);
         }
 
