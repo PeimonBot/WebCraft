@@ -9,6 +9,7 @@
 
 #include <webcraft/async/task.hpp>
 #include <webcraft/async/sync_wait.hpp>
+#include <webcraft/async/fire_and_forget_task.hpp>
 
 namespace webcraft::async
 {
@@ -206,6 +207,50 @@ namespace webcraft::async
             co_return;
 
         co_await detail::as_awaitable(detail::post_sleep_event(duration, token));
+    }
+
+    // TODO: create test cases for `set_timeout` and `set_interval`
+    /**
+     * Something simple like the following:
+     * ```
+     * // set timeout test
+     * runtime_context ctx;
+     *
+     * event_signal signal;
+     *
+     * auto f = async {
+     *
+     *   set_timeout([signal]() { signal.set(); }, 100ms);
+     *
+     *   sleep_for(100ms);
+     *
+     *   EXPECT_TRUE(signal.is_set());
+     * };
+     *
+     * sync_wait(f());
+     * ```
+     *
+     * Maybe an atomic counter for the set_interval?
+     */
+    template <typename Rep, typename Period>
+    inline fire_and_forget_task set_timeout(std::function<void()> func, std::chrono::duration<Rep, Period> duration, std::stop_token token = get_stop_token())
+    {
+        co_await sleep_for(duration, token);
+        if (token.stop_requested())
+            co_return;
+        func();
+    }
+
+    template <typename Rep, typename Period>
+    inline fire_and_forget_task set_interval(std::function<void()> func, std::chrono::duration<Rep, Period> duration, std::stop_token token = get_stop_token())
+    {
+        while (!token.stop_requested())
+        {
+            co_await sleep_for(duration, token);
+            if (token.stop_requested())
+                co_return;
+            func();
+        }
     }
 
     inline task<void> shutdown()

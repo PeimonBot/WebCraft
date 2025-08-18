@@ -66,12 +66,19 @@ namespace webcraft::async::io::socket
         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
 
     public:
-        explicit tcp_rstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+        explicit tcp_rstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(desc) {}
         ~tcp_rstream() = default;
         tcp_rstream(tcp_rstream &) = delete;
         tcp_rstream &operator=(tcp_rstream &) = delete;
-        tcp_rstream(tcp_rstream &&) = default;
-        tcp_rstream &operator=(tcp_rstream &&) = default;
+        tcp_rstream(tcp_rstream &&other) : descriptor(std::exchange(other.descriptor, nullptr)) {}
+        tcp_rstream &operator=(tcp_rstream &&other)
+        {
+            if (this != &other)
+            {
+                descriptor = std::exchange(other.descriptor, nullptr);
+            }
+            return *this;
+        }
 
         task<size_t> recv(std::span<char> buffer)
         {
@@ -104,12 +111,19 @@ namespace webcraft::async::io::socket
         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
 
     public:
-        explicit tcp_wstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+        explicit tcp_wstream(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(desc) {}
         ~tcp_wstream() = default;
         tcp_wstream(tcp_wstream &) = delete;
         tcp_wstream &operator=(tcp_wstream &) = delete;
-        tcp_wstream(tcp_wstream &&) = default;
-        tcp_wstream &operator=(tcp_wstream &&) = default;
+        tcp_wstream(tcp_wstream &&other) : descriptor(std::exchange(other.descriptor, nullptr)) {}
+        tcp_wstream &operator=(tcp_wstream &&other)
+        {
+            if (this != &other)
+            {
+                descriptor = std::exchange(other.descriptor, nullptr);
+            }
+            return *this;
+        }
 
         task<size_t> send(std::span<const char> buffer)
         {
@@ -143,18 +157,21 @@ namespace webcraft::async::io::socket
         std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
         tcp_rstream read_stream;
         tcp_wstream write_stream;
+        bool read_shutdown{false};
+        bool write_shutdown{false};
 
     public:
         tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(desc), read_stream(descriptor), write_stream(descriptor)
         {
         }
+
         ~tcp_socket()
         {
             fire_and_forget(close());
         }
 
-        tcp_socket(tcp_socket&& other) noexcept
-            : descriptor(std::move(other.descriptor)),
+        tcp_socket(tcp_socket &&other) noexcept
+            : descriptor(std::exchange(other.descriptor, nullptr)),
               read_stream(std::move(other.read_stream)),
               write_stream(std::move(other.write_stream))
         {
@@ -164,7 +181,7 @@ namespace webcraft::async::io::socket
         {
             if (this != &other)
             {
-                descriptor = std::move(other.descriptor);
+                descriptor = std::exchange(other.descriptor, nullptr);
                 read_stream = std::move(other.read_stream);
                 write_stream = std::move(other.write_stream);
             }
@@ -173,16 +190,23 @@ namespace webcraft::async::io::socket
 
         task<void> connect(const connection_info &info)
         {
+            if (!descriptor)
+                throw std::runtime_error("Descriptor is null");
+
             co_await descriptor->connect(info);
         }
 
         tcp_rstream &get_readable_stream()
         {
+            if (!descriptor)
+                throw std::runtime_error("Descriptor is null");
             return read_stream;
         }
 
         tcp_wstream &get_writable_stream()
         {
+            if (!descriptor)
+                throw std::runtime_error("Descriptor is null");
             return write_stream;
         }
 
@@ -191,21 +215,25 @@ namespace webcraft::async::io::socket
             if (mode == socket_stream_mode::READ)
             {
                 co_await read_stream.close();
+                this->read_shutdown = true;
             }
             else if (mode == socket_stream_mode::WRITE)
             {
                 co_await write_stream.close();
+                this->write_shutdown = true;
             }
         }
 
         task<void> close()
         {
-            co_await read_stream.close();
-            co_await write_stream.close();
-
             if (descriptor)
             {
+                if (!read_shutdown)
+                    co_await read_stream.close();
+                if (!write_shutdown)
+                    co_await write_stream.close();
                 co_await descriptor->close();
+                descriptor.reset();
             }
         }
 

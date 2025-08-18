@@ -17,17 +17,34 @@ const uint16_t port = 80;
 struct connection_results
 {
     std::string response;
-    int status_code;
 };
 
 connection_results get_google_results_sync();
 
-task<connection_results> get_google_results_async(tcp_rstream& rstream, tcp_wstream &wstream);
+std::string get_body(const std::string &response)
+{
+    auto pos = response.find("\r\n\r\n");
+    return (pos != std::string::npos) ? response.substr(pos + 4) : response;
+}
+
+std::string get_status_line(const std::string &resp)
+{
+    auto pos = resp.find("\r\n");
+    return (pos != std::string::npos) ? resp.substr(0, pos) : resp;
+};
+
+TEST_CASE(TestInternetAvailable)
+{
+    connection_results results;
+    EXPECT_NO_THROW(results = get_google_results_sync()) << "Internet should be available";
+
+    EXPECT_FALSE(results.response.empty()) << "Response should not be empty";
+}
+
+task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstream &wstream);
 
 TEST_CASE(TestSocketConnection)
 {
-    throw std::logic_error("not implemented yet");
-
     runtime_context context;
 
     connection_results sync_results = get_google_results_sync();
@@ -46,8 +63,11 @@ TEST_CASE(TestSocketConnection)
 
         connection_results async_results = co_await get_google_results_async(socket_rstream, socket_wstream);
 
-        EXPECT_EQ(async_results.status_code, sync_results.status_code) << "Status codes should be the same";
-        EXPECT_EQ(async_results.response, sync_results.response) << "Responses should be the same";
+        EXPECT_EQ(get_status_line(async_results.response), get_status_line(sync_results.response)) << "Status lines should be the same";
+        EXPECT_EQ(get_body(async_results.response), get_body(sync_results.response))
+            << "Bodies should be the same";
+
+        co_await socket.close();
     };
 
     sync_wait(task_fn());
@@ -101,22 +121,106 @@ TEST_CASE(TestSocketPubSub)
     sync_wait(when_all(listener_fn(), socket_fn()));
 }
 
+#ifdef __linux__
+#include <unistd.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+
 connection_results get_google_results_sync()
 {
-    return connection_results();
+    connection_results results;
+
+    // --- Resolve hostname ---
+    addrinfo hints{}, *res;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;     // IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP
+
+    if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res) != 0)
+    {
+        throw std::runtime_error("getaddrinfo failed");
+    }
+
+    // --- Create socket ---
+    int sockfd = ::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (sockfd < 0)
+    {
+        freeaddrinfo(res);
+        throw std::runtime_error("socket failed");
+    }
+
+    // --- Connect ---
+    if (connect(sockfd, res->ai_addr, res->ai_addrlen) < 0)
+    {
+        close(sockfd);
+        freeaddrinfo(res);
+        throw std::runtime_error("connect failed");
+    }
+
+    freeaddrinfo(res);
+
+    // --- Send HTTP GET request ---
+    std::string request =
+        "GET / HTTP/1.1\r\n"
+        "Host: google.com\r\n"
+        "Connection: close\r\n"
+        "\r\n";
+
+    if (send(sockfd, request.c_str(), request.size(), 0) < 0)
+    {
+        close(sockfd);
+        throw std::runtime_error("send failed");
+    }
+
+    // --- Read response ---
+    char buffer[4096];
+    ssize_t bytes_received;
+    while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0)
+    {
+        results.response.append(buffer, bytes_received);
+    }
+
+    if (bytes_received < 0)
+    {
+        close(sockfd);
+        throw std::runtime_error("recv failed");
+    }
+
+    close(sockfd);
+
+    return results;
 }
 
-task<connection_results> get_google_results_async(tcp_rstream& rstream, tcp_wstream &wstream)
+#endif
+
+task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstream &wstream)
 {
-    co_return {"", 200};
+    connection_results results;
+
+    // --- Send HTTP GET request ---
+    std::string request =
+        "GET / HTTP/1.1\r\n"
+        "Host: google.com\r\n"
+        "Connection: close\r\n"
+        "\r\n";
+
+    co_await wstream.send(std::span<const char>(request.begin(), request.end()));
+    co_await wstream.close();
+
+    // --- Read response ---
+    std::vector<char> content = co_await (rstream | collect<std::vector<char>, char>(collectors::to_vector<char>()));
+    results.response = std::string(content.begin(), content.end());
+    co_await rstream.close();
+
+    co_return results;
 }
 
 task<void> handle_server_side_async(tcp_socket &client_peer)
 {
-    co_return;
+    throw std::runtime_error("not implemented yet");
 }
 
 task<void> handle_client_side_async(tcp_socket &client)
 {
-    co_return;
+    throw std::runtime_error("not implemented yet");
 }
