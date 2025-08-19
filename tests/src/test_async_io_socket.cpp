@@ -73,8 +73,6 @@ TEST_CASE(TestSocketConnection)
     sync_wait(task_fn());
 }
 
-// TODO: Make another test case with server running in one thread and sync client running in another
-
 task<void> handle_server_side_async(tcp_socket &client_peer);
 task<void> handle_client_side_async(tcp_socket &client);
 void handle_client_side_sync(const std::string &host, uint16_t port);
