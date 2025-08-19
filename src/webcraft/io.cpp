@@ -141,7 +141,7 @@ public:
 
         int fd = this->fd;
         auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_read(sqe, fd, buffer.data(), buffer.size(), -1); }, {}));
+                                                                                                                 { io_uring_prep_read(sqe, fd, buffer.data(), buffer.size(), -1); }));
 
         co_await event;
 
@@ -157,7 +157,7 @@ public:
 
         int fd = this->fd;
         auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_write(sqe, fd, buffer.data(), buffer.size(), 0); }, {}));
+                                                                                                                 { io_uring_prep_write(sqe, fd, buffer.data(), buffer.size(), 0); }));
 
         co_await event;
 
@@ -172,7 +172,7 @@ public:
         int fd = this->fd;
 
         co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                             { io_uring_prep_close(sqe, fd); }, {}));
+                                                                                                             { io_uring_prep_close(sqe, fd); }));
 
         closed = true;
     }
@@ -249,7 +249,10 @@ private:
     uint16_t port;
 
 public:
-    io_uring_tcp_socket_descriptor() = default;
+    io_uring_tcp_socket_descriptor()
+    {
+        fd = -1;
+    }
 
     io_uring_tcp_socket_descriptor(int fd, std::string host, uint16_t port) : fd(fd), host(std::move(host)), port(port)
     {
@@ -262,13 +265,16 @@ public:
 
     task<void> close() override
     {
+        if (fd == -1)
+            co_return;
+
         bool expected = false;
         if (closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
         {
             int fd = this->fd;
 
             co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_close(sqe, fd); }, {}));
+                                                                                                                 { io_uring_prep_close(sqe, fd); }));
         }
     }
 
@@ -276,7 +282,7 @@ public:
     {
         int fd = this->fd;
         auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_recv(sqe, fd, buffer.data(), buffer.size(), 0); }, {}));
+                                                                                                                 { io_uring_prep_recv(sqe, fd, buffer.data(), buffer.size(), 0); }));
 
         co_await event;
 
@@ -292,7 +298,7 @@ public:
     {
         int fd = this->fd;
         auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, buffer](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_write(sqe, fd, buffer.data(), buffer.size(), 0); }, {}));
+                                                                                                                 { io_uring_prep_write(sqe, fd, buffer.data(), buffer.size(), 0); }));
 
         co_await event;
 
@@ -316,7 +322,6 @@ public:
         hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
         hints.ai_socktype = SOCK_STREAM; // TCP
         hints.ai_protocol = IPPROTO_TCP;
-        hints.ai_flags = AI_CANONNAME;
 
         struct addrinfo *res;
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
@@ -325,6 +330,7 @@ public:
             throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
         }
 
+        bool flag = false;
         for (auto *rp = res; rp; rp = rp->ai_next)
         {
 
@@ -333,12 +339,11 @@ public:
             int protocol = rp->ai_protocol;
             const sockaddr *addr = rp->ai_addr;
             const socklen_t len = rp->ai_addrlen;
-            const char *canonname = rp->ai_canonname;
 
             int fd = socket(family, sock_type, protocol);
             if (fd < 0)
             {
-                std::cout << "Socket creation failed: " << strerror(errno) << std::endl;
+                continue;
             }
 
             // Await io_uring connect
@@ -347,25 +352,27 @@ public:
                     [fd, addr, len](struct io_uring_sqe *sqe)
                     {
                         io_uring_prep_connect(sqe, fd, addr, len);
-                    },
-                    {}));
+                    }));
 
             co_await event;
 
             if (event.get_result() < 0)
             {
                 co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                     { io_uring_prep_close(sqe, fd); }, {}));
+                                                                                                                     { io_uring_prep_close(sqe, fd); }));
             }
             else
             {
                 this->fd = fd;
+                flag = true;
                 break;
             }
         }
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
+        if (!flag)
+            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
         co_return;
     }
 
@@ -376,12 +383,12 @@ public:
         if (mode == webcraft::async::io::socket::socket_stream_mode::READ)
         {
             co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_shutdown(sqe, fd, SHUT_RD); }, {}));
+                                                                                                                 { io_uring_prep_shutdown(sqe, fd, SHUT_RD); }));
         }
         else
         {
             co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_shutdown(sqe, fd, SHUT_WR); }, {}));
+                                                                                                                 { io_uring_prep_shutdown(sqe, fd, SHUT_WR); }));
         }
 
         co_return;
@@ -398,32 +405,58 @@ public:
     }
 };
 
-#ifndef WEBCRAFT_MOCK_LISTENER_TESTS
+task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+{
+    co_return std::make_shared<io_uring_tcp_socket_descriptor>();
+}
 
-class io_uring_tcp_listener_descriptor : public webcraft::async::io::socket::tcp_listener_descriptor
+#endif
+
+#ifdef WEBCRAFT_MOCK_LISTENER_TESTS
+
+task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+{
+    co_return std::make_shared<io_uring_tcp_socket_descriptor>();
+}
+
+task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
+{
+    throw std::runtime_error("Not implemented yet");
+}
+
+#elif defined(__linux__)
+
+class io_uring_tcp_listener_descriptor : public webcraft::async::io::socket::detail::tcp_listener_descriptor
 {
 private:
     int fd;
-    bool closed{false};
+    std::atomic<bool> closed{false};
 
 public:
     io_uring_tcp_listener_descriptor()
     {
+        fd = -1;
     }
 
-    ~io_uring_tcp_listener_descriptor() = default;
+    ~io_uring_tcp_listener_descriptor()
+    {
+        fire_and_forget(close());
+    }
 
     task<void> close() override
     {
-        if (closed)
+        if (fd == -1)
             co_return;
 
-        int fd = this->fd;
+        bool expected = false;
+        if (closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        {
+            int fd = this->fd;
 
-        co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                             { io_uring_prep_close(sqe, fd); }, {}));
-
-        closed = true;
+            co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
+                                                                                                                 { io_uring_prep_close(sqe, fd); }));
+        }
+        co_return;
     }
 
     task<void> bind(const webcraft::async::io::socket::connection_info &info) override
@@ -443,88 +476,80 @@ public:
             throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
         }
 
-        // We'll just take the first result
-        const struct sockaddr *addr = res->ai_addr, *rp;
-        socklen_t addr_len = res->ai_addrlen;
+        bool flag = false;
 
-        for (rp = res; rp != nullptr; rp = rp->ai_next)
+        for (auto *rp = res; rp; rp = rp->ai_next)
         {
+
+            int family = rp->ai_family;
+            int sock_type = rp->ai_socktype;
+            int protocol = rp->ai_protocol;
+            sockaddr *addr = rp->ai_addr;
+            socklen_t len = rp->ai_addrlen;
+
+            int fd = socket(family, sock_type, protocol);
+            if (fd < 0)
             {
-                auto event = webcraft::async::detail::as_awaitable(
-                    webcraft::async::detail::linux::create_io_uring_event(
-                        [rp](struct io_uring_sqe *sqe)
-                        {
-                            io_uring_prep_socket(sqe, rp->ai_family, rp->ai_socktype, rp->ai_protocol, SOCK_CLOEXEC | SOCK_NONBLOCK);
-                        },
-                        {}));
-
-                co_await event;
-
-                if (event->get_result() < 0)
-                {
-                    continue;
-                }
-
-                this->fd = event->get_result();
+                continue;
             }
 
+            int opt = 1;
+            if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
             {
+                ::close(fd);
+                continue;
+            }
 
-                int fd = this->fd;
+            // Await io_uring bind
+            int result = ::bind(fd, addr, len);
 
-                // Await io_uring connect
-                auto event = webcraft::async::detail::as_awaitable(
-                    webcraft::async::detail::linux::create_io_uring_event(
-                        [fd, rp](struct io_uring_sqe *sqe)
-                        {
-                            io_uring_prep_bind(sqe, fd, rp->ai_addr, rp->ai_addrlen);
-                        },
-                        {}));
-
-                co_await event;
-
-                if (event->get_result())
-                {
-                    break;
-                }
-
-                co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                     { io_uring_prep_close(sqe, fd); }, {}));
+            if (result < 0)
+            {
+                ::close(fd);
+                continue;
+            }
+            else
+            {
+                this->fd = fd;
+                flag = true;
+                break;
             }
         }
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
-        if (rp == nullptr)
-        {
-            throw std::ios_base::failure("Failed to connect: No valid address found");
-        }
+        if (!flag)
+            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
+        co_return;
     }
 
     task<void> listen(int backlog) override
     {
         int fd = this->fd;
 
-        co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, backlog](struct io_uring_sqe *sqe)
-                                                                                                             { io_uring_prep_listen(sqe, fd, backlog); }, {}));
+        int result = ::listen(fd, backlog);
 
+        if (result < 0)
+        {
+            throw std::ios_base::failure("Failed to listen: " + std::to_string(result) + ", value: " + strerror(errno));
+        }
         co_return;
     }
 
-    task<std::shared_ptr<webcraft::async::io::socket::tcp_listener_descriptor>> accept() override
+    task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> accept() override
     {
         int fd = this->fd;
         struct sockaddr_storage addr;
         socklen_t addr_len = sizeof(addr);
 
         auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd, &addr, addr_len](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_accept(sqe, fd, (struct sockaddr *)&addr, &addr_len, SOCK_CLOEXEC | SOCK_NONBLOCK); }, {}));
+                                                                                                                 { io_uring_prep_accept(sqe, fd, (struct sockaddr *)&addr, (socklen_t *)&addr_len, SOCK_CLOEXEC); }));
 
         co_await event;
 
-        if (event->get_result() < 0)
+        if (event.get_result() < 0)
         {
-            throw std::ios_base::failure("Failed to accept connection: " + std::to_string(event->get_result()));
+            throw std::ios_base::failure("Failed to accept connection: " + std::to_string(event.get_result()) + ", value: " + strerror(-event.get_result()));
         }
 
         auto [host, port] = addr_to_host_port(addr);
@@ -534,7 +559,7 @@ public:
             co_return nullptr;
         }
 
-        co_return std::make_shared<io_uring_tcp_socket_descriptor>(event->get_result(), host, port);
+        co_return std::make_shared<io_uring_tcp_socket_descriptor>(event.get_result(), host, port);
     }
 };
 
@@ -543,16 +568,6 @@ task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descripto
     co_return std::make_shared<io_uring_tcp_listener_descriptor>();
 }
 
-#endif
-
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
-{
-    co_return std::make_shared<io_uring_tcp_socket_descriptor>();
-}
-
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
-{
-    throw std::runtime_error("Not implemented yet");
-}
+#else
 
 #endif

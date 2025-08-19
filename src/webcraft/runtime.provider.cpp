@@ -127,7 +127,7 @@ bool start_runtime_async() noexcept
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
 {
     return webcraft::async::detail::linux::create_io_uring_event([](struct io_uring_sqe *sqe)
-                                                                 { io_uring_prep_nop(sqe); }, {});
+                                                                 { io_uring_prep_nop(sqe); });
 }
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)

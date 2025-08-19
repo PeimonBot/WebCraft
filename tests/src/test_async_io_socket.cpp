@@ -78,10 +78,30 @@ TEST_CASE(TestSocketConnection)
 task<void> handle_server_side_async(tcp_socket &client_peer);
 task<void> handle_client_side_async(tcp_socket &client);
 
+// TEST_CASE(TestSocketListener)
+// {
+//     runtime_context context;
+//     const std::string localhost = "127.0.0.1";
+//     const uint16_t port = 5000;
+
+//     auto listener_fn = [&]() -> task<void>
+//     {
+//         tcp_listener listener = co_await make_tcp_listener();
+
+//         co_await listener.bind({localhost, port});
+
+//         co_await listener.listen(1);
+
+//         // send the signal that server is ready for connections
+
+//         tcp_socket client_peer = co_await listener.accept();
+//     };
+
+//     sync_wait(listener_fn());
+// }
+
 TEST_CASE(TestSocketPubSub)
 {
-
-    throw std::logic_error("not implemented yet");
 
     runtime_context context;
 
@@ -92,33 +112,42 @@ TEST_CASE(TestSocketPubSub)
     auto listener_fn = [&]() -> task<void>
     {
         tcp_listener listener = co_await make_tcp_listener();
+        std::cout << "Server: Server socket was made." << std::endl;
 
+        std::cout << "Server: Preparing to bind" << std::endl;
         co_await listener.bind({localhost, port});
+        std::cout << "Server: Server socket was bound to " << localhost << ":" << port << std::endl;
 
         co_await listener.listen(1);
+        std::cout << "Server: Server socket is now listening on " << localhost << ":" << port << std::endl;
 
         // send the signal that server is ready for connections
         signal.set();
 
         tcp_socket client_peer = co_await listener.accept();
         co_await handle_server_side_async(client_peer);
+        std::cout << "Server: All went well" << std::endl;
     };
 
     auto socket_fn = [&]() -> task<void>
     {
         tcp_socket client = co_await make_tcp_socket();
+        std::cout << "Client: Client socket was made." << std::endl;
 
         // Wait until server is set up
         co_await signal;
 
         co_await client.connect({localhost, port});
+        std::cout << "Client: Connecting to " << localhost << ":" << port << std::endl;
         EXPECT_EQ(localhost, client.get_remote_host()) << "Remote host should match";
         EXPECT_EQ(port, client.get_remote_port()) << "Remote port should match";
 
         co_await handle_client_side_async(client);
+        std::cout << "Client: All went well" << std::endl;
     };
 
     sync_wait(when_all(listener_fn(), socket_fn()));
+    std::cout << "Everything went well" << std::endl;
 }
 
 #ifdef __linux__
@@ -215,12 +244,37 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
     co_return results;
 }
 
+const std::string content = "Hello World!";
+constexpr size_t content_size = 12;
+
 task<void> handle_server_side_async(tcp_socket &client_peer)
 {
-    throw std::runtime_error("not implemented yet");
+    auto &client_peer_rstream = client_peer.get_readable_stream();
+    auto &client_peer_wstream = client_peer.get_writable_stream();
+
+    std::array<char, content_size> buffer;
+    size_t bytes_received = co_await client_peer_rstream.recv(std::span<char>(buffer.begin(), buffer.end()));
+    EXPECT_EQ(bytes_received, content_size) << "Bytes received should be " << content_size;
+    std::cout << "Server: Received from client: " << bytes_received << std::endl;
+    bool sent = co_await client_peer_wstream.send(std::span<const char>(buffer.begin(), buffer.end()));
+    EXPECT_TRUE(sent) << "Data should be sent";
+    std::cout << "Server: Sent the bytes to client: " << sent << std::endl;
 }
 
 task<void> handle_client_side_async(tcp_socket &client)
 {
-    throw std::runtime_error("not implemented yet");
+    auto &client_rstream = client.get_readable_stream();
+    auto &client_wstream = client.get_writable_stream();
+
+    std::array<char, 12> rbuffer;
+    std::array<char, 12> wbuffer;
+    std::copy(content.begin(), content.end(), wbuffer.begin());
+
+    bool sent = co_await client_wstream.send(wbuffer);
+    EXPECT_TRUE(sent) << "Data should be sent";
+    std::cout << "Client: Sent the bytes to server: " << sent << std::endl;
+    size_t bytes_received = co_await client_rstream.recv(rbuffer);
+    EXPECT_EQ(bytes_received, content.size()) << "Bytes received should be " << content.size();
+    std::cout << "Client: Received from server: " << bytes_received << std::endl;
+    EXPECT_EQ(wbuffer, rbuffer);
 }

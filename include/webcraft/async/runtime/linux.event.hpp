@@ -60,7 +60,7 @@ namespace webcraft::async::detail::linux
 
     using io_uring_operation = std::function<void(struct io_uring_sqe *)>;
 
-    inline auto create_io_uring_event(io_uring_operation op, std::stop_token token)
+    inline auto create_io_uring_event(io_uring_operation op, std::stop_token token = get_stop_token())
     {
         struct io_uring_runtime_event_impl : public io_uring_runtime_event
         {
