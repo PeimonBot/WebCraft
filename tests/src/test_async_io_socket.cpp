@@ -77,28 +77,48 @@ TEST_CASE(TestSocketConnection)
 
 task<void> handle_server_side_async(tcp_socket &client_peer);
 task<void> handle_client_side_async(tcp_socket &client);
+void handle_client_side_sync(const std::string &host, uint16_t port);
 
-// TEST_CASE(TestSocketListener)
-// {
-//     runtime_context context;
-//     const std::string localhost = "127.0.0.1";
-//     const uint16_t port = 5000;
+TEST_CASE(TestAsyncServerSyncClient)
+{
+    runtime_context context;
 
-//     auto listener_fn = [&]() -> task<void>
-//     {
-//         tcp_listener listener = co_await make_tcp_listener();
+    async_event signal;
+    const std::string localhost = "127.0.0.1";
+    const uint16_t port = 5001;
 
-//         co_await listener.bind({localhost, port});
+    auto listener_fn = [&]() -> task<void>
+    {
+        tcp_listener listener = make_tcp_listener();
+        std::cout << "Async Server: Server socket was made." << std::endl;
 
-//         co_await listener.listen(1);
+        listener.bind({localhost, port});
+        std::cout << "Async Server: Server socket was bound to " << localhost << ":" << port << std::endl;
 
-//         // send the signal that server is ready for connections
+        listener.listen(1);
+        std::cout << "Async Server: Server socket is now listening on " << localhost << ":" << port << std::endl;
 
-//         tcp_socket client_peer = co_await listener.accept();
-//     };
+        // send the signal that server is ready for connections
+        signal.set();
 
-//     sync_wait(listener_fn());
-// }
+        tcp_socket client_peer = co_await listener.accept();
+        co_await handle_server_side_async(client_peer);
+        std::cout << "Async Server: All went well" << std::endl;
+    };
+
+    std::thread client_thread([&]()
+                              {
+        sync_wait(co_async {
+            co_await signal;
+        }());
+        std::cout << "Sync Client: Starting sync client" << std::endl;
+        handle_client_side_sync(localhost, port);
+        std::cout << "Sync Client: All went well" << std::endl; });
+
+    sync_wait(listener_fn());
+    client_thread.join();
+    std::cout << "Mixed async/sync test completed successfully" << std::endl;
+}
 
 TEST_CASE(TestSocketPubSub)
 {
@@ -149,6 +169,9 @@ TEST_CASE(TestSocketPubSub)
     sync_wait(when_all(listener_fn(), socket_fn()));
     std::cout << "Everything went well" << std::endl;
 }
+
+const std::string content = "Hello World!";
+constexpr size_t content_size = 12;
 
 #ifdef __linux__
 #include <unistd.h>
@@ -220,6 +243,54 @@ connection_results get_google_results_sync()
     return results;
 }
 
+void handle_client_side_sync(const std::string &host, uint16_t port)
+{
+    // --- Create socket ---
+    int sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        throw std::runtime_error("socket failed");
+    }
+
+    // --- Connect ---
+    sockaddr_in server_addr{};
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr);
+
+    if (connect(sockfd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
+    {
+        close(sockfd);
+        throw std::runtime_error("connect failed");
+    }
+
+    // --- Send data ---
+    std::array<char, 12> wbuffer;
+    std::copy(content.begin(), content.end(), wbuffer.begin());
+
+    if (send(sockfd, wbuffer.data(), wbuffer.size(), 0) < 0)
+    {
+        close(sockfd);
+        throw std::runtime_error("send failed");
+    }
+    std::cout << "Sync Client: Sent data to server" << std::endl;
+
+    // --- Receive data ---
+    std::array<char, 12> rbuffer;
+    ssize_t bytes_received = recv(sockfd, rbuffer.data(), rbuffer.size(), 0);
+    if (bytes_received < 0)
+    {
+        close(sockfd);
+        throw std::runtime_error("recv failed");
+    }
+    std::cout << "Sync Client: Received " << bytes_received << " bytes from server" << std::endl;
+
+    EXPECT_EQ(static_cast<size_t>(bytes_received), content.size()) << "Bytes received should be " << content.size();
+    EXPECT_EQ(wbuffer, rbuffer) << "Sent and received data should match";
+
+    close(sockfd);
+}
+
 #endif
 
 task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstream &wstream)
@@ -243,9 +314,6 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
 
     co_return results;
 }
-
-const std::string content = "Hello World!";
-constexpr size_t content_size = 12;
 
 task<void> handle_server_side_async(tcp_socket &client_peer)
 {
