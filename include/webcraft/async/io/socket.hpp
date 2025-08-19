@@ -38,7 +38,7 @@ namespace webcraft::async::io::socket
             virtual task<void> connect(const connection_info &info) = 0;  // Connect to a server
             virtual task<size_t> read(std::span<char> buffer) = 0;        // Read data from the socket
             virtual task<size_t> write(std::span<const char> buffer) = 0; // Write data to the socket
-            virtual task<void> shutdown(socket_stream_mode mode) = 0;     // Shutdown the socket
+            virtual void shutdown(socket_stream_mode mode) = 0;           // Shutdown the socket
 
             virtual std::string get_remote_host() = 0;
             virtual uint16_t get_remote_port() = 0;
@@ -50,13 +50,13 @@ namespace webcraft::async::io::socket
             tcp_listener_descriptor() = default;
             virtual ~tcp_listener_descriptor() = default;
 
-            virtual task<void> bind(const connection_info &info) = 0;          // Bind the listener to an address
-            virtual task<void> listen(int backlog) = 0;                        // Start listening for incoming connections
+            virtual void bind(const connection_info &info) = 0;                // Bind the listener to an address
+            virtual void listen(int backlog) = 0;                              // Start listening for incoming connections
             virtual task<std::shared_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
         };
 
-        task<std::shared_ptr<tcp_socket_descriptor>> make_tcp_socket_descriptor();
-        task<std::shared_ptr<tcp_listener_descriptor>> make_tcp_listener_descriptor();
+        std::shared_ptr<tcp_socket_descriptor> make_tcp_socket_descriptor();
+        std::shared_ptr<tcp_listener_descriptor> make_tcp_listener_descriptor();
 
     }
 
@@ -97,7 +97,8 @@ namespace webcraft::async::io::socket
 
         task<void> close()
         {
-            co_await descriptor->shutdown(socket_stream_mode::READ);
+            descriptor->shutdown(socket_stream_mode::READ);
+            co_return;
         }
     };
 
@@ -143,7 +144,8 @@ namespace webcraft::async::io::socket
 
         task<void> close()
         {
-            co_await descriptor->shutdown(socket_stream_mode::WRITE);
+            descriptor->shutdown(socket_stream_mode::WRITE);
+            co_return;
         }
     };
 
@@ -210,16 +212,16 @@ namespace webcraft::async::io::socket
             return write_stream;
         }
 
-        task<void> shutdown_channel(socket_stream_mode mode)
+        void shutdown_channel(socket_stream_mode mode)
         {
-            if (mode == socket_stream_mode::READ)
+            if (mode == socket_stream_mode::READ && !read_shutdown)
             {
-                co_await read_stream.close();
+                descriptor->shutdown(socket_stream_mode::READ);
                 this->read_shutdown = true;
             }
-            else if (mode == socket_stream_mode::WRITE)
+            else if (mode == socket_stream_mode::WRITE && !write_shutdown)
             {
-                co_await write_stream.close();
+                descriptor->shutdown(socket_stream_mode::WRITE);
                 this->write_shutdown = true;
             }
         }
@@ -228,10 +230,8 @@ namespace webcraft::async::io::socket
         {
             if (descriptor)
             {
-                if (!read_shutdown)
-                    co_await read_stream.close();
-                if (!write_shutdown)
-                    co_await write_stream.close();
+                shutdown_channel(socket_stream_mode::READ);
+                shutdown_channel(socket_stream_mode::WRITE);
                 co_await descriptor->close();
                 descriptor.reset();
             }
@@ -263,14 +263,14 @@ namespace webcraft::async::io::socket
             }
         }
 
-        task<void> bind(const connection_info &info)
+        void bind(const connection_info &info)
         {
-            return descriptor->bind(info);
+            descriptor->bind(info);
         }
 
-        task<void> listen(int backlog)
+        void listen(int backlog)
         {
-            return descriptor->listen(backlog);
+            descriptor->listen(backlog);
         }
 
         task<tcp_socket> accept()
@@ -279,15 +279,13 @@ namespace webcraft::async::io::socket
         }
     };
 
-    inline task<tcp_socket> make_tcp_socket()
+    inline tcp_socket make_tcp_socket()
     {
-        auto descriptor = co_await detail::make_tcp_socket_descriptor();
-        co_return tcp_socket(descriptor);
+        return tcp_socket(detail::make_tcp_socket_descriptor());
     }
 
-    inline task<tcp_listener> make_tcp_listener()
+    inline tcp_listener make_tcp_listener()
     {
-        auto descriptor = co_await detail::make_tcp_listener_descriptor();
-        co_return tcp_listener(descriptor);
+        return tcp_listener(detail::make_tcp_listener_descriptor());
     }
 }

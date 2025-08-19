@@ -177,9 +177,7 @@ namespace webcraft::async
 
         ~runtime_context()
         {
-            std::cout << "Shutting down" << std::endl;
             detail::shutdown_runtime();
-            std::cout << "Shut down" << std::endl;
         }
         runtime_context(const runtime_context &) = delete;
         runtime_context &operator=(const runtime_context &) = delete;

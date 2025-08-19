@@ -51,7 +51,7 @@ TEST_CASE(TestSocketConnection)
 
     auto task_fn = [&]() -> task<void>
     {
-        auto socket = co_await make_tcp_socket();
+        auto socket = make_tcp_socket();
 
         co_await socket.connect({host, port});
 
@@ -111,14 +111,14 @@ TEST_CASE(TestSocketPubSub)
 
     auto listener_fn = [&]() -> task<void>
     {
-        tcp_listener listener = co_await make_tcp_listener();
+        tcp_listener listener = make_tcp_listener();
         std::cout << "Server: Server socket was made." << std::endl;
 
         std::cout << "Server: Preparing to bind" << std::endl;
-        co_await listener.bind({localhost, port});
+        listener.bind({localhost, port});
         std::cout << "Server: Server socket was bound to " << localhost << ":" << port << std::endl;
 
-        co_await listener.listen(1);
+        listener.listen(1);
         std::cout << "Server: Server socket is now listening on " << localhost << ":" << port << std::endl;
 
         // send the signal that server is ready for connections
@@ -131,7 +131,7 @@ TEST_CASE(TestSocketPubSub)
 
     auto socket_fn = [&]() -> task<void>
     {
-        tcp_socket client = co_await make_tcp_socket();
+        tcp_socket client = make_tcp_socket();
         std::cout << "Client: Client socket was made." << std::endl;
 
         // Wait until server is set up

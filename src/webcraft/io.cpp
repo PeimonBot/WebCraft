@@ -209,12 +209,6 @@ task<std::shared_ptr<tcp_socket_descriptor>> webcraft::async::io::socket::detail
     co_return nullptr;
 }
 
-task<std::shared_ptr<tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
-{
-    throw std::runtime_error("TCP listener descriptor not implemented in mock tests");
-    co_return nullptr;
-}
-
 #elif defined(__linux__)
 
 #include <unistd.h>
@@ -358,8 +352,7 @@ public:
 
             if (event.get_result() < 0)
             {
-                co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                     { io_uring_prep_close(sqe, fd); }));
+                ::close(fd);
             }
             else
             {
@@ -373,25 +366,20 @@ public:
 
         if (!flag)
             throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
-        co_return;
     }
 
-    task<void> shutdown(webcraft::async::io::socket::socket_stream_mode mode)
+    void shutdown(webcraft::async::io::socket::socket_stream_mode mode)
     {
         int fd = this->fd;
 
         if (mode == webcraft::async::io::socket::socket_stream_mode::READ)
         {
-            co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_shutdown(sqe, fd, SHUT_RD); }));
+            ::shutdown(fd, SHUT_RD);
         }
         else
         {
-            co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
-                                                                                                                 { io_uring_prep_shutdown(sqe, fd, SHUT_WR); }));
+            ::shutdown(fd, SHUT_WR);
         }
-
-        co_return;
     }
 
     std::string get_remote_host() override
@@ -405,21 +393,16 @@ public:
     }
 };
 
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
 {
-    co_return std::make_shared<io_uring_tcp_socket_descriptor>();
+    return std::make_shared<io_uring_tcp_socket_descriptor>();
 }
 
 #endif
 
 #ifdef WEBCRAFT_MOCK_LISTENER_TESTS
 
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
-{
-    co_return std::make_shared<io_uring_tcp_socket_descriptor>();
-}
-
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
+std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
 {
     throw std::runtime_error("Not implemented yet");
 }
@@ -459,7 +442,7 @@ public:
         co_return;
     }
 
-    task<void> bind(const webcraft::async::io::socket::connection_info &info) override
+    void bind(const webcraft::async::io::socket::connection_info &info) override
     {
         // Prepare address string for getaddrinfo
         std::string port_str = std::to_string(info.port);
@@ -520,10 +503,9 @@ public:
 
         if (!flag)
             throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
-        co_return;
     }
 
-    task<void> listen(int backlog) override
+    void listen(int backlog) override
     {
         int fd = this->fd;
 
@@ -533,7 +515,6 @@ public:
         {
             throw std::ios_base::failure("Failed to listen: " + std::to_string(result) + ", value: " + strerror(errno));
         }
-        co_return;
     }
 
     task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> accept() override
@@ -563,9 +544,9 @@ public:
     }
 };
 
-task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor>> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
+std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
 {
-    co_return std::make_shared<io_uring_tcp_listener_descriptor>();
+    return std::make_shared<io_uring_tcp_listener_descriptor>();
 }
 
 #else

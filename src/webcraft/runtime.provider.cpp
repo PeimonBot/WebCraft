@@ -42,15 +42,17 @@ void webcraft::async::detail::shutdown_runtime() noexcept
         return; // Runtime not running, nothing to shut down
     }
 
-    // stop running the io_uring loop
-    run_thread->request_stop();
-
-    // join the thread if still possible
+    // Check if thread exists and is joinable before stopping
     if (run_thread && run_thread->joinable())
     {
+        // stop running the io_uring loop
+        run_thread->request_stop();
+
+        // Wait for thread to finish
         run_thread->join();
     }
 
+    // Reset the thread pointer
     run_thread.reset();
 }
 
@@ -73,26 +75,17 @@ uint64_t webcraft::async::detail::get_native_handle()
 
 void run_loop(std::stop_token token)
 {
-    // perform the following when we're done with the io_uring loop
-    std::stop_callback callback(token, []()
-                                {
-        std::lock_guard<std::mutex> lock(io_uring_mutex);
-        io_uring_queue_exit(&global_ring); });
-
     // while we're running, we will wait for events
-    std::cout << "IO_uring loop started." << std::endl;
     while (!token.stop_requested())
     {
         __kernel_timespec ts = {0, 0};
         ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(wait_timeout).count(); // 10ms timeout
 
-        struct io_uring_cqe *cqe;
+        struct io_uring_cqe *cqe = nullptr;
         int ret = io_uring_wait_cqe_timeout(&global_ring, &cqe, &ts);
         if (ret < 0 && ret != -ETIME)
         {
-            if (ret == -EINTR)
-                continue; // Interrupted, retry
-            break;        // Other error, exit loop
+            break; // Other error, exit loop
         }
 
         if (cqe)
@@ -109,6 +102,9 @@ void run_loop(std::stop_token token)
             }
         }
     }
+
+    // Only cleanup if we were the ones who initialized it
+    io_uring_queue_exit(&global_ring);
 }
 
 bool start_runtime_async() noexcept
