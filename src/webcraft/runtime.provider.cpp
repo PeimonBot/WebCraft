@@ -143,6 +143,7 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 #include <windows.h>
 #include <webcraft/async/runtime/windows/windows_timer_manager.hpp>
 #include <webcraft/async/runtime/windows.event.hpp>
+#include <webcraft/async/runtime/event.hpp>
 #include <WinSock2.h>
 
 static HANDLE iocp;
@@ -223,33 +224,16 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
 {
-    struct sleep_event final : webcraft::async::detail::runtime_event
-    {
-    private:
-        std::chrono::steady_clock::duration duration;
-        PTP_TIMER timer;
+    std::shared_ptr<PTP_TIMER> timer;
 
-    public:
-        sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token) : runtime_event(token), duration(duration)
+    return webcraft::async::detail::create_runtime_event([timer, duration](webcraft::async::detail::runtime_event *ev) mutable
+                                                         { timer = std::make_shared<PTP_TIMER>(timer_manager.post_timer_event(duration, [ev]()
+                                                                                                                              { ev->try_execute(0); })); }, [timer]
+                                                         {
+        if (timer && *timer)
         {
-        }
-
-        void try_native_cancel() override
-        {
-            timer_manager.cancel_timer(timer);
-        }
-
-        void try_start() override
-        {
-            runtime_event *ev = this;
-            timer = timer_manager.post_timer_event(duration, [ev]()
-                                                   {
-                                                       ev->try_execute(0); // Indicate completion with 0 result
-                                                   });
-        }
-    };
-
-    return std::make_unique<sleep_event>(duration, token); // Windows does not support sleep events in the same way
+            timer_manager.cancel_timer(*timer);
+        } }, token);
 }
 
 #elif defined(__APPLE__)
