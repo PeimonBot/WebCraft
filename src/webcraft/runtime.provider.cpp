@@ -226,14 +226,25 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 {
     std::shared_ptr<PTP_TIMER> timer;
 
-    return webcraft::async::detail::create_runtime_event([timer, duration](webcraft::async::detail::runtime_event *ev) mutable
-                                                         { timer = std::make_shared<PTP_TIMER>(timer_manager.post_timer_event(duration, [ev]()
-                                                                                                                              { ev->try_execute(0); })); }, [timer]
-                                                         {
-        if (timer && *timer)
+    return webcraft::async::detail::create_runtime_event(
+        [timer, duration](webcraft::async::detail::runtime_event *ev) mutable
         {
-            timer_manager.cancel_timer(*timer);
-        } }, token);
+            PTP_TIMER _timer = timer_manager.post_timer_event(
+                duration,
+                [ev]()
+                {
+                    ev->try_execute(0);
+                });
+            timer = std::make_shared<PTP_TIMER>(_timer);
+        },
+        [timer]
+        {
+            if (timer && *timer)
+            {
+                timer_manager.cancel_timer(*timer);
+            }
+        },
+        token);
 }
 
 #elif defined(__APPLE__)
