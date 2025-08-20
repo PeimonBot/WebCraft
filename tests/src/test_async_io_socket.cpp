@@ -35,6 +35,7 @@ std::string get_status_line(const std::string &resp)
 
 TEST_CASE(TestInternetAvailable)
 {
+    runtime_context context;
     connection_results results;
     EXPECT_NO_THROW(results = get_google_results_sync()) << "Internet should be available";
 
@@ -45,6 +46,7 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
 
 TEST_CASE(TestSocketConnection)
 {
+    throw std::runtime_error("Test not implemented");
     runtime_context context;
 
     connection_results sync_results = get_google_results_sync();
@@ -79,6 +81,8 @@ void handle_client_side_sync(const std::string &host, uint16_t port);
 
 TEST_CASE(TestAsyncServerSyncClient)
 {
+    throw std::runtime_error("Test not implemented");
+
     runtime_context context;
 
     async_event signal;
@@ -120,6 +124,7 @@ TEST_CASE(TestAsyncServerSyncClient)
 
 TEST_CASE(TestSocketPubSub)
 {
+    throw std::runtime_error("Test not implemented");
 
     runtime_context context;
 
@@ -171,10 +176,28 @@ TEST_CASE(TestSocketPubSub)
 const std::string content = "Hello World!";
 constexpr size_t content_size = 12;
 
-#ifdef __linux__
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+
+#else
 #include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+
+#define SOCKET int
+#define INVALID_SOCKET (-1)
+
+void closesocket(SOCKET fd)
+{
+    ::close(fd);
+}
+
+#endif
 
 connection_results get_google_results_sync()
 {
@@ -188,21 +211,23 @@ connection_results get_google_results_sync()
 
     if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res) != 0)
     {
+        std::cout << "Address failed: " << host.c_str() << ":" << port << std::endl;
+        std::cout << std::endl;
         throw std::runtime_error("getaddrinfo failed");
     }
 
     // --- Create socket ---
-    int sockfd = ::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (sockfd < 0)
+    SOCKET sockfd = ::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (sockfd == INVALID_SOCKET)
     {
         freeaddrinfo(res);
         throw std::runtime_error("socket failed");
     }
 
     // --- Connect ---
-    if (connect(sockfd, res->ai_addr, res->ai_addrlen) < 0)
+    if (connect(sockfd, res->ai_addr, (int)res->ai_addrlen) < 0)
     {
-        close(sockfd);
+        closesocket(sockfd);
         freeaddrinfo(res);
         throw std::runtime_error("connect failed");
     }
@@ -216,15 +241,15 @@ connection_results get_google_results_sync()
         "Connection: close\r\n"
         "\r\n";
 
-    if (send(sockfd, request.c_str(), request.size(), 0) < 0)
+    if (send(sockfd, request.c_str(), (int)request.size(), 0) < 0)
     {
-        close(sockfd);
+        closesocket(sockfd);
         throw std::runtime_error("send failed");
     }
 
     // --- Read response ---
     char buffer[4096];
-    ssize_t bytes_received;
+    int bytes_received;
     while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0)
     {
         results.response.append(buffer, bytes_received);
@@ -232,11 +257,11 @@ connection_results get_google_results_sync()
 
     if (bytes_received < 0)
     {
-        close(sockfd);
+        closesocket(sockfd);
         throw std::runtime_error("recv failed");
     }
 
-    close(sockfd);
+    closesocket(sockfd);
 
     return results;
 }
@@ -244,8 +269,8 @@ connection_results get_google_results_sync()
 void handle_client_side_sync(const std::string &host, uint16_t port)
 {
     // --- Create socket ---
-    int sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0)
+    SOCKET sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd == INVALID_SOCKET)
     {
         throw std::runtime_error("socket failed");
     }
@@ -258,7 +283,7 @@ void handle_client_side_sync(const std::string &host, uint16_t port)
 
     if (connect(sockfd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
     {
-        close(sockfd);
+        closesocket(sockfd);
         throw std::runtime_error("connect failed");
     }
 
@@ -266,30 +291,28 @@ void handle_client_side_sync(const std::string &host, uint16_t port)
     std::array<char, 12> wbuffer;
     std::copy(content.begin(), content.end(), wbuffer.begin());
 
-    if (send(sockfd, wbuffer.data(), wbuffer.size(), 0) < 0)
+    if (send(sockfd, wbuffer.data(), (int)wbuffer.size(), 0) < 0)
     {
-        close(sockfd);
+        closesocket(sockfd);
         throw std::runtime_error("send failed");
     }
     std::cout << "Sync Client: Sent data to server" << std::endl;
 
     // --- Receive data ---
     std::array<char, 12> rbuffer;
-    ssize_t bytes_received = recv(sockfd, rbuffer.data(), rbuffer.size(), 0);
+    int bytes_received = recv(sockfd, rbuffer.data(), (int)rbuffer.size(), 0);
     if (bytes_received < 0)
     {
-        close(sockfd);
+        closesocket(sockfd);
         throw std::runtime_error("recv failed");
     }
     std::cout << "Sync Client: Received " << bytes_received << " bytes from server" << std::endl;
 
-    EXPECT_EQ(static_cast<size_t>(bytes_received), content.size()) << "Bytes received should be " << content.size();
+    EXPECT_EQ(bytes_received, content.size()) << "Bytes received should be " << content.size();
     EXPECT_EQ(wbuffer, rbuffer) << "Sent and received data should match";
 
-    close(sockfd);
+    closesocket(sockfd);
 }
-
-#endif
 
 task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstream &wstream)
 {

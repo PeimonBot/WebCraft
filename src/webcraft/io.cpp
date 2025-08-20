@@ -203,10 +203,9 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 
 #if defined(WEBCRAFT_MOCK_SOCKET_TESTS)
 
-task<std::shared_ptr<tcp_socket_descriptor>> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
 {
     throw std::runtime_error("TCP socket descriptor not implemented in mock tests");
-    co_return nullptr;
 }
 
 #elif defined(__linux__)
