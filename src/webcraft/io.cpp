@@ -197,7 +197,12 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 }
 
 #elif defined(_WIN32)
-#elif defined(__APPLE__)
+
+
+#elif defined(_WIN32)
+
+
+
 #else
 #endif
 

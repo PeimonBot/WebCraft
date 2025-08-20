@@ -142,38 +142,20 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <webcraft/async/runtime/windows/windows_timer_manager.hpp>
+#include <webcraft/async/runtime/windows.event.hpp>
 #include <WinSock2.h>
 
 static HANDLE iocp;
 static webcraft::async::runtime::detail::timer_manager timer_manager;
+using webcraft::async::detail::windows::overlapped_event;
 
 uint64_t webcraft::async::detail::get_native_handle()
 {
     return reinterpret_cast<uint64_t>(iocp);
 }
 
-struct overlapped_event : public OVERLAPPED
-{
-    webcraft::async::detail::runtime_event *event;
-
-    overlapped_event(webcraft::async::detail::runtime_event *ev) : event(ev)
-    {
-        ZeroMemory(this, sizeof(OVERLAPPED));
-    }
-};
-
 void run_loop(std::stop_token token)
 {
-    std::stop_callback callback(token, []()
-                                {
-        WSACleanup();
-        if (iocp)
-        {
-            CloseHandle(iocp);
-            iocp = nullptr;
-        } });
-    std::cout << "IOCP loop started." << std::endl;
-
     while (!token.stop_requested())
     {
         DWORD bytesTransferred;
@@ -192,21 +174,24 @@ void run_loop(std::stop_token token)
             break; // Other error, exit loop
         }
 
-        // Process the completion event
-        auto *event = reinterpret_cast<overlapped_event *>(overlapped);
-        if (event == nullptr)
+        if (overlapped == nullptr)
         {
             std::cerr << "Received null event in IOCP loop." << std::endl;
             continue; // Skip if event is null
         }
+
+        // Process the completion event
+        auto *event = reinterpret_cast<overlapped_event *>(overlapped);
         auto runtime_event = event->event;
         if (runtime_event)
         {
             // Call the callback function
             runtime_event->try_execute(static_cast<int>(bytesTransferred));
         }
-        delete event; // Clean up the overlapped structure
     }
+
+    CloseHandle(iocp);
+    WSACleanup();
 }
 
 bool start_runtime_async() noexcept
@@ -232,34 +217,8 @@ bool start_runtime_async() noexcept
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
 {
-    struct yield_event final : webcraft::async::detail::runtime_event
-    {
-    private:
-        overlapped_event *overlapped;
-
-    public:
-        yield_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token)
-        {
-            overlapped = new overlapped_event(this);
-        }
-
-        ~yield_event() = default;
-
-        void try_native_cancel() override
-        {
-        }
-
-        void try_start() override
-        {
-            BOOL result = PostQueuedCompletionStatus(iocp, 0, 0, overlapped);
-            if (!result)
-            {
-                throw std::runtime_error("Failed to post yield event: " + std::to_string(GetLastError()));
-            }
-        }
-    };
-
-    return std::make_unique<yield_event>(); // Windows does not support yield events in the same way
+    return webcraft::async::detail::windows::create_overlapped_event(iocp, [](HANDLE iocp, LPOVERLAPPED ptr)
+                                                                     { return PostQueuedCompletionStatus(iocp, 0, 0, ptr); });
 }
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)

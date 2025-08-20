@@ -18,17 +18,16 @@ namespace webcraft::async::detail::windows
         }
     };
 
-    struct overlapped_runtime_event final : webcraft::async::detail::runtime_event
+    struct overlapped_runtime_event : public webcraft::async::detail::runtime_event
     {
     private:
         overlapped_event *overlapped;
         HANDLE iocp;
 
     public:
-        overlapped_runtime_event(std::stop_token token = webcraft::async::get_stop_token()) : runtime_event(token)
+        overlapped_runtime_event(HANDLE iocp, std::stop_token token) : runtime_event(token), iocp(iocp)
         {
             overlapped = new overlapped_event(this);
-            iocp = reinterpret_cast<HANDLE>(webcraft::async::detail::get_native_handle());
         }
 
         ~overlapped_runtime_event()
@@ -56,6 +55,29 @@ namespace webcraft::async::detail::windows
 
         virtual BOOL perform_overlapped_operation(HANDLE iocp, LPOVERLAPPED overlapped) = 0;
     };
+
+    using overlapped_operation = std::function<BOOL(HANDLE, LPOVERLAPPED)>;
+
+    inline auto create_overlapped_event(HANDLE iocp, overlapped_operation op, std::stop_token token = get_stop_token())
+    {
+        struct overlapped_runtime_event_impl : public overlapped_runtime_event
+        {
+            overlapped_runtime_event_impl(HANDLE iocp, overlapped_operation op, std::stop_token token)
+                : overlapped_runtime_event(iocp, token), op(std::move(op))
+            {
+            }
+
+            BOOL perform_overlapped_operation(HANDLE iocp, LPOVERLAPPED overlapped) override
+            {
+                return op(iocp, overlapped);
+            }
+
+        private:
+            overlapped_operation op;
+        };
+
+        return std::make_unique<overlapped_runtime_event_impl>(iocp, std::move(op), token);
+    }
 }
 
 #endif
