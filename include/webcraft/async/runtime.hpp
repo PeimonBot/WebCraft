@@ -98,64 +98,58 @@ namespace webcraft::async
             { t.is_cancelled() } -> std::convertible_to<bool>;
         };
 
-        template <typename T>
-            requires std::is_base_of_v<runtime_event, T>
-        awaitable_event_t auto as_awaitable(std::unique_ptr<T> &event)
+        template <typename SmartPtrType>
+        struct runtime_event_awaiter
         {
-            struct awaiter
-            {
-                std::unique_ptr<T> &event;
-                bool cancelled;
+            SmartPtrType event;
+            bool cancelled;
+            std::exception_ptr ptr;
 
-                bool await_ready() const noexcept { return false; }
-                void await_suspend(std::coroutine_handle<> h) noexcept
+            bool await_ready() const noexcept { return false; }
+            void await_suspend(std::coroutine_handle<> h) noexcept
+            {
+                try
                 {
                     event->start_async([h]
                                        { h.resume(); });
                 }
-                void await_resume() noexcept {}
-
-                int get_result()
+                catch (...)
                 {
-                    return event->get_result();
+                    ptr = std::current_exception();
+                    h.resume();
                 }
-
-                bool is_cancelled()
+            }
+            void await_resume()
+            {
+                if (ptr)
                 {
-                    return event->is_cancelled();
+                    std::rethrow_exception(ptr);
                 }
-            };
-            return awaiter{event};
+            }
+
+            int get_result()
+            {
+                return event->get_result();
+            }
+
+            bool is_cancelled()
+            {
+                return event->is_cancelled();
+            }
+        };
+
+        template <typename T>
+            requires std::is_base_of_v<runtime_event, T>
+        awaitable_event_t auto as_awaitable(std::unique_ptr<T> &event)
+        {
+            return runtime_event_awaiter{event};
         }
 
         template <typename T>
             requires std::is_base_of_v<runtime_event, T>
         awaitable_event_t auto as_awaitable(std::unique_ptr<T> &&event)
         {
-            struct awaiter
-            {
-                std::unique_ptr<T> event;
-                bool cancelled;
-
-                bool await_ready() const noexcept { return false; }
-                void await_suspend(std::coroutine_handle<> h) noexcept
-                {
-                    event->start_async([h]
-                                       { h.resume(); });
-                }
-                void await_resume() noexcept {}
-
-                int get_result()
-                {
-                    return event->get_result();
-                }
-
-                bool is_cancelled()
-                {
-                    return event->is_cancelled();
-                }
-            };
-            return awaiter{std::move(event)};
+            return runtime_event_awaiter{std::move(event)};
         }
 
         uint64_t get_native_handle();

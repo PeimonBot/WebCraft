@@ -18,65 +18,125 @@ namespace webcraft::async::detail::windows
         }
     };
 
+    using overlapped_operation = std::function<BOOL(LPDWORD, LPOVERLAPPED)>;
+    using overlapped_cancel = std::function<void(LPOVERLAPPED)>;
+
     struct overlapped_runtime_event : public webcraft::async::detail::runtime_event
     {
     private:
         overlapped_event *overlapped;
-        HANDLE iocp;
 
     public:
-        overlapped_runtime_event(HANDLE iocp, std::stop_token token) : runtime_event(token), iocp(iocp)
+        overlapped_runtime_event(std::stop_token token) : runtime_event(token)
         {
             overlapped = new overlapped_event(this);
         }
 
-        ~overlapped_runtime_event()
+        virtual ~overlapped_runtime_event()
         {
             delete overlapped;
         }
 
+        void try_start() override
+        {
+            DWORD numberOfBytesTransfered = 0;
+            BOOL result = perform_overlapped_operation(&numberOfBytesTransfered, overlapped);
+
+            if (result)
+            {
+                // Operation completed synchronously
+                try_execute(numberOfBytesTransfered);
+            }
+            else if (!result && GetLastError() != ERROR_IO_PENDING)
+            {
+                // Operation failed
+                throw std::runtime_error("Failed to post overlapped event: " + std::to_string(GetLastError()));
+            }
+            else
+            {
+                // Operation is being completed asynchronously
+            }
+        }
+
         void try_native_cancel() override
         {
-            BOOL result = CancelIoEx(iocp, overlapped);
+            try_native_cancel(overlapped);
+        }
+
+        virtual void try_native_cancel(LPOVERLAPPED overlapped) = 0;
+        virtual BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) = 0;
+    };
+
+    struct overlapped_async_io_runtime_event : public overlapped_runtime_event
+    {
+    private:
+        HANDLE file;
+
+    public:
+        overlapped_async_io_runtime_event(HANDLE file, std::stop_token token) : overlapped_runtime_event(token), file(file)
+        {
+        }
+
+        ~overlapped_async_io_runtime_event()
+        {
+        }
+
+        void try_native_cancel(LPOVERLAPPED overlapped) override
+        {
+            BOOL result = CancelIoEx(file, overlapped);
             if (!result && GetLastError() != ERROR_NOT_FOUND)
             {
                 throw std::runtime_error("Failed to cancel IO operation: " + std::to_string(GetLastError()));
             }
         }
-
-        void try_start() override
-        {
-            BOOL result = perform_overlapped_operation(iocp, overlapped);
-            if (!result)
-            {
-                throw std::runtime_error("Failed to post overlapped event: " + std::to_string(GetLastError()));
-            }
-        }
-
-        virtual BOOL perform_overlapped_operation(HANDLE iocp, LPOVERLAPPED overlapped) = 0;
     };
 
-    using overlapped_operation = std::function<BOOL(HANDLE, LPOVERLAPPED)>;
-
-    inline auto create_overlapped_event(HANDLE iocp, overlapped_operation op, std::stop_token token = get_stop_token())
+    inline auto create_overlapped_event(overlapped_operation op, overlapped_cancel cancel = [](LPOVERLAPPED) {}, std::stop_token token = get_stop_token())
     {
         struct overlapped_runtime_event_impl : public overlapped_runtime_event
         {
-            overlapped_runtime_event_impl(HANDLE iocp, overlapped_operation op, std::stop_token token)
-                : overlapped_runtime_event(iocp, token), op(std::move(op))
+            overlapped_runtime_event_impl(overlapped_operation op, overlapped_cancel cancel, std::stop_token token)
+                : overlapped_runtime_event(token), op(std::move(op)), cancel(std::move(cancel))
             {
             }
 
-            BOOL perform_overlapped_operation(HANDLE iocp, LPOVERLAPPED overlapped) override
+            BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
             {
-                return op(iocp, overlapped);
+                return op(numberOfBytesTransfered, overlapped);
+            }
+
+            void try_native_cancel(LPOVERLAPPED overlapped) override
+            {
+                cancel(overlapped);
+            }
+
+        private:
+            overlapped_operation op;
+            overlapped_cancel cancel;
+        };
+
+        return std::make_unique<overlapped_runtime_event_impl>(std::move(op), std::move(cancel), token);
+    }
+
+    inline auto create_async_io_overlapped_event(HANDLE file, overlapped_operation op, std::stop_token token = get_stop_token())
+    {
+        struct overlapped_async_io_runtime_event_impl : public overlapped_async_io_runtime_event
+        {
+            overlapped_async_io_runtime_event_impl(HANDLE file, overlapped_operation op, std::stop_token token)
+                : overlapped_async_io_runtime_event(file, token), op(std::move(op))
+            {
+            }
+
+            BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
+            {
+                return op(numberOfBytesTransfered, overlapped);
             }
 
         private:
             overlapped_operation op;
         };
 
-        return std::make_unique<overlapped_runtime_event_impl>(iocp, std::move(op), token);
+        return std::make_unique<overlapped_async_io_runtime_event_impl>(file, std::move(op), token);
     }
 }
 

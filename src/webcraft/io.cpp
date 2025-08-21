@@ -22,17 +22,17 @@ public:
     {
         if (mode & std::ios::in)
         {
-            file = std::fopen(p.string().c_str(), "r");
+            file = std::fopen(p.c_str(), "r");
         }
         else if (mode & std::ios::out)
         {
             if (mode & std::ios::app)
             {
-                file = std::fopen(p.string().c_str(), "a");
+                file = std::fopen(p.c_str(), "a");
             }
             else
             {
-                file = std::fopen(p.string().c_str(), "w");
+                file = std::fopen(p.c_str(), "w");
             }
         }
     }
@@ -198,11 +198,143 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 
 #elif defined(_WIN32)
 
+class iocp_file_descriptor : public file_descriptor
+{
+protected:
+    HANDLE fd;
+    HANDLE iocp;
+    LONGLONG fileOffset = 0;
 
-#elif defined(_WIN32)
+public:
+    iocp_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode) : file_descriptor(mode)
+    {
+        // Implementation for Windows
+        DWORD desiredAccess = 0;
+        DWORD shareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+        DWORD creationMode = OPEN_EXISTING; // Default for read-only
 
+        if ((mode & std::ios::in) == std::ios::in)
+        {
+            // Read only
+            desiredAccess = GENERIC_READ;
+            creationMode = OPEN_EXISTING;
+        }
+        else if ((mode & std::ios::out) == std::ios::out)
+        {
+            // Write only
+            if ((mode & std::ios::trunc) == std::ios::trunc)
+            {
+                desiredAccess = GENERIC_WRITE;
+                creationMode = CREATE_ALWAYS;
+            }
+            else if ((mode & std::ios::app) == std::ios::app)
+            {
+                desiredAccess = FILE_APPEND_DATA;
+                creationMode = OPEN_ALWAYS;
+            }
+            else
+            {
+                desiredAccess = GENERIC_WRITE;
+                creationMode = CREATE_ALWAYS;
+            }
+        }
 
+        fd = ::CreateFileW(p.c_str(), desiredAccess, shareMode, nullptr, creationMode, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
 
+        if (fd == INVALID_HANDLE_VALUE)
+        {
+            throw std::runtime_error("Failed to create file: " + std::to_string(GetLastError()));
+        }
+
+        // Associate this file handle with the global IOCP
+        iocp = ::CreateIoCompletionPort(fd, (HANDLE)webcraft::async::detail::get_native_handle(), 0, 0);
+
+        if (iocp == nullptr)
+        {
+            CloseHandle(fd);
+            throw std::runtime_error("Failed to associate file with IO completion port: " + std::to_string(GetLastError()));
+        }
+    }
+
+    ~iocp_file_descriptor()
+    {
+        if (fd != INVALID_HANDLE_VALUE)
+        {
+            fire_and_forget(close());
+        }
+    }
+
+    task<size_t> read(std::span<char> buffer)
+    {
+        if ((mode & std::ios::in) == std::ios::in)
+        {
+            LONGLONG offset = fileOffset;
+            HANDLE fd = this->fd;
+            auto event = webcraft::async::detail::as_awaitable(
+                webcraft::async::detail::windows::create_async_io_overlapped_event(
+                    fd,
+                    [fd, buffer, offset](LPDWORD bytesTransferred, LPOVERLAPPED ptr)
+                    {
+                        ptr->Offset = static_cast<DWORD>(offset & 0xFFFFFFFF);
+                        ptr->OffsetHigh = static_cast<DWORD>((offset >> 32) & 0xFFFFFFFF);
+                        return ::ReadFile(fd, buffer.data(), (ULONG)buffer.size(), bytesTransferred, ptr);
+                    }));
+            co_await event;
+
+            fileOffset += event.get_result();
+
+            co_return event.get_result();
+        }
+        throw std::ios_base::failure("The file is not opened in read mode");
+    }
+
+    task<size_t> write(std::span<char> buffer)
+    {
+        if ((mode & std::ios::out) == std::ios::out)
+        {
+            LONGLONG offset = fileOffset;
+            HANDLE fd = this->fd;
+            auto event = webcraft::async::detail::as_awaitable(
+                webcraft::async::detail::windows::create_async_io_overlapped_event(
+                    fd,
+                    [fd, buffer, offset](LPDWORD bytesTransferred, LPOVERLAPPED ptr)
+                    {
+                        ptr->Offset = static_cast<DWORD>(offset & 0xFFFFFFFF);
+                        ptr->OffsetHigh = static_cast<DWORD>((offset >> 32) & 0xFFFFFFFF);
+                        return ::WriteFile(fd, buffer.data(), (ULONG)buffer.size(), bytesTransferred, ptr);
+                    }));
+            co_await event;
+
+            if (event.get_result() < 0)
+            {
+                throw std::ios_base::failure("Writing the file failed with error code: " + GetLastError());
+            }
+
+            fileOffset += event.get_result();
+
+            co_return event.get_result();
+        }
+        throw std::ios_base::failure("The file is not opened in read mode");
+    }
+
+    task<void> close()
+    {
+        if (fd != INVALID_HANDLE_VALUE)
+        {
+            ::CloseHandle(fd);
+            fd = INVALID_HANDLE_VALUE;
+        }
+        // Don't close iocp as it's the global IOCP handle
+        co_return;
+    }
+};
+
+task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
+{
+    co_return std::make_shared<iocp_file_descriptor>(p, mode);
+}
+
+#elif defined(__APPLE__)
 #else
 #endif
 

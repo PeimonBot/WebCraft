@@ -164,14 +164,41 @@ void run_loop(std::stop_token token)
         LPOVERLAPPED overlapped;
 
         BOOL result = GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, static_cast<DWORD>(wait_timeout.count()));
+
         if (!result)
         {
-            if (GetLastError() == WAIT_TIMEOUT)
+            DWORD lastError = GetLastError();
+            if (lastError == WAIT_TIMEOUT)
             {
                 continue; // Timeout, retry
             }
 
-            std::cerr << "GetQueuedCompletionStatus failed: " << GetLastError() << std::endl;
+            // If we have a valid overlapped pointer, the I/O operation completed but with an error
+            // This is normal for operations like reading past EOF
+            if (overlapped != nullptr)
+            {
+                // Process the completion event even though it failed
+                auto *event = reinterpret_cast<overlapped_event *>(overlapped);
+                auto runtime_event = event->event;
+                if (runtime_event)
+                {
+                    // For file operations, ERROR_HANDLE_EOF (38) means we've reached end of file
+                    // Pass 0 bytes transferred and let the application handle it
+                    if (lastError == ERROR_HANDLE_EOF)
+                    {
+                        runtime_event->try_execute(0); // 0 bytes indicates EOF
+                    }
+                    else
+                    {
+                        // Other errors - pass negative error code
+                        runtime_event->try_execute(-static_cast<int>(lastError));
+                    }
+                }
+                continue;
+            }
+
+            // If no overlapped pointer, this is a serious error
+            std::cerr << "GetQueuedCompletionStatus failed: " << lastError << std::endl;
             break; // Other error, exit loop
         }
 
@@ -218,8 +245,18 @@ bool start_runtime_async() noexcept
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_yield_event()
 {
-    return webcraft::async::detail::windows::create_overlapped_event(iocp, [](HANDLE iocp, LPOVERLAPPED ptr)
-                                                                     { return PostQueuedCompletionStatus(iocp, 0, 0, ptr); });
+    HANDLE iocp = ::iocp;
+    return webcraft::async::detail::windows::create_overlapped_event(
+        [iocp](LPDWORD bytesTransferred, LPOVERLAPPED ptr)
+        {
+            BOOL result = PostQueuedCompletionStatus(iocp, *bytesTransferred, 0, ptr);
+            if (!result)
+            {
+                throw std::runtime_error("Failed to post yield event: " + std::to_string(GetLastError()));
+            }
+            SetLastError(ERROR_IO_PENDING);
+            return false;
+        });
 }
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
