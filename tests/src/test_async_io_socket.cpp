@@ -46,7 +46,6 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
 
 TEST_CASE(TestSocketConnection)
 {
-    throw std::runtime_error("Test not implemented");
     runtime_context context;
 
     connection_results sync_results = get_google_results_sync();
