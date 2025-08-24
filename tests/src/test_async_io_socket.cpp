@@ -6,6 +6,29 @@
 #include <filesystem>
 #include <sstream>
 
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+
+#else
+#include <unistd.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+
+#define SOCKET int
+#define INVALID_SOCKET (-1)
+
+void closesocket(SOCKET fd)
+{
+    ::close(fd);
+}
+
+#endif
+
 using namespace webcraft::async;
 using namespace webcraft::async::io;
 using namespace webcraft::async::io::adaptors;
@@ -59,6 +82,8 @@ TEST_CASE(TestSocketConnection)
         EXPECT_EQ(host, socket.get_remote_host()) << "Remote host should match";
         EXPECT_EQ(port, socket.get_remote_port()) << "Remote port should match";
 
+        std::cout << "Async Client: Connected to " << host << ":" << port << std::endl;
+
         auto &socket_rstream = socket.get_readable_stream();
         auto &socket_wstream = socket.get_writable_stream();
 
@@ -72,6 +97,9 @@ TEST_CASE(TestSocketConnection)
     };
 
     sync_wait(task_fn());
+
+    std::cout << "Async Client: All went well" << std::endl;
+    std::cout << "Last error: " << GetLastError() << std::endl;
 }
 
 task<void> handle_server_side_async(tcp_socket &client_peer);
@@ -174,29 +202,6 @@ TEST_CASE(TestSocketPubSub)
 
 const std::string content = "Hello World!";
 constexpr size_t content_size = 12;
-
-#ifdef _WIN32
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-
-#else
-#include <unistd.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-
-#define SOCKET int
-#define INVALID_SOCKET (-1)
-
-void closesocket(SOCKET fd)
-{
-    ::close(fd);
-}
-
-#endif
 
 connection_results get_google_results_sync()
 {
@@ -327,8 +332,21 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
     co_await wstream.send(std::span<const char>(request.begin(), request.end()));
     co_await wstream.close();
 
+    std::cout << "Async Client: Sent HTTP GET request: " << request.size() << " bytes sent" << std::endl;
+
     // --- Read response ---
-    std::vector<char> content = co_await (rstream | collect<std::vector<char>, char>(collectors::to_vector<char>()));
+    std::vector<char> content;
+
+    std::array<char, 4096> buffer{};
+    while (auto bytes_received = co_await rstream.recv(std::span<char>(buffer.begin(), buffer.end())))
+    {
+        std::cout << "Bytes received: " << bytes_received << std::endl;
+        std::cout << "Buffer content: ";
+        std::cout.write(buffer.data(), bytes_received);
+        std::cout << std::endl;
+        content.insert(content.end(), buffer.begin(), buffer.begin() + bytes_received);
+    }
+
     results.response = std::string(content.begin(), content.end());
     co_await rstream.close();
 

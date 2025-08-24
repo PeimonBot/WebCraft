@@ -555,20 +555,21 @@ struct WSAExtensionManager
         // Get the function pointers
         GUID guidConnectEx = WSAID_CONNECTEX;
         GUID guidAcceptEx = WSAID_ACCEPTEX;
+        DWORD bytes;
 
         SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock != INVALID_SOCKET)
         {
             // Get the ConnectEx function pointer
-            if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidConnectEx, sizeof(guidConnectEx), &ConnectEx, sizeof(ConnectEx), nullptr, nullptr, nullptr) == SOCKET_ERROR)
+            if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidConnectEx, sizeof(guidConnectEx), &ConnectEx, sizeof(ConnectEx), &bytes, nullptr, nullptr) != 0)
             {
-                ConnectEx = nullptr;
+                throw std::runtime_error("Failed to get ConnectEx function pointer: " + std::to_string(WSAGetLastError()));
             }
 
             // Get the AcceptEx function pointer
-            if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidAcceptEx, sizeof(guidAcceptEx), &AcceptEx, sizeof(AcceptEx), nullptr, nullptr, nullptr) == SOCKET_ERROR)
+            if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidAcceptEx, sizeof(guidAcceptEx), &AcceptEx, sizeof(AcceptEx), &bytes, nullptr, nullptr) != 0)
             {
-                AcceptEx = nullptr;
+                throw std::runtime_error("Failed to get AcceptEx function pointer: " + std::to_string(WSAGetLastError()));
             }
 
             closesocket(sock);
@@ -603,6 +604,7 @@ private:
 public:
     iocp_tcp_socket_descriptor() : socket(INVALID_SOCKET), iocp(INVALID_HANDLE_VALUE), port(0)
     {
+        get_extension_manager(); // Ensure WSA extensions are initialized
     }
 
     iocp_tcp_socket_descriptor(SOCKET sock, std::string host, uint16_t port) : socket(sock), iocp(INVALID_HANDLE_VALUE), host(std::move(host)), port(port)
@@ -671,13 +673,21 @@ public:
                 }
             }
 
+            iocp = ::CreateIoCompletionPort((HANDLE)fd, (HANDLE)webcraft::async::detail::get_native_handle(), 0, 0);
+
+            if (iocp == nullptr)
+            {
+                ::closesocket(fd);
+                throw std::runtime_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
+            }
+
             // Await io_uring connect
             auto event = webcraft::async::detail::as_awaitable(
                 webcraft::async::detail::windows::create_async_io_overlapped_event(
                     (HANDLE)fd,
                     [fd, addr, len](LPDWORD bytesTransferred, LPOVERLAPPED overlapped)
                     {
-                        BOOL result = ::WSAConnectEx(fd, addr, len, nullptr, 0, bytesTransferred, overlapped);
+                        BOOL result = ::WSAConnectEx(fd, addr, len, nullptr, 0, nullptr, overlapped);
                         SetLastError(WSAGetLastError());
                         return result;
                     }));
@@ -717,15 +727,25 @@ public:
         WSABUF wsaBuf;
         wsaBuf.len = (ULONG)buffer.size();
         wsaBuf.buf = buffer.data();
+        DWORD flags = 0;
+        std::cout << "Read Event creating" << std::endl;
         auto event = webcraft::async::detail::as_awaitable(
             webcraft::async::detail::windows::create_async_io_overlapped_event(
                 (HANDLE)fd,
-                [fd, wsaBuf](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
+                [fd, wsaBuf, flags](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
                 {
-                    return WSARecv(fd, &wsaBuf, 1, bytesTransferred, nullptr, overlapped, nullptr);
+                    BOOL result = WSARecv(fd, &wsaBuf, 1, bytesTransferred, &flags, overlapped, nullptr);
+                    if (result == SOCKET_ERROR)
+                    {
+                        SetLastError(WSAGetLastError());
+                        return FALSE;
+                    }
+                    return TRUE;
                 }));
+        std::cout << "Read event queued" << std::endl;
 
         co_await event;
+        std::cout << "Read Event result: " << event.get_result() << ", Error: " << WSAGetLastError() << std::endl;
 
         co_return event.get_result();
     }
@@ -738,17 +758,26 @@ public:
         std::copy(buffer.begin(), buffer.end(), cbuf);
         wsaBuf.len = (ULONG)buffer.size();
         wsaBuf.buf = cbuf;
+        std::cout << "Write Event creating" << std::endl;
         auto event = webcraft::async::detail::as_awaitable(
             webcraft::async::detail::windows::create_async_io_overlapped_event(
                 (HANDLE)fd,
                 [fd, wsaBuf](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
                 {
-                    return WSASend(fd, &wsaBuf, 1, bytesTransferred, 0, overlapped, nullptr);
+                    BOOL result = WSASend(fd, &wsaBuf, 1, bytesTransferred, 0, overlapped, nullptr); // segfault occurs here
+                    if (result == SOCKET_ERROR)
+                    {
+                        SetLastError(WSAGetLastError());
+                        return FALSE;
+                    }
+                    return TRUE;
                 }));
+        std::cout << "Write event queued" << std::endl;
 
         co_await event;
         delete[] cbuf;
 
+        std::cout << "Write Event result: " << event.get_result() << ", Error: " << WSAGetLastError() << std::endl;
         co_return event.get_result();
     }
 

@@ -50,7 +50,8 @@ namespace webcraft::async::detail::windows
             else if (!result && GetLastError() != ERROR_IO_PENDING)
             {
                 // Operation failed
-                throw std::runtime_error("Failed to post overlapped event: " + std::to_string(GetLastError()));
+                std::cerr << "Failed to post overlapped event: " << GetLastError() << std::endl;
+                throw std::runtime_error("Failed to post overlapped event: " + std::to_string(GetLastError())); // something is not working with the awaiting code? its not throwing an exception and instead is segfaulting
             }
             else
             {
@@ -95,6 +96,7 @@ namespace webcraft::async::detail::windows
     {
         struct overlapped_runtime_event_impl : public overlapped_runtime_event
         {
+
             overlapped_runtime_event_impl(overlapped_operation op, overlapped_cancel cancel, std::stop_token token)
                 : overlapped_runtime_event(token), op(std::move(op)), cancel(std::move(cancel))
             {
@@ -102,6 +104,7 @@ namespace webcraft::async::detail::windows
 
             BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
             {
+                overlapped->hEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
                 return op(numberOfBytesTransfered, overlapped);
             }
 
@@ -120,6 +123,8 @@ namespace webcraft::async::detail::windows
 
     inline auto create_async_io_overlapped_event(HANDLE file, overlapped_operation op, std::stop_token token = get_stop_token())
     {
+        // https://learn.microsoft.com/en-us/answers/questions/5532583/receiving-garbage-data-with-iocp-after-wsasend-in?page=1&orderby=helpful&comment=answer-12201038&translated=false#newest-answer-comment
+        // TODO: Fix to using CreateEvent in conjunction with IOCP for overlapped send and recv (for everything actually + will be easier since everything is using the WRAPPER I made) and WaitForSingleObject after GetQueuedCompletionStatus
         struct overlapped_async_io_runtime_event_impl : public overlapped_async_io_runtime_event
         {
             overlapped_async_io_runtime_event_impl(HANDLE file, overlapped_operation op, std::stop_token token)

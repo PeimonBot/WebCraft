@@ -106,7 +106,7 @@ namespace webcraft::async
             std::exception_ptr ptr;
 
             bool await_ready() const noexcept { return false; }
-            void await_suspend(std::coroutine_handle<> h) noexcept
+            void await_suspend(std::coroutine_handle<> h)
             {
                 try
                 {
@@ -123,6 +123,7 @@ namespace webcraft::async
             {
                 if (ptr)
                 {
+                    std::cout << "Rethrowing exception from await_resume" << std::endl;
                     std::rethrow_exception(ptr);
                 }
             }

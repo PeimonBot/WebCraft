@@ -177,8 +177,15 @@ void run_loop(std::stop_token token)
             // This is normal for operations like reading past EOF
             if (overlapped != nullptr)
             {
+                if (overlapped->hEvent)
+                {
+                    WaitForSingleObject(overlapped->hEvent, static_cast<DWORD>(wait_timeout.count()));
+                    CloseHandle(overlapped->hEvent);
+                }
+
                 // Process the completion event even though it failed
                 auto *event = reinterpret_cast<overlapped_event *>(overlapped);
+
                 auto runtime_event = event->event;
                 if (runtime_event)
                 {
@@ -186,6 +193,7 @@ void run_loop(std::stop_token token)
                     // Pass 0 bytes transferred and let the application handle it
                     if (lastError == ERROR_HANDLE_EOF)
                     {
+                        std::cout << "EOF reached" << std::endl;
                         runtime_event->try_execute(0); // 0 bytes indicates EOF
                     }
                     else
@@ -209,6 +217,12 @@ void run_loop(std::stop_token token)
         }
 
         // Process the completion event
+        if (overlapped->hEvent)
+        {
+            WaitForSingleObject(overlapped->hEvent, static_cast<DWORD>(wait_timeout.count()));
+            CloseHandle(overlapped->hEvent);
+        }
+
         auto *event = reinterpret_cast<overlapped_event *>(overlapped);
         auto runtime_event = event->event;
         if (runtime_event)
