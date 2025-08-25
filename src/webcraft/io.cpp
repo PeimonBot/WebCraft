@@ -1,5 +1,6 @@
 #include <webcraft/async/io/io.hpp>
 #include <webcraft/async/runtime.hpp>
+#include <webcraft/async/task_completion_source.hpp>
 #include <webcraft/async/runtime/windows.event.hpp>
 #include <webcraft/async/runtime/macos.event.hpp>
 #include <webcraft/async/runtime/linux.event.hpp>
@@ -714,20 +715,30 @@ public:
     {
         SOCKET fd = this->socket;
 
-        co_await yield();
-        int result = ::recv(fd, buffer.data(), (int)buffer.size(), 0);
-        co_await yield();
-        co_return result;
+        task_completion_source<size_t> tcs;
+
+        std::thread([&tcs, fd, buffer] mutable
+                    {
+                        int result = ::recv(fd, buffer.data(), (int)buffer.size(), 0);
+                        tcs.set_value(result); })
+            .detach();
+
+        co_return co_await tcs.task();
     }
 
     task<size_t> write(std::span<const char> buffer) override
     {
         SOCKET fd = this->socket;
 
-        co_await yield();
-        int result = ::send(fd, buffer.data(), (int)buffer.size(), 0);
-        co_await yield();
-        co_return result;
+        task_completion_source<size_t> tcs;
+
+        std::thread([&tcs, fd, buffer] mutable
+                    {
+                        int result = ::send(fd, buffer.data(), (int)buffer.size(), 0);
+                        tcs.set_value(result); })
+            .detach();
+
+        co_return co_await tcs.task();
     }
 
     void shutdown(webcraft::async::io::socket::socket_stream_mode mode)
