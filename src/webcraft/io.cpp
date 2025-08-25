@@ -624,6 +624,7 @@ public:
         fire_and_forget(close());
     }
 
+    // TODO: make it asynchronous
     task<void> connect(const webcraft::async::io::socket::connection_info &info) override
     {
         this->host = info.host;
@@ -660,17 +661,17 @@ public:
             }
             else
             {
-                struct sockaddr_in addr_;
-                ZeroMemory(&addr_, sizeof(addr_));
-                addr_.sin_family = AF_INET;
-                addr_.sin_addr.s_addr = INADDR_ANY;
-                addr_.sin_port = 0;
-                int rc = bind(fd, (SOCKADDR *)&addr_, sizeof(addr_));
-                if (rc != 0)
-                {
-                    ::closesocket(fd);
-                    continue;
-                }
+                // struct sockaddr_in addr_;
+                // ZeroMemory(&addr_, sizeof(addr_));
+                // addr_.sin_family = AF_INET;
+                // addr_.sin_addr.s_addr = INADDR_ANY;
+                // addr_.sin_port = 0;
+                // int rc = bind(fd, (SOCKADDR *)&addr_, sizeof(addr_));
+                // if (rc != 0)
+                // {
+                //     ::closesocket(fd);
+                //     continue;
+                // }
             }
 
             iocp = ::CreateIoCompletionPort((HANDLE)fd, (HANDLE)webcraft::async::detail::get_native_handle(), 0, 0);
@@ -681,104 +682,149 @@ public:
                 throw std::runtime_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
             }
 
-            // Await io_uring connect
-            auto event = webcraft::async::detail::as_awaitable(
-                webcraft::async::detail::windows::create_async_io_overlapped_event(
-                    (HANDLE)fd,
-                    [fd, addr, len](LPDWORD bytesTransferred, LPOVERLAPPED overlapped)
-                    {
-                        BOOL result = ::WSAConnectEx(fd, addr, len, nullptr, 0, nullptr, overlapped);
-                        SetLastError(WSAGetLastError());
-                        return result;
-                    }));
-
-            co_await event;
-
-            if (event.get_result() < 0)
+            int result = ::connect(fd, res->ai_addr, (int)res->ai_addrlen);
+            if (result == SOCKET_ERROR)
             {
                 ::closesocket(fd);
+                continue;
             }
             else
             {
-
-                int rc = setsockopt(fd, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
-                if (rc != 0)
-                {
-                    throw std::ios_base::failure("Failed to update socket connect context: " + std::to_string(WSAGetLastError()));
-                }
-                else
-                {
-                    this->socket = fd;
-                    flag = true;
-                    break;
-                }
+                this->socket = fd;
+                flag = true;
+                break;
             }
+
+            // Await io_uring connect
+            // auto event = webcraft::async::detail::as_awaitable(
+            //     webcraft::async::detail::windows::create_async_io_overlapped_event(
+            //         (HANDLE)fd,
+            //         [fd, addr, len](LPDWORD bytesTransferred, LPOVERLAPPED overlapped)
+            //         {
+            //             BOOL result = ::WSAConnectEx(fd, addr, len, nullptr, 0, nullptr, overlapped);
+            //             SetLastError(WSAGetLastError());
+            //             return result;
+            //         }));
+
+            // co_await event;
+
+            // if (event.get_result() < 0)
+            // {
+            //     ::closesocket(fd);
+            // }
+            // else
+            // {
+
+            //     int rc = setsockopt(fd, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
+            //     if (rc != 0)
+            //     {
+            //         throw std::ios_base::failure("Failed to update socket connect context: " + std::to_string(WSAGetLastError()));
+            //     }
+            //     else
+            //     {
+            //         this->socket = fd;
+            //         flag = true;
+            //         break;
+            //     }
+            // }
         }
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
         if (!flag)
             throw std::ios_base::failure("Failed to create socket: " + std::to_string(WSAGetLastError()));
+
+        co_return;
     }
 
     task<size_t> read(std::span<char> buffer) override
     {
         SOCKET fd = this->socket;
-        WSABUF wsaBuf;
-        wsaBuf.len = (ULONG)buffer.size();
-        wsaBuf.buf = buffer.data();
-        DWORD flags = 0;
-        std::cout << "Read Event creating" << std::endl;
-        auto event = webcraft::async::detail::as_awaitable(
-            webcraft::async::detail::windows::create_async_io_overlapped_event(
-                (HANDLE)fd,
-                [fd, wsaBuf, flags](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
-                {
-                    BOOL result = WSARecv(fd, &wsaBuf, 1, bytesTransferred, &flags, overlapped, nullptr);
-                    if (result == SOCKET_ERROR)
-                    {
-                        SetLastError(WSAGetLastError());
-                        return FALSE;
-                    }
-                    return TRUE;
-                }));
-        std::cout << "Read event queued" << std::endl;
 
-        co_await event;
-        std::cout << "Read Event result: " << event.get_result() << ", Error: " << WSAGetLastError() << std::endl;
+        co_return ::recv(fd, buffer.data(), (int)buffer.size(), 0);
 
-        co_return event.get_result();
+        // // Create a stable buffer that will persist for the async operation
+        // auto stable_buffer = std::make_shared<std::vector<char>>(buffer.size());
+
+        // // Use the simpler overlapped_event approach like the working test
+        // std::cout << "Read Event creating" << std::endl;
+        // auto event = webcraft::async::detail::as_awaitable(
+        //     webcraft::async::detail::windows::create_overlapped_event(
+        //         [fd, stable_buffer, flags = DWORD(0)](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
+        //         {
+        //             WSABUF wsaBuf;
+        //             wsaBuf.len = (ULONG)stable_buffer->size();
+        //             wsaBuf.buf = stable_buffer->data();
+
+        //             BOOL result = WSARecv(fd, &wsaBuf, 1, bytesTransferred, &flags, overlapped, nullptr);
+        //             std::cout << "WSARecv returned: " << result << ", Error: " << WSAGetLastError() << std::endl;
+        //             if (result == SOCKET_ERROR)
+        //             {
+        //                 int error = WSAGetLastError();
+        //                 if (error != WSA_IO_PENDING)
+        //                 {
+        //                     SetLastError(error);
+        //                     return FALSE;
+        //                 }
+        //             }
+        //             return result == 0 ? TRUE : result; // Return TRUE for async operations
+        //         },
+        //         [fd](LPOVERLAPPED overlapped)
+        //         {
+        //             // Cancel the operation if needed
+        //             CancelIoEx((HANDLE)fd, overlapped);
+        //         }));
+        // std::cout << "Read event queued" << std::endl;
+
+        // co_await event;
+
+        // // Copy data from stable buffer back to the original buffer
+        // size_t bytes_read = event.get_result();
+        // if (bytes_read > 0 && bytes_read <= buffer.size())
+        // {
+        //     std::copy(stable_buffer->begin(), stable_buffer->begin() + bytes_read, buffer.begin());
+        // }
+        // std::cout << "Read finished with " << bytes_read << " bytes" << std::endl;
+
+        // co_return bytes_read;
     }
 
     task<size_t> write(std::span<const char> buffer) override
     {
         SOCKET fd = this->socket;
-        WSABUF wsaBuf;
-        char *cbuf = new char[buffer.size()];
-        std::copy(buffer.begin(), buffer.end(), cbuf);
-        wsaBuf.len = (ULONG)buffer.size();
-        wsaBuf.buf = cbuf;
-        std::cout << "Write Event creating" << std::endl;
-        auto event = webcraft::async::detail::as_awaitable(
-            webcraft::async::detail::windows::create_async_io_overlapped_event(
-                (HANDLE)fd,
-                [fd, wsaBuf](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
-                {
-                    BOOL result = WSASend(fd, &wsaBuf, 1, bytesTransferred, 0, overlapped, nullptr); // segfault occurs here
-                    if (result == SOCKET_ERROR)
-                    {
-                        SetLastError(WSAGetLastError());
-                        return FALSE;
-                    }
-                    return TRUE;
-                }));
-        std::cout << "Write event queued" << std::endl;
 
-        co_await event;
-        delete[] cbuf;
+        co_return ::send(fd, buffer.data(), (int)buffer.size(), 0);
+        // // Create a stable buffer that will persist for the async operation
+        // auto stable_buffer = std::make_shared<std::vector<char>>(buffer.begin(), buffer.end());
 
-        std::cout << "Write Event result: " << event.get_result() << ", Error: " << WSAGetLastError() << std::endl;
-        co_return event.get_result();
+        // WSABUF wsaBuf;
+        // wsaBuf.len = (ULONG)stable_buffer->size();
+        // wsaBuf.buf = stable_buffer->data();
+
+        // std::cout << "Write Event creating" << std::endl;
+        // auto event = webcraft::async::detail::as_awaitable(
+        //     webcraft::async::detail::windows::create_async_io_overlapped_event(
+        //         (HANDLE)fd,
+        //         [fd, wsaBuf, stable_buffer](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
+        //         {
+        //             BOOL result = WSASend(fd, &wsaBuf, 1, bytesTransferred, 0, overlapped, nullptr);
+        //             if (result == SOCKET_ERROR)
+        //             {
+        //                 int error = WSAGetLastError();
+        //                 if (error != WSA_IO_PENDING)
+        //                 {
+        //                     SetLastError(error);
+        //                     return FALSE;
+        //                 }
+        //             }
+        //             return TRUE;
+        //         }));
+        // std::cout << "Write event queued" << std::endl;
+
+        // co_await event;
+
+        // std::cout << "Write Event result: " << event.get_result() << ", Error: " << WSAGetLastError() << std::endl;
+        // co_return event.get_result();
     }
 
     void shutdown(webcraft::async::io::socket::socket_stream_mode mode)

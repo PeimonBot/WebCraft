@@ -24,23 +24,19 @@ namespace webcraft::async::detail::windows
     struct overlapped_runtime_event : public webcraft::async::detail::runtime_event
     {
     private:
-        overlapped_event *overlapped;
+        overlapped_event overlapped;
 
     public:
-        overlapped_runtime_event(std::stop_token token) : runtime_event(token)
+        overlapped_runtime_event(std::stop_token token) : runtime_event(token), overlapped(this)
         {
-            overlapped = new overlapped_event(this);
         }
 
-        virtual ~overlapped_runtime_event()
-        {
-            delete overlapped;
-        }
+        virtual ~overlapped_runtime_event() = default;
 
         void try_start() override
         {
             DWORD numberOfBytesTransfered = 0;
-            BOOL result = perform_overlapped_operation(&numberOfBytesTransfered, overlapped);
+            BOOL result = perform_overlapped_operation(&numberOfBytesTransfered, &overlapped);
 
             if (result)
             {
@@ -61,7 +57,7 @@ namespace webcraft::async::detail::windows
 
         void try_native_cancel() override
         {
-            try_native_cancel(overlapped);
+            try_native_cancel(&overlapped);
         }
 
         virtual void try_native_cancel(LPOVERLAPPED overlapped) = 0;
@@ -104,7 +100,6 @@ namespace webcraft::async::detail::windows
 
             BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
             {
-                overlapped->hEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
                 return op(numberOfBytesTransfered, overlapped);
             }
 
@@ -134,7 +129,14 @@ namespace webcraft::async::detail::windows
 
             BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
             {
-                return op(numberOfBytesTransfered, overlapped);
+                overlapped->hEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+                BOOL value = op(numberOfBytesTransfered, overlapped);
+                if (value)
+                {
+                    WaitForSingleObject(overlapped->hEvent, INFINITE);
+                    CloseHandle(overlapped->hEvent);
+                }
+                return value;
             }
 
         private:

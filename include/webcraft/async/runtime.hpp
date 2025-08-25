@@ -54,7 +54,9 @@ namespace webcraft::async
                 {
                     this->cancelled = cancelled;
                     this->result = result;
+                    std::cout << "Running the continuation" << std::endl;
                     callback();
+                    std::cout << "Continuation ran" << std::endl;
                 }
             }
 
@@ -115,12 +117,15 @@ namespace webcraft::async
                 }
                 catch (...)
                 {
+                    std::cout << "Exception was caught" << std::endl;
                     ptr = std::current_exception();
+                    std::cout << "Resuming coroutine" << std::endl;
                     h.resume();
                 }
             }
             void await_resume()
             {
+                std::cout << "Coroutine resumed" << std::endl;
                 if (ptr)
                 {
                     std::cout << "Rethrowing exception from await_resume" << std::endl;

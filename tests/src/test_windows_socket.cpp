@@ -81,7 +81,7 @@ bool setup_connection()
         return false;
     }
 
-    HANDLE iocpHandle = CreateIoCompletionPort((HANDLE)sock, iocp, (ULONG_PTR)sock, 0);
+    HANDLE iocpHandle = CreateIoCompletionPort((HANDLE)sock, iocp, 0, 0);
     if (iocpHandle == nullptr)
     {
         freeaddrinfo(res);
@@ -124,6 +124,7 @@ std::string test_original_approach()
         LPOVERLAPPED overlapped;
         GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, 5000);
         WaitForSingleObject(sendOverlapped.hEvent, 5000);
+        CloseHandle(sendOverlapped.hEvent);
         bytesSent = bytesTransferred;
     }
 
@@ -149,6 +150,7 @@ std::string test_original_approach()
         LPOVERLAPPED overlapped;
         GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, 5000);
         WaitForSingleObject(recvOverlapped.hEvent, 5000);
+        CloseHandle(recvOverlapped.hEvent);
         bytesReceived = bytesTransferred;
     }
 

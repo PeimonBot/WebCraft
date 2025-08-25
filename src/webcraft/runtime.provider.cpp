@@ -164,6 +164,7 @@ void run_loop(std::stop_token token)
         LPOVERLAPPED overlapped;
 
         BOOL result = GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, static_cast<DWORD>(wait_timeout.count()));
+        std::cout << "Got queued completion status" << std::endl;
 
         if (!result)
         {
@@ -179,8 +180,11 @@ void run_loop(std::stop_token token)
             {
                 if (overlapped->hEvent)
                 {
+                    std::cout << "Waiting for event to complete..." << std::endl;
                     WaitForSingleObject(overlapped->hEvent, static_cast<DWORD>(wait_timeout.count()));
+                    std::cout << "Event completed." << std::endl;
                     CloseHandle(overlapped->hEvent);
+                    std::cout << "Closing event" << std::endl;
                 }
 
                 // Process the completion event even though it failed
@@ -219,16 +223,22 @@ void run_loop(std::stop_token token)
         // Process the completion event
         if (overlapped->hEvent)
         {
-            WaitForSingleObject(overlapped->hEvent, static_cast<DWORD>(wait_timeout.count()));
+            std::cout << "Waiting for event to complete..." << std::endl;
+            WaitForSingleObject(overlapped->hEvent, INFINITE);
+            std::cout << "Event completed." << std::endl;
             CloseHandle(overlapped->hEvent);
+            std::cout << "Closing event" << std::endl;
         }
 
         auto *event = reinterpret_cast<overlapped_event *>(overlapped);
+        std::cout << "Getting the event from pointer" << std::endl;
         auto runtime_event = event->event;
         if (runtime_event)
         {
+            std::cout << "Runtime event exists executing with bytes transferred: " << bytesTransferred << std::endl;
             // Call the callback function
             runtime_event->try_execute(static_cast<int>(bytesTransferred));
+            std::cout << "Runtime event executed with bytes transferred: " << bytesTransferred << std::endl;
         }
     }
 
