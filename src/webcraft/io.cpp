@@ -338,18 +338,28 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 #else
 #endif
 
-#if defined(WEBCRAFT_MOCK_SOCKET_TESTS)
-
-std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
-{
-    throw std::runtime_error("TCP socket descriptor not implemented in mock tests");
-}
-
-#elif defined(__linux__)
+#if defined(__linux__)
 
 #include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+
+#elif defined(_WIN32)
+
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <MSWSock.h>
+
+#elif defined(__APPLE__)
+
+#include <unistd.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+
+#endif
+
 #include <string.h>
 
 std::pair<std::string, uint16_t> addr_to_host_port(
@@ -368,6 +378,20 @@ std::pair<std::string, uint16_t> addr_to_host_port(
 
     return {std::string(host), static_cast<uint16_t>(std::stoi(service))};
 }
+
+#if defined(WEBCRAFT_MOCK_SOCKET_TESTS)
+
+std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+{
+    throw std::runtime_error("TCP socket descriptor not implemented in mock tests");
+}
+
+#elif defined(__linux__)
+
+#include <unistd.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <string.h>
 
 class io_uring_tcp_socket_descriptor : public tcp_socket_descriptor
 {
@@ -535,11 +559,8 @@ std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor> webc
 }
 
 #elif defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-#include <MSWSock.h>
+
+#if !defined(WEBCRAFT_WIN32_SYNC_SOCKETS)
 
 struct WSAExtensionManager
 {
@@ -593,7 +614,8 @@ BOOL WSAAcceptEx(SOCKET sListenSocket, SOCKET sAcceptSocket, PVOID lpOutputBuffe
     return get_extension_manager().AcceptEx(sListenSocket, sAcceptSocket, lpOutputBuffer, dwReceiveDataLength, dwLocalAddressLength, dwRemoteAddressLength, lpdwBytesReceived, lpOverlapped);
 }
 
-struct iocp_tcp_socket_descriptor : public webcraft::async::io::socket::detail::tcp_socket_descriptor
+#else
+struct iocp_tcp_socket_descriptor : public tcp_socket_descriptor
 {
 private:
     SOCKET socket;
@@ -604,7 +626,6 @@ private:
 public:
     iocp_tcp_socket_descriptor() : socket(INVALID_SOCKET), iocp(INVALID_HANDLE_VALUE), port(0)
     {
-        get_extension_manager(); // Ensure WSA extensions are initialized
     }
 
     iocp_tcp_socket_descriptor(SOCKET sock, std::string host, uint16_t port) : socket(sock), iocp(INVALID_HANDLE_VALUE), host(std::move(host)), port(port)
@@ -624,7 +645,6 @@ public:
         fire_and_forget(close());
     }
 
-    // TODO: make it asynchronous
     task<void> connect(const webcraft::async::io::socket::connection_info &info) override
     {
         this->host = info.host;
@@ -659,20 +679,6 @@ public:
             {
                 continue;
             }
-            else
-            {
-                // struct sockaddr_in addr_;
-                // ZeroMemory(&addr_, sizeof(addr_));
-                // addr_.sin_family = AF_INET;
-                // addr_.sin_addr.s_addr = INADDR_ANY;
-                // addr_.sin_port = 0;
-                // int rc = bind(fd, (SOCKADDR *)&addr_, sizeof(addr_));
-                // if (rc != 0)
-                // {
-                //     ::closesocket(fd);
-                //     continue;
-                // }
-            }
 
             iocp = ::CreateIoCompletionPort((HANDLE)fd, (HANDLE)webcraft::async::detail::get_native_handle(), 0, 0);
 
@@ -694,39 +700,6 @@ public:
                 flag = true;
                 break;
             }
-
-            // Await io_uring connect
-            // auto event = webcraft::async::detail::as_awaitable(
-            //     webcraft::async::detail::windows::create_async_io_overlapped_event(
-            //         (HANDLE)fd,
-            //         [fd, addr, len](LPDWORD bytesTransferred, LPOVERLAPPED overlapped)
-            //         {
-            //             BOOL result = ::WSAConnectEx(fd, addr, len, nullptr, 0, nullptr, overlapped);
-            //             SetLastError(WSAGetLastError());
-            //             return result;
-            //         }));
-
-            // co_await event;
-
-            // if (event.get_result() < 0)
-            // {
-            //     ::closesocket(fd);
-            // }
-            // else
-            // {
-
-            //     int rc = setsockopt(fd, SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, NULL, 0);
-            //     if (rc != 0)
-            //     {
-            //         throw std::ios_base::failure("Failed to update socket connect context: " + std::to_string(WSAGetLastError()));
-            //     }
-            //     else
-            //     {
-            //         this->socket = fd;
-            //         flag = true;
-            //         break;
-            //     }
-            // }
         }
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
@@ -741,90 +714,20 @@ public:
     {
         SOCKET fd = this->socket;
 
-        co_return ::recv(fd, buffer.data(), (int)buffer.size(), 0);
-
-        // // Create a stable buffer that will persist for the async operation
-        // auto stable_buffer = std::make_shared<std::vector<char>>(buffer.size());
-
-        // // Use the simpler overlapped_event approach like the working test
-        // std::cout << "Read Event creating" << std::endl;
-        // auto event = webcraft::async::detail::as_awaitable(
-        //     webcraft::async::detail::windows::create_overlapped_event(
-        //         [fd, stable_buffer, flags = DWORD(0)](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
-        //         {
-        //             WSABUF wsaBuf;
-        //             wsaBuf.len = (ULONG)stable_buffer->size();
-        //             wsaBuf.buf = stable_buffer->data();
-
-        //             BOOL result = WSARecv(fd, &wsaBuf, 1, bytesTransferred, &flags, overlapped, nullptr);
-        //             std::cout << "WSARecv returned: " << result << ", Error: " << WSAGetLastError() << std::endl;
-        //             if (result == SOCKET_ERROR)
-        //             {
-        //                 int error = WSAGetLastError();
-        //                 if (error != WSA_IO_PENDING)
-        //                 {
-        //                     SetLastError(error);
-        //                     return FALSE;
-        //                 }
-        //             }
-        //             return result == 0 ? TRUE : result; // Return TRUE for async operations
-        //         },
-        //         [fd](LPOVERLAPPED overlapped)
-        //         {
-        //             // Cancel the operation if needed
-        //             CancelIoEx((HANDLE)fd, overlapped);
-        //         }));
-        // std::cout << "Read event queued" << std::endl;
-
-        // co_await event;
-
-        // // Copy data from stable buffer back to the original buffer
-        // size_t bytes_read = event.get_result();
-        // if (bytes_read > 0 && bytes_read <= buffer.size())
-        // {
-        //     std::copy(stable_buffer->begin(), stable_buffer->begin() + bytes_read, buffer.begin());
-        // }
-        // std::cout << "Read finished with " << bytes_read << " bytes" << std::endl;
-
-        // co_return bytes_read;
+        co_await yield();
+        int result = ::recv(fd, buffer.data(), (int)buffer.size(), 0);
+        co_await yield();
+        co_return result;
     }
 
     task<size_t> write(std::span<const char> buffer) override
     {
         SOCKET fd = this->socket;
 
-        co_return ::send(fd, buffer.data(), (int)buffer.size(), 0);
-        // // Create a stable buffer that will persist for the async operation
-        // auto stable_buffer = std::make_shared<std::vector<char>>(buffer.begin(), buffer.end());
-
-        // WSABUF wsaBuf;
-        // wsaBuf.len = (ULONG)stable_buffer->size();
-        // wsaBuf.buf = stable_buffer->data();
-
-        // std::cout << "Write Event creating" << std::endl;
-        // auto event = webcraft::async::detail::as_awaitable(
-        //     webcraft::async::detail::windows::create_async_io_overlapped_event(
-        //         (HANDLE)fd,
-        //         [fd, wsaBuf, stable_buffer](LPDWORD bytesTransferred, LPOVERLAPPED overlapped) mutable
-        //         {
-        //             BOOL result = WSASend(fd, &wsaBuf, 1, bytesTransferred, 0, overlapped, nullptr);
-        //             if (result == SOCKET_ERROR)
-        //             {
-        //                 int error = WSAGetLastError();
-        //                 if (error != WSA_IO_PENDING)
-        //                 {
-        //                     SetLastError(error);
-        //                     return FALSE;
-        //                 }
-        //             }
-        //             return TRUE;
-        //         }));
-        // std::cout << "Write event queued" << std::endl;
-
-        // co_await event;
-
-        // std::cout << "Write Event result: " << event.get_result() << ", Error: " << WSAGetLastError() << std::endl;
-        // co_return event.get_result();
+        co_await yield();
+        int result = ::send(fd, buffer.data(), (int)buffer.size(), 0);
+        co_await yield();
+        co_return result;
     }
 
     void shutdown(webcraft::async::io::socket::socket_stream_mode mode)
@@ -869,6 +772,8 @@ std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make
 
 #endif
 
+#endif
+
 #ifdef WEBCRAFT_MOCK_LISTENER_TESTS
 
 std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
@@ -907,12 +812,16 @@ public:
 
             co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::linux::create_io_uring_event([fd](struct io_uring_sqe *sqe)
                                                                                                                  { io_uring_prep_close(sqe, fd); }));
+            this->fd = -1;
         }
         co_return;
     }
 
     void bind(const webcraft::async::io::socket::connection_info &info) override
     {
+        this->host = info.host;
+        this->port = info.port;
+
         // Prepare address string for getaddrinfo
         std::string port_str = std::to_string(info.port);
         struct addrinfo hints{};
@@ -986,7 +895,7 @@ public:
         }
     }
 
-    task<std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor>> accept() override
+    task<std::shared_ptr<tcp_socket_descriptor>> accept() override
     {
         int fd = this->fd;
         struct sockaddr_storage addr;
@@ -1018,6 +927,144 @@ std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> we
     return std::make_shared<io_uring_tcp_listener_descriptor>();
 }
 
-#else
+#elif defined(_WIN32)
 
+#if defined(WEBCRAFT_WIN32_SYNC_SOCKETS)
+class iocp_tcp_socket_listener : public tcp_listener_descriptor
+{
+private:
+    SOCKET socket;
+    HANDLE iocp;
+    std::atomic<bool> closed{false};
+
+public:
+    iocp_tcp_socket_listener() : socket(INVALID_SOCKET), iocp(INVALID_HANDLE_VALUE)
+    {
+    }
+
+    ~iocp_tcp_socket_listener()
+    {
+        fire_and_forget(close());
+    }
+
+    void bind(const webcraft::async::io::socket::connection_info &info) override
+    {
+        // Prepare address string for getaddrinfo
+        std::string port_str = std::to_string(info.port);
+        struct addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+        hints.ai_socktype = SOCK_STREAM; // TCP
+        hints.ai_flags = AI_PASSIVE;     // No special flags
+        hints.ai_protocol = IPPROTO_TCP;
+
+        struct addrinfo *res;
+        int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
+        if (ret != 0)
+        {
+            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        }
+
+        bool flag = false;
+
+        for (auto *rp = res; rp; rp = rp->ai_next)
+        {
+
+            int family = rp->ai_family;
+            int sock_type = rp->ai_socktype;
+            int protocol = rp->ai_protocol;
+            sockaddr *addr = rp->ai_addr;
+            socklen_t len = (socklen_t)rp->ai_addrlen;
+
+            SOCKET fd = ::socket(family, sock_type, protocol);
+            if (fd == INVALID_SOCKET)
+            {
+                continue;
+            }
+
+            iocp = CreateIoCompletionPort((HANDLE)fd, (HANDLE)webcraft::async::detail::get_native_handle(), 0, 0);
+            if (iocp == INVALID_HANDLE_VALUE)
+            {
+                ::closesocket(fd);
+                continue;
+            }
+
+            // Await io_uring bind
+            int result = ::bind(fd, addr, len);
+
+            if (result < 0)
+            {
+                ::closesocket(fd);
+                continue;
+            }
+            else
+            {
+
+                this->socket = fd;
+                flag = true;
+                break;
+            }
+        }
+
+        freeaddrinfo(res); // Free memory allocated by getaddrinfo
+
+        if (!flag)
+            throw std::ios_base::failure("Failed to create socket: " + std::to_string(WSAGetLastError()));
+    }
+
+    void listen(int backlog) override
+    {
+        SOCKET fd = this->socket;
+
+        int result = ::listen(fd, backlog);
+
+        if (result < 0)
+        {
+            throw std::ios_base::failure("Failed to listen: " + std::to_string(result) + ", value: " + std::to_string(WSAGetLastError()));
+        }
+    }
+
+    task<std::shared_ptr<tcp_socket_descriptor>> accept() override
+    {
+
+        SOCKET fd = this->socket;
+        struct sockaddr_storage addr;
+        socklen_t addr_len = sizeof(addr);
+
+        SOCKET result = ::accept(fd, (struct sockaddr *)&addr, &addr_len);
+
+        if (result == INVALID_SOCKET)
+        {
+            throw std::ios_base::failure("Failed to accept connection: " + std::to_string(WSAGetLastError()));
+        }
+
+        auto [host, port] = addr_to_host_port(addr);
+
+        if (host.empty() || port == 0)
+        {
+            co_return nullptr;
+        }
+
+        co_return std::make_shared<iocp_tcp_socket_descriptor>(result, host, port);
+    }
+
+    task<void> close() override
+    {
+        if (socket != INVALID_SOCKET)
+        {
+            ::closesocket(socket);
+            socket = INVALID_SOCKET;
+        }
+
+        // Don't close iocp as it's the global IOCP handle
+        co_return;
+    }
+};
+
+std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> webcraft::async::io::socket::detail::make_tcp_listener_descriptor()
+{
+    return std::make_shared<iocp_tcp_socket_listener>();
+}
+#endif
+
+#else
 #endif

@@ -108,8 +108,6 @@ void handle_client_side_sync(const std::string &host, uint16_t port);
 
 TEST_CASE(TestAsyncServerSyncClient)
 {
-    throw std::runtime_error("Test not implemented");
-
     runtime_context context;
 
     async_event signal;
@@ -151,8 +149,6 @@ TEST_CASE(TestAsyncServerSyncClient)
 
 TEST_CASE(TestSocketPubSub)
 {
-    throw std::runtime_error("Test not implemented");
-
     runtime_context context;
 
     async_event signal;
@@ -377,6 +373,11 @@ task<void> handle_client_side_async(tcp_socket &client)
     std::copy(content.begin(), content.end(), wbuffer.begin());
 
     bool sent = co_await client_wstream.send(wbuffer);
+
+#if defined(WEBCRAFT_WIN32_SYNC_SOCKETS)
+    // it will wait on it so we gotta yield
+    co_await yield();
+#endif
     EXPECT_TRUE(sent) << "Data should be sent";
     std::cout << "Client: Sent the bytes to server: " << sent << std::endl;
     size_t bytes_received = co_await client_rstream.recv(rbuffer);
