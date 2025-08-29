@@ -513,11 +513,6 @@ TEST_CASE(TestExceptionAsyncGeneratorIncrement)
 
 TEST_CASE(TestAsyncGeneratorThroughput)
 {
-    // BUG: This test was failing with C++20 coroutines due to stack overflow even with symmetric transfer enabled
-    // Note: This test uses a reduced count (40,000) to avoid stack overflow issues
-    // that occur with C++20 coroutines when processing >45,000 individual items.
-    // For larger datasets, use the batched processing approach shown in
-    // TestAsyncGeneratorBatchedProcessing.
 
     auto makeSequence = [](async_event &event) -> async_generator<std::uint32_t>
     {

@@ -222,7 +222,7 @@ namespace webcraft::async
      *
      *   set_timeout([signal]() { signal.set(); }, 100ms);
      *
-     *   sleep_for(100ms);
+     *   await sleep_for(100ms);
      *
      *   EXPECT_TRUE(signal.is_set());
      * };

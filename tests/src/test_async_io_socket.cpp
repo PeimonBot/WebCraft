@@ -69,6 +69,7 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
 
 TEST_CASE(TestSocketConnection)
 {
+    throw std::runtime_error("Not implemented yet");
     runtime_context context;
 
     connection_results sync_results = get_google_results_sync();
@@ -99,7 +100,6 @@ TEST_CASE(TestSocketConnection)
     sync_wait(task_fn());
 
     std::cout << "Async Client: All went well" << std::endl;
-    std::cout << "Last error: " << GetLastError() << std::endl;
 }
 
 task<void> handle_server_side_async(tcp_socket &client_peer);
@@ -108,6 +108,7 @@ void handle_client_side_sync(const std::string &host, uint16_t port);
 
 TEST_CASE(TestAsyncServerSyncClient)
 {
+    throw std::runtime_error("Not implemented yet");
     runtime_context context;
 
     async_event signal;
@@ -149,6 +150,7 @@ TEST_CASE(TestAsyncServerSyncClient)
 
 TEST_CASE(TestSocketPubSub)
 {
+    throw std::runtime_error("Not implemented yet");
     runtime_context context;
 
     async_event signal;

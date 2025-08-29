@@ -26,7 +26,8 @@ namespace webcraft::async::detail::macos
 
         void try_native_cancel() override
         {
-            EV_SET(&kev, event.ident, event.filter, EV_DELETE, 0, 0, nullptr);
+            struct kevent ev;
+            EV_SET(&ev, kev.ident, kev.filter, EV_DELETE, 0, 0, nullptr);
             int ret = kevent(kq, &kev, 1, nullptr, 0, nullptr);
             if (ret < 0)
             {
