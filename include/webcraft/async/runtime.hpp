@@ -20,7 +20,16 @@ namespace webcraft::async
 
         void shutdown_runtime() noexcept;
 
-        class runtime_event
+        class runtime_callback
+        {
+        public:
+            /// @brief Tries to execute the callback and gives result to consumer
+            /// @param result the result of runtime event
+            /// @param cancelled the cancellation status
+            virtual void try_execute(int result, bool cancelled = false) = 0;
+        };
+
+        class runtime_event : public runtime_callback
         {
         private:
             std::function<void()> callback;
@@ -47,7 +56,7 @@ namespace webcraft::async
             /// @brief Tries to execute the callback and gives result to consumer
             /// @param result the result of runtime event
             /// @param cancelled the cancellation status
-            void try_execute(int result, bool cancelled = false)
+            void try_execute(int result, bool cancelled = false) override
             {
                 bool expected = false;
                 if (finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel))

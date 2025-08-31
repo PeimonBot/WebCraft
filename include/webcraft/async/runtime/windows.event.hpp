@@ -118,8 +118,6 @@ namespace webcraft::async::detail::windows
 
     inline auto create_async_io_overlapped_event(HANDLE file, overlapped_operation op, std::stop_token token = get_stop_token())
     {
-        // https://learn.microsoft.com/en-us/answers/questions/5532583/receiving-garbage-data-with-iocp-after-wsasend-in?page=1&orderby=helpful&comment=answer-12201038&translated=false#newest-answer-comment
-        // TODO: Fix to using CreateEvent in conjunction with IOCP for overlapped send and recv (for everything actually + will be easier since everything is using the WRAPPER I made) and WaitForSingleObject after GetQueuedCompletionStatus
         struct overlapped_async_io_runtime_event_impl : public overlapped_async_io_runtime_event
         {
             overlapped_async_io_runtime_event_impl(HANDLE file, overlapped_operation op, std::stop_token token)
