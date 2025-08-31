@@ -58,7 +58,6 @@ namespace webcraft::async
         std::mutex mutex;
         std::condition_variable cv;
         std::atomic<int> available_workers{0};
-        std::set<std::thread::id> workers_to_remove; // Track workers that should be removed
         friend class thread_pool_worker;
 
     public:
@@ -87,9 +86,6 @@ namespace webcraft::async
             {
                 std::unique_lock<std::mutex> lock(mutex);
 
-                // Clean up workers that have marked themselves for removal
-                cleanup_expired_workers();
-
                 if (available_workers == 0 && workers.size() < max_threads)
                 {
                     auto worker = std::make_unique<thread_pool_worker>(this);
@@ -99,31 +95,6 @@ namespace webcraft::async
                 tasks.push(func);
             }
             cv.notify_one();
-        }
-
-    private:
-        void cleanup_expired_workers()
-        {
-            // This method should be called while holding the mutex
-            for (auto it = workers_to_remove.begin(); it != workers_to_remove.end();)
-            {
-                // Only remove workers if we have more than min_threads
-                if (workers.size() <= min_threads)
-                {
-                    // Don't remove any more workers - we're at minimum
-                    workers_to_remove.clear();
-                    break;
-                }
-
-                auto worker_it = workers.find(*it);
-                if (worker_it != workers.end())
-                {
-                    // Request stop and remove the worker
-                    worker_it->second->request_stop();
-                    workers.erase(worker_it);
-                }
-                it = workers_to_remove.erase(it);
-            }
         }
 
     public:
@@ -153,7 +124,6 @@ namespace webcraft::async
         while (!token.stop_requested())
         {
             std::function<void()> task;
-            bool should_exit = false;
 
             (pool->available_workers)++;
             {
@@ -167,33 +137,21 @@ namespace webcraft::async
                     // Timeout occurred and no tasks available
                     if (pool->workers.size() > pool->get_min_threads())
                     {
-                        // Mark this worker for removal instead of removing immediately
-                        pool->workers_to_remove.insert(get_id());
-                        should_exit = true;
+                        pool->workers.erase(get_id());
+                        (pool->available_workers)--;
+                        return;
                     }
                 }
 
                 if (token.stop_requested())
                 {
-                    (pool->available_workers)--;
                     return;
-                }
-
-                if (should_exit)
-                {
-                    (pool->available_workers)--;
-                    return; // Exit the loop, worker will be cleaned up later
                 }
 
                 if (!pool->tasks.empty())
                 {
                     task = std::move(pool->tasks.front());
                     pool->tasks.pop();
-                }
-                else
-                {
-                    (pool->available_workers)--;
-                    continue;
                 }
             }
             (pool->available_workers)--;
