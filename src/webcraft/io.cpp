@@ -5,6 +5,7 @@
 #include <webcraft/async/runtime/macos.event.hpp>
 #include <webcraft/async/runtime/linux.event.hpp>
 #include <cstdio>
+#include <webcraft/async/thread_pool.hpp>
 
 using namespace webcraft::async;
 using namespace webcraft::async::io::fs;
