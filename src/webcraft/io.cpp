@@ -696,6 +696,9 @@ BOOL WSAAcceptEx(SOCKET sListenSocket, SOCKET sAcceptSocket, PVOID lpOutputBuffe
 }
 
 #else
+
+static webcraft::async::thread_pool pool(std::thread::hardware_concurrency(), std::thread::hardware_concurrency() * 2);
+
 struct iocp_tcp_socket_descriptor : public tcp_socket_descriptor
 {
 private:
@@ -797,11 +800,10 @@ public:
 
         task_completion_source<size_t> tcs;
 
-        std::thread([&tcs, fd, buffer] mutable
+        pool.submit([&tcs, fd, buffer] mutable
                     {
                         int result = ::recv(fd, buffer.data(), (int)buffer.size(), 0);
-                        tcs.set_value(result); })
-            .detach();
+                        tcs.set_value(result); });
 
         co_return co_await tcs.task();
     }
@@ -812,11 +814,10 @@ public:
 
         task_completion_source<size_t> tcs;
 
-        std::thread([&tcs, fd, buffer] mutable
+        pool.submit([&tcs, fd, buffer] mutable
                     {
                         int result = ::send(fd, buffer.data(), (int)buffer.size(), 0);
-                        tcs.set_value(result); })
-            .detach();
+                        tcs.set_value(result); });
 
         co_return co_await tcs.task();
     }
