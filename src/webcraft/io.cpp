@@ -337,6 +337,85 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 }
 
 #elif defined(__APPLE__)
+
+static webcraft::async::thread_pool pool(std::thread::hardware_concurrency(), std::thread::hardware_concurrency() * 2);
+
+class thread_pool_file_descriptor : public file_descriptor
+{
+private:
+    std::FILE *file;
+
+public:
+    thread_pool_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode) : file_descriptor(mode)
+    {
+        if (mode & std::ios::in)
+        {
+            file = std::fopen(p.c_str(), "r");
+        }
+        else if (mode & std::ios::out)
+        {
+            if (mode & std::ios::app)
+            {
+                file = std::fopen(p.c_str(), "a");
+            }
+            else
+            {
+                file = std::fopen(p.c_str(), "w");
+            }
+        }
+    }
+
+    ~thread_pool_file_descriptor()
+    {
+        if (file)
+        {
+            fire_and_forget(close());
+            file = nullptr;
+        }
+    }
+
+    // virtual because we want to allow platform specific implementation
+    task<size_t> read(std::span<char> buffer)
+    {
+        task_completion_source<size_t> source;
+
+        pool.submit([&]
+                    {
+            auto size = std::fread(buffer.data(), sizeof(char), buffer.size(), file);
+            source.set_value(size); });
+
+        co_return co_await source.task();
+    }
+
+    task<size_t> write(std::span<char> buffer)
+    {
+
+        task_completion_source<size_t> source;
+
+        pool.submit([&]
+                    {
+            auto size = std::fwrite(buffer.data(), sizeof(char), buffer.size(), file);
+            source.set_value(size); });
+
+        co_return co_await source.task();
+    }
+
+    task<void> close()
+    {
+        if (file)
+        {
+            std::fclose(file);
+            file = nullptr;
+        }
+        co_return;
+    }
+};
+
+task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode)
+{
+    co_return std::make_shared<thread_pool_file_descriptor>(p, mode);
+}
+
 #else
 #endif
 
