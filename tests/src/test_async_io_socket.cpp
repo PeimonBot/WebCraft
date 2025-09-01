@@ -111,7 +111,7 @@ TEST_CASE(TestAsyncServerSyncClient)
     // throw std::runtime_error("Not implemented yet");
     runtime_context context;
 
-    async_event signal;
+    event_signal signal;
     const std::string localhost = "127.0.0.1";
     const uint16_t port = 5001;
 
@@ -136,12 +136,14 @@ TEST_CASE(TestAsyncServerSyncClient)
 
     std::thread client_thread([&]()
                               {
-        sync_wait(co_async {
-            co_await signal;
-        }());
+        signal.wait();
         std::cout << "Sync Client: Starting sync client" << std::endl;
-        handle_client_side_sync(localhost, port);
-        std::cout << "Sync Client: All went well" << std::endl; });
+        try {
+            handle_client_side_sync(localhost, port);
+            std::cout << "Sync Client: All went well" << std::endl;
+        } catch (...) {
+            std::cerr << "Sync Client: Error occurred" << std::endl;
+        } });
 
     sync_wait(listener_fn());
     client_thread.join();
@@ -277,24 +279,31 @@ void handle_client_side_sync(const std::string &host, uint16_t port)
         throw std::runtime_error("socket failed");
     }
 
+    std::cout << "Created socket" << std::endl;
     // --- Connect ---
     sockaddr_in server_addr{};
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
     inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr);
+    std::cout << "Connecting to " << host << ":" << port << std::endl;
 
-    if (connect(sockfd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
+    if (::connect(sockfd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
     {
+        std::cout << "Failed to connect" << std::endl;
         closesocket(sockfd);
         throw std::runtime_error("connect failed");
     }
+
+    std::cout << "Connected to " << host << ":" << port << std::endl;
 
     // --- Send data ---
     std::array<char, 12> wbuffer;
     std::copy(content.begin(), content.end(), wbuffer.begin());
 
-    if (send(sockfd, wbuffer.data(), (int)wbuffer.size(), 0) < 0)
+    int bytes_sent = send(sockfd, wbuffer.data(), (int)wbuffer.size(), 0);
+    if (bytes_sent < 0)
     {
+        std::cout << "Send failed: " << bytes_sent << ", last error:" << WSAGetLastError() << std::endl;
         closesocket(sockfd);
         throw std::runtime_error("send failed");
     }
@@ -305,6 +314,7 @@ void handle_client_side_sync(const std::string &host, uint16_t port)
     int bytes_received = recv(sockfd, rbuffer.data(), (int)rbuffer.size(), 0);
     if (bytes_received < 0)
     {
+        std::cout << "Recv failed: " << bytes_received << ", last error:" << WSAGetLastError() << std::endl;
         closesocket(sockfd);
         throw std::runtime_error("recv failed");
     }
@@ -335,6 +345,7 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
     // --- Read response ---
     std::vector<char> content;
 
+    std::cout << "Async Client: Waiting for response..." << std::endl;
     std::array<char, 4096> buffer{};
     while (auto bytes_received = co_await rstream.recv(std::span<char>(buffer.begin(), buffer.end())))
     {
@@ -357,6 +368,7 @@ task<void> handle_server_side_async(tcp_socket &client_peer)
     auto &client_peer_wstream = client_peer.get_writable_stream();
 
     std::array<char, content_size> buffer;
+    std::cout << "Server: Waiting for client data..." << std::endl;
     size_t bytes_received = co_await client_peer_rstream.recv(std::span<char>(buffer.begin(), buffer.end()));
     EXPECT_EQ(bytes_received, content_size) << "Bytes received should be " << content_size;
     std::cout << "Server: Received from client: " << bytes_received << std::endl;

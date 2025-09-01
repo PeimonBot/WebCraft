@@ -164,7 +164,6 @@ void run_loop(std::stop_token token)
         LPOVERLAPPED overlapped;
 
         BOOL result = GetQueuedCompletionStatus(iocp, &bytesTransferred, &completionKey, &overlapped, static_cast<DWORD>(wait_timeout.count()));
-        std::cout << "Got queued completion status" << std::endl;
 
         if (!result)
         {
@@ -182,13 +181,12 @@ void run_loop(std::stop_token token)
                 auto *event = reinterpret_cast<overlapped_event *>(overlapped);
 
                 auto runtime_event = event->event;
-                if (runtime_event)
+                if (runtime_event && !event->completed_sync)
                 {
                     // For file operations, ERROR_HANDLE_EOF (38) means we've reached end of file
                     // Pass 0 bytes transferred and let the application handle it
                     if (lastError == ERROR_HANDLE_EOF)
                     {
-                        std::cout << "EOF reached" << std::endl;
                         runtime_event->try_execute(0); // 0 bytes indicates EOF
                     }
                     else
@@ -201,7 +199,6 @@ void run_loop(std::stop_token token)
             }
 
             // If no overlapped pointer, this is a serious error
-            std::cerr << "GetQueuedCompletionStatus failed: " << lastError << std::endl;
             break; // Other error, exit loop
         }
 
@@ -212,14 +209,11 @@ void run_loop(std::stop_token token)
         }
 
         auto *event = reinterpret_cast<overlapped_event *>(overlapped);
-        std::cout << "Getting the event from pointer" << std::endl;
         auto runtime_event = event->event;
-        if (runtime_event)
+        if (runtime_event && !event->completed_sync)
         {
-            std::cout << "Runtime event exists executing with bytes transferred: " << bytesTransferred << std::endl;
             // Call the callback function
             runtime_event->try_execute(static_cast<int>(bytesTransferred));
-            std::cout << "Runtime event executed with bytes transferred: " << bytesTransferred << std::endl;
         }
     }
 

@@ -712,6 +712,7 @@ private:
 public:
     iocp_tcp_socket_descriptor() : socket(INVALID_SOCKET), iocp(INVALID_HANDLE_VALUE), port(0)
     {
+        get_extension_manager(); // Ensure WSA extensions are loaded
     }
 
     iocp_tcp_socket_descriptor(SOCKET sock, std::string host, uint16_t port) : socket(sock), iocp(INVALID_HANDLE_VALUE), host(std::move(host)), port(port)
@@ -799,33 +800,43 @@ public:
     task<size_t> read(std::span<char> buffer) override
     {
         SOCKET fd = this->socket;
+        WSABUF wsabuf;
+        wsabuf.buf = const_cast<char *>(buffer.data());
+        wsabuf.len = (ULONG)buffer.size();
+        DWORD flags = 0;
 
-        task_completion_source<size_t> tcs;
+        auto event = webcraft::async::detail::as_awaitable(
+            webcraft::async::detail::windows::create_async_socket_overlapped_event(
+                fd,
+                [fd, &wsabuf, &flags](LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped)
+                {
+                    return WSARecv(fd, &wsabuf, 1, numberOfBytesTransfered, &flags, overlapped, nullptr);
+                }));
 
-        pool.submit([&tcs, fd, buffer] mutable
-                    {
-                        int result = ::recv(fd, buffer.data(), (int)buffer.size(), 0);
-                        tcs.set_value(result); });
+        co_await event;
 
-        auto si = co_await tcs.task();
-        co_await yield();
-        co_return si;
+        co_return event.get_result();
     }
 
     task<size_t> write(std::span<const char> buffer) override
     {
+
         SOCKET fd = this->socket;
+        WSABUF wsabuf;
+        wsabuf.buf = const_cast<char *>(buffer.data());
+        wsabuf.len = (ULONG)buffer.size();
 
-        task_completion_source<size_t> tcs;
+        auto event = webcraft::async::detail::as_awaitable(
+            webcraft::async::detail::windows::create_async_socket_overlapped_event(
+                fd,
+                [fd, &wsabuf](LPDWORD numberOfBytesTransfered, LPWSAOVERLAPPED overlapped)
+                {
+                    return WSASend(fd, &wsabuf, 1, numberOfBytesTransfered, 0, overlapped, nullptr);
+                }));
 
-        pool.submit([&tcs, fd, buffer] mutable
-                    {
-                        int result = ::send(fd, buffer.data(), (int)buffer.size(), 0);
-                        tcs.set_value(result); });
+        co_await event;
 
-        auto si = co_await tcs.task();
-        co_await yield();
-        co_return si;
+        co_return event.get_result();
     }
 
     void shutdown(webcraft::async::io::socket::socket_stream_mode mode)
@@ -1037,6 +1048,7 @@ private:
 public:
     iocp_tcp_socket_listener() : socket(INVALID_SOCKET), iocp(INVALID_HANDLE_VALUE)
     {
+        get_extension_manager(); // Ensure WSA extensions are loaded
     }
 
     ~iocp_tcp_socket_listener()
@@ -1122,10 +1134,7 @@ public:
 
     task<std::shared_ptr<tcp_socket_descriptor>> accept() override
     {
-
         SOCKET fd = this->socket;
-        struct sockaddr_storage addr;
-        socklen_t addr_len = sizeof(addr);
 
         SOCKET acceptSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (acceptSocket == INVALID_SOCKET)
@@ -1133,17 +1142,26 @@ public:
             throw std::ios_base::failure("Failed to create accept socket: " + std::to_string(WSAGetLastError()));
         }
 
-        co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::windows::create_async_socket_overlapped_event(acceptSocket, [fd, acceptSocket, &addr, addr_len](LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped)
-                                                                                                                              { return AcceptEx(fd, acceptSocket, &addr, 0, 0, addr_len, numberOfBytesTransfered, overlapped); }));
+        constexpr DWORD addrLen = sizeof(SOCKADDR_STORAGE) + 16;
+        char buffer[addrLen * 2];
 
-        auto [host, port] = addr_to_host_port(addr);
+        auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::windows::create_async_socket_overlapped_event(acceptSocket, [fd, acceptSocket, &buffer, addrLen](LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped)
+                                                                                                                                  { return WSAAcceptEx(fd, acceptSocket, buffer, 0, addrLen, addrLen, numberOfBytesTransfered, overlapped); }));
 
-        if (host.empty() || port == 0)
-        {
-            co_return nullptr;
-        }
+        co_await event;
 
-        co_return std::make_shared<iocp_tcp_socket_descriptor>(acceptSocket, host, port);
+        struct sockaddr_storage local_addr, remote_addr;
+        int local_len = 0, remote_len = 0;
+
+        GetAcceptExSockaddrs(buffer, 0, addrLen, addrLen, (SOCKADDR **)&buffer, (LPINT)&local_len, (SOCKADDR **)&buffer + addrLen, (LPINT)&remote_len);
+
+        auto [local_host, local_port] = addr_to_host_port(local_addr);
+        auto [remote_host, remote_port] = addr_to_host_port(remote_addr);
+
+        std::cout << "local host: " << local_host << ", local port: " << local_port << std::endl;
+        std::cout << "remote host: " << remote_host << ", remote port: " << remote_port << std::endl;
+
+        co_return std::make_shared<iocp_tcp_socket_descriptor>(acceptSocket, remote_host, remote_port);
     }
 
     task<void> close() override

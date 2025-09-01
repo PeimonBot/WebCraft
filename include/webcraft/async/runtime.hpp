@@ -63,9 +63,7 @@ namespace webcraft::async
                 {
                     this->cancelled = cancelled;
                     this->result = result;
-                    std::cout << "Running the continuation" << std::endl;
                     callback();
-                    std::cout << "Continuation ran" << std::endl;
                 }
             }
 
@@ -114,7 +112,7 @@ namespace webcraft::async
         {
             SmartPtrType event;
             bool cancelled;
-            std::exception_ptr ptr;
+            std::exception_ptr ptr{nullptr};
 
             bool await_ready() const noexcept { return false; }
             void await_suspend(std::coroutine_handle<> h)
@@ -126,18 +124,14 @@ namespace webcraft::async
                 }
                 catch (...)
                 {
-                    std::cout << "Exception was caught" << std::endl;
                     ptr = std::current_exception();
-                    std::cout << "Resuming coroutine" << std::endl;
                     h.resume();
                 }
             }
             void await_resume()
             {
-                std::cout << "Coroutine resumed" << std::endl;
                 if (ptr)
                 {
-                    std::cout << "Rethrowing exception from await_resume" << std::endl;
                     std::rethrow_exception(ptr);
                 }
             }

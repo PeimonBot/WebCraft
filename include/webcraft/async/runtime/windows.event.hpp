@@ -12,6 +12,7 @@ namespace webcraft::async::detail::windows
     struct overlapped_event : public OVERLAPPED
     {
         webcraft::async::detail::runtime_event *event;
+        bool completed_sync{false};
 
         overlapped_event(webcraft::async::detail::runtime_event *ev) : event(ev)
         {
@@ -41,18 +42,14 @@ namespace webcraft::async::detail::windows
 
             if (result)
             {
+                overlapped.completed_sync = true;
                 // Operation completed synchronously
                 try_execute(numberOfBytesTransfered);
             }
             else if (!result && GetLastError() != ERROR_IO_PENDING)
             {
                 // Operation failed
-                std::cerr << "Failed to post overlapped event: " << GetLastError() << std::endl;
                 throw std::runtime_error("Failed to post overlapped event: " + std::to_string(GetLastError())); // something is not working with the awaiting code? its not throwing an exception and instead is segfaulting
-            }
-            else
-            {
-                // Operation is being completed asynchronously
             }
         }
 
@@ -149,14 +146,17 @@ namespace webcraft::async::detail::windows
 
             BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
             {
-                BOOL result = op(numberOfBytesTransfered, overlapped);
-
-                if (!result && WSAGetLastError() != WSA_IO_PENDING)
+                int result = op(numberOfBytesTransfered, overlapped);
+                if (result == SOCKET_ERROR)
                 {
-                    throw std::ios_base::failure("Failed to perform overlapped operation");
+                    int error = WSAGetLastError();
+                    if (error != WSA_IO_PENDING)
+                    {
+                        throw std::ios_base::failure("Failed to perform overlapped operation: " + std::to_string(error));
+                    }
+                    return FALSE; // Operation is pending
                 }
-
-                return result;
+                return TRUE; // Operation completed synchronously
             }
 
         private:
