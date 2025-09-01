@@ -178,15 +178,6 @@ void run_loop(std::stop_token token)
             // This is normal for operations like reading past EOF
             if (overlapped != nullptr)
             {
-                if (overlapped->hEvent)
-                {
-                    std::cout << "Waiting for event to complete..." << std::endl;
-                    WaitForSingleObject(overlapped->hEvent, static_cast<DWORD>(wait_timeout.count()));
-                    std::cout << "Event completed." << std::endl;
-                    CloseHandle(overlapped->hEvent);
-                    std::cout << "Closing event" << std::endl;
-                }
-
                 // Process the completion event even though it failed
                 auto *event = reinterpret_cast<overlapped_event *>(overlapped);
 
@@ -218,16 +209,6 @@ void run_loop(std::stop_token token)
         {
             std::cerr << "Received null event in IOCP loop." << std::endl;
             continue; // Skip if event is null
-        }
-
-        // Process the completion event
-        if (overlapped->hEvent)
-        {
-            std::cout << "Waiting for event to complete..." << std::endl;
-            WaitForSingleObject(overlapped->hEvent, INFINITE);
-            std::cout << "Event completed." << std::endl;
-            CloseHandle(overlapped->hEvent);
-            std::cout << "Closing event" << std::endl;
         }
 
         auto *event = reinterpret_cast<overlapped_event *>(overlapped);

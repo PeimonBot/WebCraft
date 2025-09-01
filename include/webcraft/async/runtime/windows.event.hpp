@@ -5,6 +5,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <winsock2.h>
 
 namespace webcraft::async::detail::windows
 {
@@ -127,14 +128,7 @@ namespace webcraft::async::detail::windows
 
             BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
             {
-                overlapped->hEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-                BOOL value = op(numberOfBytesTransfered, overlapped);
-                if (value)
-                {
-                    WaitForSingleObject(overlapped->hEvent, INFINITE);
-                    CloseHandle(overlapped->hEvent);
-                }
-                return value;
+                return op(numberOfBytesTransfered, overlapped);
             }
 
         private:
@@ -142,6 +136,34 @@ namespace webcraft::async::detail::windows
         };
 
         return std::make_unique<overlapped_async_io_runtime_event_impl>(file, std::move(op), token);
+    }
+
+    inline auto create_async_socket_overlapped_event(SOCKET file, overlapped_operation op, std::stop_token token = get_stop_token())
+    {
+        struct overlapped_async_socket_runtime_event_impl : public overlapped_async_io_runtime_event
+        {
+            overlapped_async_socket_runtime_event_impl(SOCKET file, overlapped_operation op, std::stop_token token)
+                : overlapped_async_io_runtime_event((HANDLE)file, token), op(std::move(op))
+            {
+            }
+
+            BOOL perform_overlapped_operation(LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped) override
+            {
+                BOOL result = op(numberOfBytesTransfered, overlapped);
+
+                if (!result && WSAGetLastError() != WSA_IO_PENDING)
+                {
+                    throw std::ios_base::failure("Failed to perform overlapped operation");
+                }
+
+                return result;
+            }
+
+        private:
+            overlapped_operation op;
+        };
+
+        return std::make_unique<overlapped_async_socket_runtime_event_impl>(file, std::move(op), token);
     }
 }
 

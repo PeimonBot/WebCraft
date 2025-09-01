@@ -645,8 +645,6 @@ std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor> webc
 
 #elif defined(_WIN32)
 
-#if !defined(WEBCRAFT_WIN32_SYNC_SOCKETS)
-
 struct WSAExtensionManager
 {
     LPFN_CONNECTEX ConnectEx;
@@ -699,7 +697,7 @@ BOOL WSAAcceptEx(SOCKET sListenSocket, SOCKET sAcceptSocket, PVOID lpOutputBuffe
     return get_extension_manager().AcceptEx(sListenSocket, sAcceptSocket, lpOutputBuffer, dwReceiveDataLength, dwLocalAddressLength, dwRemoteAddressLength, lpdwBytesReceived, lpOverlapped);
 }
 
-#else
+#if defined(WEBCRAFT_WIN32_SYNC_SOCKETS)
 
 static webcraft::async::thread_pool pool(std::thread::hardware_concurrency(), std::thread::hardware_concurrency() * 2);
 
@@ -1029,7 +1027,6 @@ std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> we
 
 #elif defined(_WIN32)
 
-#if defined(WEBCRAFT_WIN32_SYNC_SOCKETS)
 class iocp_tcp_socket_listener : public tcp_listener_descriptor
 {
 private:
@@ -1130,12 +1127,14 @@ public:
         struct sockaddr_storage addr;
         socklen_t addr_len = sizeof(addr);
 
-        SOCKET result = ::accept(fd, (struct sockaddr *)&addr, &addr_len);
-
-        if (result == INVALID_SOCKET)
+        SOCKET acceptSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (acceptSocket == INVALID_SOCKET)
         {
-            throw std::ios_base::failure("Failed to accept connection: " + std::to_string(WSAGetLastError()));
+            throw std::ios_base::failure("Failed to create accept socket: " + std::to_string(WSAGetLastError()));
         }
+
+        co_await webcraft::async::detail::as_awaitable(webcraft::async::detail::windows::create_async_socket_overlapped_event(acceptSocket, [fd, acceptSocket, &addr, addr_len](LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped)
+                                                                                                                              { return AcceptEx(fd, acceptSocket, &addr, 0, 0, addr_len, numberOfBytesTransfered, overlapped); }));
 
         auto [host, port] = addr_to_host_port(addr);
 
@@ -1144,7 +1143,7 @@ public:
             co_return nullptr;
         }
 
-        co_return std::make_shared<iocp_tcp_socket_descriptor>(result, host, port);
+        co_return std::make_shared<iocp_tcp_socket_descriptor>(acceptSocket, host, port);
     }
 
     task<void> close() override
@@ -1164,7 +1163,6 @@ std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> we
 {
     return std::make_shared<iocp_tcp_socket_listener>();
 }
-#endif
 
 #else
 #endif

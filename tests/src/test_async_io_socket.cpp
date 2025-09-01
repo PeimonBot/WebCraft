@@ -69,7 +69,7 @@ task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstr
 
 TEST_CASE(TestSocketConnection)
 {
-    throw std::runtime_error("Not implemented yet");
+    // throw std::runtime_error("Not implemented yet");
     runtime_context context;
 
     connection_results sync_results = get_google_results_sync();
@@ -108,7 +108,7 @@ void handle_client_side_sync(const std::string &host, uint16_t port);
 
 TEST_CASE(TestAsyncServerSyncClient)
 {
-    throw std::runtime_error("Not implemented yet");
+    // throw std::runtime_error("Not implemented yet");
     runtime_context context;
 
     async_event signal;
@@ -150,7 +150,7 @@ TEST_CASE(TestAsyncServerSyncClient)
 
 TEST_CASE(TestSocketPubSub)
 {
-    throw std::runtime_error("Not implemented yet");
+    // throw std::runtime_error("Not implemented yet");
     runtime_context context;
 
     async_event signal;
