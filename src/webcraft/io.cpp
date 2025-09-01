@@ -6,6 +6,7 @@
 #include <webcraft/async/runtime/linux.event.hpp>
 #include <cstdio>
 #include <webcraft/async/thread_pool.hpp>
+#include <webcraft/async/async_event.hpp>
 
 using namespace webcraft::async;
 using namespace webcraft::async::io::fs;
@@ -880,6 +881,254 @@ std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make
 }
 
 #endif
+
+#elif defined(__APPLE__)
+
+#include <fcntl.h>
+
+class kqueue_tcp_socket_descriptor : public tcp_socket_descriptor, public webcraft::async::detail::runtime_callback
+{
+private:
+    int fd;
+    std::atomic<bool> closed{false};
+
+    std::string host;
+    uint16_t port;
+
+    int kq;
+
+    async_event read_ev, write_ev;
+    bool no_more_bytes{false};
+
+public:
+    kqueue_tcp_socket_descriptor()
+    {
+        fd = -1;
+    }
+
+    kqueue_tcp_socket_descriptor(int fd, std::string host, uint16_t port) : fd(fd), host(std::move(host)), port(port)
+    {
+        register_with_queue();
+    }
+
+    ~kqueue_tcp_socket_descriptor()
+    {
+        fire_and_forget(close());
+    }
+
+    task<void> close() override
+    {
+        if (fd == -1)
+            co_return;
+
+        bool expected = false;
+        if (closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        {
+            int fd = this->fd;
+            deregister_with_queue();
+            ::close(fd);
+        }
+    }
+
+    task<size_t> read(std::span<char> buffer) override
+    {
+        if (no_more_bytes)
+            co_return 0;
+
+        int bytes_read = 0;
+        bool wait_async = ((bytes_read = recv(fd, buffer.data(), buffer.size(), 0)) < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
+
+        if (!wait_async)
+            co_return bytes_read;
+
+        co_await read_ev;
+
+        read_ev.reset();
+
+        if ((bytes_read = recv(fd, buffer.data(), buffer.size(), 0)) < 0)
+        {
+            throw std::ios_base::failure("Failed to read with error: " + std::string(strerror(errno)));
+        }
+
+        co_return bytes_read;
+    }
+
+    task<size_t> write(std::span<const char> buffer) override
+    {
+
+        int bytes_written = 0;
+        bool wait_async = ((bytes_written = send(fd, buffer.data(), buffer.size(), 0)) < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
+
+        if (!wait_async)
+            co_return bytes_written;
+
+        co_await write_ev;
+
+        write_ev.reset();
+
+        if ((bytes_written = send(fd, buffer.data(), buffer.size(), 0)) < 0)
+        {
+            throw std::ios_base::failure("Failed to write with error: " + std::string(strerror(errno)));
+        }
+
+        co_return bytes_written;
+    }
+
+    task<void> connect(const webcraft::async::io::socket::connection_info &info) override
+    {
+
+        this->host = info.host;
+        this->port = info.port;
+
+        // Prepare address string for getaddrinfo
+        std::string port_str = std::to_string(info.port);
+        struct addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+        hints.ai_socktype = SOCK_STREAM; // TCP
+        hints.ai_protocol = IPPROTO_TCP;
+
+        struct addrinfo *res;
+        int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
+        if (ret != 0)
+        {
+            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        }
+
+        bool flag = false;
+        for (auto *rp = res; rp; rp = rp->ai_next)
+        {
+
+            int family = rp->ai_family;
+            int sock_type = rp->ai_socktype;
+            int protocol = rp->ai_protocol;
+            const sockaddr *addr = rp->ai_addr;
+            const socklen_t len = rp->ai_addrlen;
+
+            int fd = socket(family, sock_type, protocol);
+            if (fd < 0)
+            {
+                continue;
+            }
+            if (::connect(fd, rp->ai_addr, rp->ai_addrlen) < 0)
+            {
+                ::close(fd);
+            }
+            else
+            {
+                this->fd = fd;
+                flag = true;
+                break;
+            }
+        }
+
+        freeaddrinfo(res); // Free memory allocated by getaddrinfo
+
+        if (!flag)
+            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
+
+        int flags = fcntl(fd, F_GETFL, 0);
+        if (flags == -1)
+        {
+            throw std::runtime_error("fnctl(F_GETFL) failed");
+        }
+
+        if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+        {
+            throw std::runtime_error("fnctl(F_SETFL) failed");
+        }
+
+        register_with_queue();
+        co_return;
+    }
+
+    void shutdown(webcraft::async::io::socket::socket_stream_mode mode) override
+    {
+        int fd = this->fd;
+
+        if (mode == webcraft::async::io::socket::socket_stream_mode::READ)
+        {
+            ::shutdown(fd, SHUT_RD);
+        }
+        else
+        {
+            ::shutdown(fd, SHUT_WR);
+        }
+    }
+
+    std::string get_remote_host() override
+    {
+        return host;
+    }
+
+    uint16_t get_remote_port() override
+    {
+        return port;
+    }
+
+    void register_with_queue()
+    {
+        kq = (int)webcraft::async::detail::get_native_handle();
+
+        struct kevent kev;
+        EV_SET(&kev, fd, EVFILT_READ, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
+        if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
+        {
+            std::cerr << "Could not register read listener" << std::endl;
+        }
+
+        EV_SET(&kev, fd, EVFILT_WRITE, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
+        if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
+        {
+            std::cerr << "Could not register read listener" << std::endl;
+        }
+
+        std::cout << "Listener initialized! We look like this for reference: " << this << std::endl;
+    }
+
+    void deregister_with_queue()
+    {
+        struct kevent kev;
+        EV_SET(&kev, fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+        if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
+        {
+            std::cerr << "Could not unregister listener" << std::endl;
+        }
+
+        EV_SET(&kev, fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+        if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
+        {
+            std::cerr << "Could not unregister listener" << std::endl;
+        }
+    }
+
+    void try_execute(int result, bool cancelled) override
+    {
+        auto filter = webcraft::async::detail::get_kqueue_filter();
+        auto flags = webcraft::async::detail::get_kqueue_flags();
+
+        std::cout << "We got a result" << std::endl;
+        std::cout << "Flags: " << flags << ", filters: " << filter << std::endl;
+        if (flags & EV_EOF)
+        {
+            no_more_bytes = true;
+        }
+
+        if (filter == EVFILT_READ)
+        {
+            read_ev.set();
+        }
+
+        if (filter == EVFILT_WRITE)
+        {
+            write_ev.set();
+        }
+    }
+};
+
+std::shared_ptr<webcraft::async::io::socket::detail::tcp_socket_descriptor> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
+{
+    return std::make_shared<kqueue_tcp_socket_descriptor>();
+}
 
 #endif
 

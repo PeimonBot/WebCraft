@@ -165,6 +165,9 @@ namespace webcraft::async
 
 #ifdef __linux__
         std::mutex &get_runtime_mutex();
+#elif defined(__APPLE__)
+        int16_t get_kqueue_filter();
+        uint32_t get_kqueue_flags();
 #endif
     };
 

@@ -67,6 +67,8 @@ TEST_CASE(TestInternetAvailable)
 
 task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstream &wstream);
 
+#ifndef WEBCRAFT_MOCK_SOCKET_TESTS
+
 TEST_CASE(TestSocketConnection)
 {
     // throw std::runtime_error("Not implemented yet");
@@ -78,7 +80,9 @@ TEST_CASE(TestSocketConnection)
     {
         auto socket = make_tcp_socket();
 
+        std::cout << "Connecting..." << std::endl;
         co_await socket.connect({host, port});
+        std::cout << "Connected" << std::endl;
 
         EXPECT_EQ(host, socket.get_remote_host()) << "Remote host should match";
         EXPECT_EQ(port, socket.get_remote_port()) << "Remote port should match";
@@ -88,6 +92,7 @@ TEST_CASE(TestSocketConnection)
         auto &socket_rstream = socket.get_readable_stream();
         auto &socket_wstream = socket.get_writable_stream();
 
+        std::cout << "Beginning interaction with server" << std::endl;
         connection_results async_results = co_await get_google_results_async(socket_rstream, socket_wstream);
 
         EXPECT_EQ(get_status_line(async_results.response), get_status_line(sync_results.response)) << "Status lines should be the same";
@@ -102,9 +107,12 @@ TEST_CASE(TestSocketConnection)
     std::cout << "Async Client: All went well" << std::endl;
 }
 
+#endif
 task<void> handle_server_side_async(tcp_socket &client_peer);
 task<void> handle_client_side_async(tcp_socket &client);
 void handle_client_side_sync(const std::string &host, uint16_t port);
+
+#ifndef WEBCRAFT_MOCK_LISTENER_TESTS
 
 TEST_CASE(TestAsyncServerSyncClient)
 {
@@ -200,6 +208,7 @@ TEST_CASE(TestSocketPubSub)
     std::cout << "Everything went well" << std::endl;
 }
 
+#endif
 const std::string content = "Hello World!";
 constexpr size_t content_size = 12;
 
@@ -303,7 +312,13 @@ void handle_client_side_sync(const std::string &host, uint16_t port)
     int bytes_sent = send(sockfd, wbuffer.data(), (int)wbuffer.size(), 0);
     if (bytes_sent < 0)
     {
-        std::cout << "Send failed: " << bytes_sent << ", last error:" << WSAGetLastError() << std::endl;
+        std::cout << "Send failed: " << bytes_sent << ", last error:" <<
+#ifdef _WIN32
+            WSAGetLastError()
+#else
+            errno
+#endif
+                  << std::endl;
         closesocket(sockfd);
         throw std::runtime_error("send failed");
     }
@@ -314,7 +329,13 @@ void handle_client_side_sync(const std::string &host, uint16_t port)
     int bytes_received = recv(sockfd, rbuffer.data(), (int)rbuffer.size(), 0);
     if (bytes_received < 0)
     {
-        std::cout << "Recv failed: " << bytes_received << ", last error:" << WSAGetLastError() << std::endl;
+        std::cout << "Recv failed: " << bytes_received << ", last error:" <<
+#ifdef _WIN32
+            WSAGetLastError()
+#else
+            errno
+#endif
+                  << std::endl;
         closesocket(sockfd);
         throw std::runtime_error("recv failed");
     }
