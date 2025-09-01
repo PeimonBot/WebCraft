@@ -164,7 +164,8 @@ TEST_CASE(TestFileReadAllUsingAdaptors)
     {
         auto stream = co_await f.open_readable_stream();
 
-        std::vector<char> content = co_await (stream | collect<std::vector<char>, char>(collectors::to_vector<char>()));
+        std::vector<char> content = co_await (stream |
+                                              collect<std::vector<char>, char>(collectors::to_vector<char>()));
 
         std::string_view str(content.begin(), content.end());
         EXPECT_EQ(str, test_data) << "File contents should be the same";

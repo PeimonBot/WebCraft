@@ -384,7 +384,9 @@ public:
             auto size = std::fread(buffer.data(), sizeof(char), buffer.size(), file);
             source.set_value(size); });
 
-        co_return co_await source.task();
+        auto si = co_await source.task();
+        co_await yield();
+        co_return si;
     }
 
     task<size_t> write(std::span<char> buffer)
@@ -397,7 +399,9 @@ public:
             auto size = std::fwrite(buffer.data(), sizeof(char), buffer.size(), file);
             source.set_value(size); });
 
-        co_return co_await source.task();
+        auto si = co_await source.task();
+        co_await yield();
+        co_return si;
     }
 
     task<void> close()
@@ -805,7 +809,9 @@ public:
                         int result = ::recv(fd, buffer.data(), (int)buffer.size(), 0);
                         tcs.set_value(result); });
 
-        co_return co_await tcs.task();
+        auto si = co_await tcs.task();
+        co_await yield();
+        co_return si;
     }
 
     task<size_t> write(std::span<const char> buffer) override
@@ -819,7 +825,9 @@ public:
                         int result = ::send(fd, buffer.data(), (int)buffer.size(), 0);
                         tcs.set_value(result); });
 
-        co_return co_await tcs.task();
+        auto si = co_await tcs.task();
+        co_await yield();
+        co_return si;
     }
 
     void shutdown(webcraft::async::io::socket::socket_stream_mode mode)
