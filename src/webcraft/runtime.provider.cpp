@@ -325,7 +325,6 @@ uint32_t webcraft::async::detail::get_kqueue_flags()
 void run_loop(std::stop_token token)
 {
     // while we're running, we will wait for events
-    std::cout << "kqueue loop started." << std::endl;
     while (!token.stop_requested())
     {
         timespec ts = {0, 0};
@@ -334,7 +333,6 @@ void run_loop(std::stop_token token)
         struct kevent event;
         int ret = kevent(queue, nullptr, 0, &event, 1, &ts);
 
-        std::cout << "Got a event" << std::endl;
         if (ret == 0)
             continue; // Timeout has occured
         if (ret == -1)
@@ -342,23 +340,17 @@ void run_loop(std::stop_token token)
             break; // Error has occured
         }
 
-        std::cout << "Nothing broke" << std::endl;
-
         // Process the completion event
         auto user_data = event.udata;
         current_filter = event.filter;
         current_flags = event.flags;
 
-        std::cout << "Our data looks like this: " << user_data << std::endl;
-
         // Call the callback or handle the event based on user_data
         auto *ev = reinterpret_cast<webcraft::async::detail::runtime_callback *>(user_data);
         if (ev)
         {
-            std::cout << "Executing callback" << std::endl;
             // Call the callback function
             ev->try_execute(ret);
-            std::cout << "Callback executed" << std::endl;
         }
     }
 

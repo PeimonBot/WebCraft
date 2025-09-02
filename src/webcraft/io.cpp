@@ -1071,16 +1071,14 @@ public:
         EV_SET(&kev, fd, EVFILT_READ, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
         if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
         {
-            std::cerr << "Could not register read listener" << std::endl;
+            throw std::runtime_error("Could not register read listener");
         }
 
         EV_SET(&kev, fd, EVFILT_WRITE, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
         if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
         {
-            std::cerr << "Could not register read listener" << std::endl;
+            throw std::runtime_error("Could not register write listener");
         }
-
-        std::cout << "Listener initialized! We look like this for reference: " << this << std::endl;
     }
 
     void deregister_with_queue()
@@ -1569,10 +1567,8 @@ public:
         EV_SET(&kev, fd, EVFILT_READ, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
         if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
         {
-            std::cerr << "Could not register read listener" << std::endl;
+            throw std::runtime_error("Could not register read listener");
         }
-
-        std::cout << "Listener initialized! We look like this for reference: " << this << std::endl;
     }
 
     void deregister_with_queue()
