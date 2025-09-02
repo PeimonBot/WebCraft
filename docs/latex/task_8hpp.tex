@@ -1,0 +1,56 @@
+\doxysection{include/webcraft/async/task.hpp File Reference}
+\hypertarget{task_8hpp}{}\label{task_8hpp}\index{include/webcraft/async/task.hpp@{include/webcraft/async/task.hpp}}
+{\ttfamily \#include $<$concepts$>$}\newline
+{\ttfamily \#include $<$exception$>$}\newline
+{\ttfamily \#include $<$coroutine$>$}\newline
+{\ttfamily \#include "{}awaitable.\+hpp"{}}\newline
+{\ttfamily \#include "{}event\+\_\+signal.\+hpp"{}}\newline
+{\ttfamily \#include $<$iostream$>$}\newline
+{\ttfamily \#include $<$ranges$>$}\newline
+{\ttfamily \#include $<$utility$>$}\newline
+{\ttfamily \#include $<$functional$>$}\newline
+Include dependency graph for task.\+hpp\+:\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{task_8hpp__incl}
+\end{center}
+\end{figure}
+This graph shows which files directly or indirectly include this file\+:\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{task_8hpp__dep__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Classes}
+\begin{DoxyCompactItemize}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task__promise}{webcraft\+::async\+::task\+\_\+promise$<$ T $>$}}
+\item 
+struct \mbox{\hyperlink{structwebcraft_1_1async_1_1task__promise_1_1final__awaiter}{webcraft\+::async\+::task\+\_\+promise$<$ T $>$\+::final\+\_\+awaiter}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task__promise_3_01void_01_4}{webcraft\+::async\+::task\+\_\+promise$<$ void $>$}}
+\item 
+struct \mbox{\hyperlink{structwebcraft_1_1async_1_1task__promise_3_01void_01_4_1_1final__awaiter}{webcraft\+::async\+::task\+\_\+promise$<$ void $>$\+::final\+\_\+awaiter}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{webcraft\+::async\+::task$<$ T $>$}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task_3_01void_01_4}{webcraft\+::async\+::task$<$ void $>$}}
+\item 
+struct \mbox{\hyperlink{structwebcraft_1_1async_1_1task__adaptor__closure}{webcraft\+::async\+::task\+\_\+adaptor\+\_\+closure$<$ Derived $>$}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Namespaces}
+\begin{DoxyCompactItemize}
+\item 
+namespace \mbox{\hyperlink{namespacewebcraft}{webcraft}}
+\item 
+namespace \mbox{\hyperlink{namespacewebcraft_1_1async}{webcraft\+::async}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+{\footnotesize template$<$typename Func $>$ }\\auto \mbox{\hyperlink{namespacewebcraft_1_1async_aa2f7829b92b3c6f724586abddbe4147c}{webcraft\+::async\+::then}} (Func \&\&func)
+\item 
+{\footnotesize template$<$typename Func $>$ }\\auto \mbox{\hyperlink{namespacewebcraft_1_1async_a4cdc12c581f571e77dba6f036250a51a}{webcraft\+::async\+::upon\+\_\+error}} (Func \&\&handler)
+\end{DoxyCompactItemize}

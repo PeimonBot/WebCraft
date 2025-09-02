@@ -1,0 +1,112 @@
+\doxysection{windows\+\_\+timer\+\_\+manager.\+hpp}
+\hypertarget{windows__timer__manager_8hpp_source}{}\label{windows__timer__manager_8hpp_source}\index{include/webcraft/async/runtime/windows/windows\_timer\_manager.hpp@{include/webcraft/async/runtime/windows/windows\_timer\_manager.hpp}}
+\mbox{\hyperlink{windows__timer__manager_8hpp}{Go to the documentation of this file.}}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{00001\ \textcolor{preprocessor}{\#pragma\ once}}
+\DoxyCodeLine{00002\ }
+\DoxyCodeLine{00004\ \textcolor{comment}{//\ Copyright\ (c)\ Aditya\ Rao}}
+\DoxyCodeLine{00005\ \textcolor{comment}{//\ Licenced\ under\ MIT\ license.\ See\ LICENSE.txt\ for\ details.}}
+\DoxyCodeLine{00007\ }
+\DoxyCodeLine{00008\ }
+\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#ifdef\ \_WIN32}}
+\DoxyCodeLine{00010\ }
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ <functional>}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ <chrono>}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ <queue>}}
+\DoxyCodeLine{00014\ \textcolor{preprocessor}{\#include\ <vector>}}
+\DoxyCodeLine{00015\ }
+\DoxyCodeLine{00016\ \textcolor{preprocessor}{\#define\ NOMINMAX}}
+\DoxyCodeLine{00017\ \textcolor{preprocessor}{\#define\ WIN32\_LEAN\_AND\_MEAN}}
+\DoxyCodeLine{00018\ \textcolor{preprocessor}{\#include\ <windows.h>}}
+\DoxyCodeLine{00019\ }
+\DoxyCodeLine{00020\ \textcolor{keyword}{namespace\ }webcraft::async::runtime::detail}
+\DoxyCodeLine{00021\ \{}
+\DoxyCodeLine{00022\ }
+\DoxyCodeLine{00023\ \ \ \ \ \textcolor{keyword}{class\ }timer\_manager;}
+\DoxyCodeLine{00024\ }
+\DoxyCodeLine{00025\ \ \ \ \ \textcolor{keyword}{struct\ }data\_entry}
+\DoxyCodeLine{00026\ \ \ \ \ \{}
+\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ std::function<void()>\ callback;}
+\DoxyCodeLine{00028\ \ \ \ \ \ \ \ \ timer\_manager\ *manager;}
+\DoxyCodeLine{00029\ }
+\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ data\_entry(std::function<\textcolor{keywordtype}{void}()>\ cb,\ timer\_manager\ *mgr)}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \ \ \ \ :\ callback(std::move(cb)),\ manager(mgr)\ \{\}}
+\DoxyCodeLine{00032\ \ \ \ \ \};}
+\DoxyCodeLine{00033\ }
+\DoxyCodeLine{00034\ \ \ \ \ \textcolor{keyword}{class\ }timer\_manager}
+\DoxyCodeLine{00035\ \ \ \ \ \{}
+\DoxyCodeLine{00036\ }
+\DoxyCodeLine{00037\ \ \ \ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00038\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ set\_timer(PTP\_TIMER\ timer,\ std::chrono::steady\_clock::duration\ duration)}
+\DoxyCodeLine{00039\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ duration\_nanos\ =\ std::chrono::duration\_cast<std::chrono::nanoseconds>(duration)\ /\ 100;}
+\DoxyCodeLine{00041\ }
+\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \ \ \ \ LARGE\_INTEGER\ li;}
+\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \ \ \ \ li.QuadPart\ =\ -\/\textcolor{keyword}{static\_cast<}LONGLONG\textcolor{keyword}{>}(duration\_nanos.count());\ \textcolor{comment}{//\ Convert\ to\ negative\ for\ relative\ time}}
+\DoxyCodeLine{00044\ }
+\DoxyCodeLine{00045\ \ \ \ \ \ \ \ \ \ \ \ \ FILETIME\ ft;}
+\DoxyCodeLine{00046\ \ \ \ \ \ \ \ \ \ \ \ \ ft.dwLowDateTime\ =\ \textcolor{keyword}{static\_cast<}DWORD\textcolor{keyword}{>}(li.LowPart);}
+\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \ \ \ \ ft.dwHighDateTime\ =\ \textcolor{keyword}{static\_cast<}DWORD\textcolor{keyword}{>}(li.HighPart);}
+\DoxyCodeLine{00048\ }
+\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \ \ \ \ SetThreadpoolTimer(timer,\ \&ft,\ 0,\ 0);}
+\DoxyCodeLine{00050\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00051\ }
+\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ create\_timer(PTP\_TIMER\ \&timer,\ std::function<\textcolor{keywordtype}{void}()>\ callback)}
+\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00054\ \ \ \ \ \ \ \ \ \ \ \ \ timer\ =\ CreateThreadpoolTimer([](PTP\_CALLBACK\_INSTANCE,\ PVOID\ context,\ PTP\_TIMER\ timer)}
+\DoxyCodeLine{00055\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \{\ }
+\DoxyCodeLine{00056\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ data\_entry*\ entry\ =\ \textcolor{keyword}{static\_cast<}data\_entry*\textcolor{keyword}{>}(context);}
+\DoxyCodeLine{00057\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ entry-\/>manager-\/>process\_timer(std::move(entry-\/>callback),\ timer);\ \},}
+\DoxyCodeLine{00058\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{new}\ data\_entry(std::move(callback),\ \textcolor{keyword}{this}),\ \textcolor{keyword}{nullptr});}
+\DoxyCodeLine{00059\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (timer\ ==\ \textcolor{keyword}{nullptr})}
+\DoxyCodeLine{00060\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00061\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ create\ thread\ pool\ timer"{}});}
+\DoxyCodeLine{00062\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00063\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00064\ }
+\DoxyCodeLine{00065\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ close\_timer(\textcolor{keyword}{const}\ PTP\_TIMER\ \&timer)}
+\DoxyCodeLine{00066\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00067\ \ \ \ \ \ \ \ \ \ \ \ \ SetThreadpoolTimer(timer,\ \textcolor{keyword}{nullptr},\ 0,\ 0);}
+\DoxyCodeLine{00068\ \ \ \ \ \ \ \ \ \ \ \ \ WaitForThreadpoolTimerCallbacks(timer,\ TRUE);}
+\DoxyCodeLine{00069\ \ \ \ \ \ \ \ \ \ \ \ \ CloseThreadpoolTimer(timer);}
+\DoxyCodeLine{00070\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00071\ }
+\DoxyCodeLine{00072\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ process\_timer(std::function<\textcolor{keywordtype}{void}()>\ callback,\ PTP\_TIMER\ timer)}
+\DoxyCodeLine{00073\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00074\ \ \ \ \ \ \ \ \ \ \ \ \ callback();}
+\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \ \ \ \ close\_timer(timer);}
+\DoxyCodeLine{00076\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00077\ }
+\DoxyCodeLine{00078\ \ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00079\ \ \ \ \ \ \ \ \ timer\_manager()}
+\DoxyCodeLine{00080\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00081\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00082\ }
+\DoxyCodeLine{00083\ \ \ \ \ \ \ \ \ \string~timer\_manager()}
+\DoxyCodeLine{00084\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00085\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00086\ }
+\DoxyCodeLine{00087\ \ \ \ \ \ \ \ \ PTP\_TIMER\ post\_timer\_event(std::chrono::steady\_clock::duration\ duration,\ std::function<\textcolor{keywordtype}{void}()>\ callback)}
+\DoxyCodeLine{00088\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00089\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ time\_point\ =\ std::chrono::steady\_clock::now()\ +\ duration;}
+\DoxyCodeLine{00090\ \ \ \ \ \ \ \ \ \ \ \ \ PTP\_TIMER\ timer;}
+\DoxyCodeLine{00091\ }
+\DoxyCodeLine{00092\ \ \ \ \ \ \ \ \ \ \ \ \ create\_timer(timer,\ std::move(callback));}
+\DoxyCodeLine{00093\ \ \ \ \ \ \ \ \ \ \ \ \ set\_timer(timer,\ duration);}
+\DoxyCodeLine{00094\ }
+\DoxyCodeLine{00095\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ timer;}
+\DoxyCodeLine{00096\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00097\ }
+\DoxyCodeLine{00098\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ cancel\_timer(\textcolor{keyword}{const}\ PTP\_TIMER\ \&timer)}
+\DoxyCodeLine{00099\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00100\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (timer)}
+\DoxyCodeLine{00101\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00102\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ close\_timer(timer);}
+\DoxyCodeLine{00103\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00104\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00105\ \ \ \ \ \};}
+\DoxyCodeLine{00106\ }
+\DoxyCodeLine{00107\ \}}
+\DoxyCodeLine{00108\ \textcolor{preprocessor}{\#endif}}
+
+\end{DoxyCode}

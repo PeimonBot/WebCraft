@@ -1,0 +1,44 @@
+\doxysection{include/webcraft/async/awaitable.hpp File Reference}
+\hypertarget{awaitable_8hpp}{}\label{awaitable_8hpp}\index{include/webcraft/async/awaitable.hpp@{include/webcraft/async/awaitable.hpp}}
+{\ttfamily \#include $<$coroutine$>$}\newline
+{\ttfamily \#include $<$optional$>$}\newline
+{\ttfamily \#include $<$concepts$>$}\newline
+Include dependency graph for awaitable.\+hpp\+:\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=294pt]{awaitable_8hpp__incl}
+\end{center}
+\end{figure}
+This graph shows which files directly or indirectly include this file\+:\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{awaitable_8hpp__dep__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Namespaces}
+\begin{DoxyCompactItemize}
+\item 
+namespace \mbox{\hyperlink{namespacewebcraft}{webcraft}}
+\item 
+namespace \mbox{\hyperlink{namespacewebcraft_1_1async}{webcraft\+::async}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Concepts}
+\begin{DoxyCompactItemize}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1has__member__operator__co__await__v}{webcraft\+::async\+::has\+\_\+member\+\_\+operator\+\_\+co\+\_\+await\+\_\+v}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1is__awaitable__suspend__type}{webcraft\+::async\+::is\+\_\+awaitable\+\_\+suspend\+\_\+type}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1has__awaitable__elements}{webcraft\+::async\+::has\+\_\+awaitable\+\_\+elements}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1has__non__member__operator__co__await__v}{webcraft\+::async\+::has\+\_\+non\+\_\+member\+\_\+operator\+\_\+co\+\_\+await\+\_\+v}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1awaitable__t}{webcraft\+::async\+::awaitable\+\_\+t}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Typedefs}
+\begin{DoxyCompactItemize}
+\item 
+{\footnotesize template$<$awaitable\+\_\+t T$>$ }\\using \mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{webcraft\+::async\+::awaitable\+\_\+resume\+\_\+t}} = decltype(detail\+::get\+\_\+awaiter(std\+::declval$<$ T $>$()).await\+\_\+resume())
+\end{DoxyCompactItemize}

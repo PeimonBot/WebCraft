@@ -1,0 +1,1221 @@
+\chapter{Asynchronous I/O Implemented in Web\+Craft}
+\hypertarget{md_include_2webcraft_2async_2io_2README}{}\label{md_include_2webcraft_2async_2io_2README}\index{Asynchronous I/O Implemented in WebCraft@{Asynchronous I/O Implemented in WebCraft}}
+\label{md_include_2webcraft_2async_2io_2README_autotoc_md0}%
+\Hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md0}%
+ This readme will go over how Web\+Craft handles {\bfseries{Asynchronous I/O}} powered with the latest C++ coroutine features.
+
+Table of Contents\+:
+
+
+\begin{DoxyEnumerate}
+\item Async Streams
+\item Async Readable Stream Adaptors
+\item Async File I/O
+\item Async Socket I/O
+\end{DoxyEnumerate}\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md1}{}\doxysection{\texorpdfstring{Async Streams}{Async Streams}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md1}
+Async I/O in webcraft is implemented using the concept of Streams (similar to Java Streams API and Java Input and Output Streams). There are 2 types of async streams defined in here\+: the async readable stream and async writable stream.\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md2}{}\doxysubsection{\texorpdfstring{Async readable streams}{Async readable streams}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md2}
+The definition of it is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }async\_readable\_stream\ =\ std::is\_move\_constructible\_v<Derived>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream)\ \{}
+\DoxyCodeLine{\ \ \ \ \{\ stream.recv()\ \}\ -\/>\ std::same\_as<task<std::optional<R>>>;}
+\DoxyCodeLine{\};}
+
+\end{DoxyCode}
+
+
+The any type which models {\ttfamily async\+\_\+readable\+\_\+stream\texorpdfstring{$<$}{<}R\texorpdfstring{$>$}{>}} must have a function {\ttfamily recv()} which takes in no arguments and returns a {\ttfamily task\texorpdfstring{$<$}{<}std\+::optional\texorpdfstring{$<$}{<}R\texorpdfstring{$>$}{>}\texorpdfstring{$>$}{>}}. Here {\ttfamily R} represents the type of value streamed to the client. The end of the stream is denoted when the result of the task is a {\ttfamily std\+::nullopt} which subsequent calls to {\ttfamily recv()} will result in.
+
+There is also a buffered variant as shown below for streams which implement buffering internally\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }async\_buffered\_readable\_stream\ =\ async\_readable\_stream<Derived,\ R>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream,\ std::span<R>\ buffer)\ \{}
+\DoxyCodeLine{\ \ \ \ \{\ stream.recv(buffer)\ \}\ -\/>\ std::same\_as<task<std::size\_t>>;}
+\DoxyCodeLine{\};}
+
+\end{DoxyCode}
+
+
+The buffered variant allows you to send in multiple objects at once into the stream. Internally, the regular {\ttfamily recv()} variant will either call the buffered variant with size of 1 or it will internally buffer it so if the values already exist in the queue, it only needs to pop it from there instead of waiting.\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md3}{}\doxysubsection{\texorpdfstring{Async writable streams}{Async writable streams}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md3}
+The definition of it is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }async\_writable\_stream\ =\ std::is\_move\_constructible\_v<Derived>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream,\ R\ \&\&value)\ \{}
+\DoxyCodeLine{\ \ \ \ \{\ stream.send(std::forward<R>(value))\ \}\ -\/>\ std::same\_as<task<bool>>;}
+\DoxyCodeLine{\};}
+
+\end{DoxyCode}
+
+
+Any type which models {\ttfamily async\+\_\+writable\+\_\+stream\texorpdfstring{$<$}{<}R\texorpdfstring{$>$}{>}} must have a function {\ttfamily send(R\&\& )} which takes in an lvalue for R (to be moved into the stream) and returns a {\ttfamily task\texorpdfstring{$<$}{<}bool\texorpdfstring{$>$}{>}} which indicates that the value has been written or not.
+
+There is also a buffered variant which allows you to write multiple objects at once (better for batching).
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }async\_buffered\_writable\_stream\ =\ async\_writable\_stream<Derived,\ R>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream,\ std::span<R>\ buffer)\ \{}
+\DoxyCodeLine{\ \ \ \ \{\ stream.send(buffer)\ \}\ -\/>\ std::same\_as<task<size\_t>>;}
+\DoxyCodeLine{\};}
+
+\end{DoxyCode}
+
+
+This version accepts a span of values which will be written to the stream.\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md4}{}\doxysubsection{\texorpdfstring{Async stream helpers}{Async stream helpers}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md4}
+For those who do want to read and write multiple values without knowing whether the implementation provides buffering or not, we\textquotesingle{}ve created some helper functions\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ R,\ async\_readable\_stream<R>\ RStream,\ \textcolor{keywordtype}{size\_t}\ BufferSize>}
+\DoxyCodeLine{task<std::size\_t>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_aaaf5c2dda44d2ea9c9518aa85bf729c1}{recv}}(RStream\ \&stream,\ std::span<R,\ BufferSize>\ buffer);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ R,\ async\_writable\_stream<R>\ WStream,\ \textcolor{keywordtype}{size\_t}\ BufferSize>}
+\DoxyCodeLine{task<size\_t>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_af2b81544adcc4ba129f31b5797a43670}{send}}(WStream\ \&stream,\ std::span<R,\ BufferSize>\ buffer);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ R,\ async\_readable\_stream<R>\ RStream>}
+\DoxyCodeLine{async\_generator<R>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_a7e1420555f9b1c5e37aecdf9086d972d}{to\_async\_generator}}(RStream\ \&\&stream);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{async\_readable\_stream<R>\ \textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_a65fdb2f3bc3e4af76fe30526dcb1e4b1}{to\_readable\_stream}}(async\_generator<R>\ \&\&gen);}
+
+\end{DoxyCode}
+
+
+The batched {\ttfamily recv()} and {\ttfamily send()} call the buffered streams variants of {\ttfamily recv()} and {\ttfamily send()} if a buffered stream is passed, otherwise it will call enough {\ttfamily recv()} and {\ttfamily send()} from the non buffered variants until the span is filled or until we can\textquotesingle{}t read or write anymore from the stream.
+
+The conversion to and from async generators are added for readable streams since it would be really nice to be able to do something like this\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ fn\ =\ [](\textcolor{keywordtype}{size\_t}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a7f89d23f44cca5e13f844ad7c5b3282d}{limit}})\ -\/>\ async\_generator<int>\ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordtype}{size\_t}\ count\ =\ 0;}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{while}\ (count\ <\ limit)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ sleep(200ms);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_yield}\ count++;}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ rstream\ =\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_a65fdb2f3bc3e4af76fe30526dcb1e4b1}{to\_readable\_stream}}(fn(10));}
+\DoxyCodeLine{\textcolor{keywordflow}{while}\ (\textcolor{keyword}{auto}\ opt\ =\ \textcolor{keyword}{co\_await}\ rstream.next())\ \{}
+\DoxyCodeLine{\ \ \ \ handle(opt.value());}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+
+
+This will allow us to add a powerful set of adaptors onto async streams similar to the adaptors added with the ranges library onto iterables. From this, we can build powerful stream processing and pub/sub systems which can do a variety of processing without ever requiring us to have to manually process the stream ourselves\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md5}{}\doxysubsection{\texorpdfstring{Channels}{Channels}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md5}
+Channels are a mechanism to transfer data from a publisher to a subscriber. The model that we have implemented our channels is through MPSC (multiple publishers to a single consumer -\/ since it only makes sense to deal with one event at a time). You can create an MPSC channel as shown below (NOTE\+: you have to specify data type of channel otherwise what data will you be sending over in the first place)\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ [rstream,\ wstream]\ =\ make\_mpsc\_channel<int>();}
+
+\end{DoxyCode}
+
+
+The type of {\ttfamily rstream} satisfies {\ttfamily async\+\_\+readable\+\_\+stream} and the type of {\ttfamily wstream} satisfies {\ttfamily async\+\_\+writable\+\_\+stream}. This effectively is an asynchronous pipe. Concurrency here is not required to be a concern since whenever the "{}send()"{} on the writeable stream occurs, we resume the existing read.
+
+{\bfseries{NOTE\+: DO NOT TRY AND PIPE {\ttfamily rstream} into {\ttfamily wstream} as it will cause an infinite loop (more so a stackoverflow exception) since all values received from read will be sent into write which will be sent into read and you get the rest.}}
+
+Working with this becomes really useful as you can build highly scalable Publisher Subscriber Applications based off of channels as your data sending medium. Most microservices use this message queues which internally uses channels since it makes working with event streams a lot easier. I myself am planning on using channels for managing async socket I/O and async file I/O.\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md6}{}\doxysection{\texorpdfstring{Async Readable Stream Adaptors}{Async Readable Stream Adaptors}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md6}
+Stream\textquotesingle{}s aren\textquotesingle{}t really useful by themselves. Most of the time, we want to turn our raw data into something useful to then deal with it. This is the idea of a {\bfseries{stream adaptor}}. We take a readable stream of one data type, then we apply some kind of operation on it (mapping, filtering, transforming), then we get a stream of another data type, something more useful to deal with.
+
+Here is an example\+:
+
+Suppose, we want to group the students into a map where we assign a lesson grade (A for 80-\/100, B for 70-\/80, C for 60-\/70, and D for 50-\/60) as showing and get rid of any students which are failing and have the students sorted in each grouping in order\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{struct\ }student\ \{}
+\DoxyCodeLine{\ \ \ \ std::string\ name;}
+\DoxyCodeLine{\ \ \ \ std::vector<double>\ marks;}
+\DoxyCodeLine{\ \ \ \ std::string\ grade;}
+\DoxyCodeLine{\};}
+
+\end{DoxyCode}
+
+
+The non-\/adaptor based solution would look something like this\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{task<std::unordered\_map<std::string,\ std::vector<student>>>\ get\_student\_grade\_groupings(async\_readable\_stream<student>\ students)\ \{}
+\DoxyCodeLine{\ \ \ \ std::unordered\_map<std::string,\ student>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}};}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}A"{}}]\ =\ \{\};}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}B"{}}]\ =\ \{\};}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}C"{}}]\ =\ \{\};}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}D"{}}]\ =\ \{\};}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{while}\ (\textcolor{keyword}{auto}\ st\ =\ \textcolor{keyword}{co\_await}\ students)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::vector<double>\ marks\ =\ st.marks;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordtype}{double}\ sum\_of\_marks\ =\ std::accumulate(marks.begin(),\ marks.end(),\ 0.0));}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ num\_of\_marks\ =\ marks.size();}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordtype}{double}\ average\ =\ sum\_of\_marks\ /\ num\_of\_marks;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (average\ >=\ 80.0)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}A"{}}].push\_back(*st);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (average\ >=\ 70.0)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}B"{}}].push\_back(*st);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (average\ >=\ 60.0)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}C"{}}].push\_back(*st);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (average\ >=\ 50.0)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}[\textcolor{stringliteral}{"{}D"{}}].push\_back(*st);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ std::sort(map[\textcolor{stringliteral}{"{}A"{}}]);}
+\DoxyCodeLine{\ \ \ \ std::sort(map[\textcolor{stringliteral}{"{}B"{}}]);}
+\DoxyCodeLine{\ \ \ \ std::sort(map[\textcolor{stringliteral}{"{}C"{}}]);}
+\DoxyCodeLine{\ \ \ \ std::sort(map[\textcolor{stringliteral}{"{}D"{}}]);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{return}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}};}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+
+
+The adaptor based solution would be as follows\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{std::string\ average\_to\_grade(\textcolor{keywordtype}{double}\ average)\ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{if}\ (average\ >=\ 80.0)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{stringliteral}{"{}A"{}};}
+\DoxyCodeLine{\ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (average\ >=\ 70.0)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{stringliteral}{"{}B"{}};}
+\DoxyCodeLine{\ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (average\ >=\ 60.0)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{stringliteral}{"{}C"{}};}
+\DoxyCodeLine{\ \ \ \ \}\ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (average\ >=\ 50)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{stringliteral}{"{}D"{}};}
+\DoxyCodeLine{\ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{stringliteral}{"{}F"{}};}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keywordtype}{double}\ get\_average(student\ st)\ \{}
+\DoxyCodeLine{\ \ \ \ std::vector<double>\ marks\ =\ st.marks;}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordtype}{double}\ sum\_of\_marks\ =\ std::accumulate(marks.begin(),\ marks.end(),\ 0.0));}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordtype}{size\_t}\ num\_of\_marks\ =\ marks.size();}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordtype}{double}\ average\ =\ sum\_of\_marks\ /\ num\_of\_marks;}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{return}\ average;}
+\DoxyCodeLine{\}}
+\DoxyCodeLine{}
+\DoxyCodeLine{}
+\DoxyCodeLine{task<std::unordered\_map<std::string,\ std::vector<student>>>\ get\_student\_grade\_groupings(async\_readable\_stream<student>\ students)\ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{return}\ students\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_adda76c1251d855604fa6c9f4b752de2c}{filter}}([](\textcolor{keyword}{auto}\ st)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ get\_average(st)\ >=\ 50;}
+\DoxyCodeLine{\ \ \ \ \})\ |\ sorted([](\textcolor{keyword}{auto}\ pair)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ pair.key;\ }
+\DoxyCodeLine{\ \ \ \ \})\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors_a2e67493f2e10fee623eb18b43d02ea71}{group\_by}}([](\textcolor{keyword}{auto}\ st)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ average\_to\_grade(get\_average(st));}
+\DoxyCodeLine{\ \ \ \ \});}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+
+
+This is just one example which would greatly reduce the amount of code and logic involved to write a program. There are many other uses for having async streams including when dealing with pub/sub streams.\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md7}{}\doxysubsection{\texorpdfstring{Some of the adaptors have already been implemented in this framework\+:}{Some of the adaptors have already been implemented in this framework:}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md7}
+All stream adaptors have to inherit the {\ttfamily async\+\_\+readable\+\_\+stream\+\_\+adaptor}. The definition of it is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{struct\ }async\_readable\_stream\_adaptor}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{friend}\ \textcolor{keyword}{auto}\ operator|(async\_readable\_stream<T>\ \textcolor{keyword}{auto}\ \&\&stream,\ Derived\ \&adaptor)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ std::invoke(adaptor,\ std::move(stream));}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{friend}\ \textcolor{keyword}{auto}\ operator|(async\_readable\_stream<T>\ \textcolor{keyword}{auto}\ \&\&stream,\ Derived\ \&\&adaptor)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ std::invoke(std::move(adaptor),\ std::forward<\textcolor{keyword}{decltype}(stream)>(stream));}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md8}{}\doxysubsubsection{\texorpdfstring{Transform adaptor}{Transform adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md8}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ InType,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ab1e6d4ed87247b8982c2536eeb7220e5}{transform}}(Func\ \&\&fn)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this you\textquotesingle{}ll be able transform the existing async\+\_\+readable\+\_\+stream to another async\+\_\+readable\+\_\+stream. The function that is passed has to be of signature {\ttfamily async\+\_\+generator\texorpdfstring{$<$}{<}Out\+Type\texorpdfstring{$>$}{>}(async\+\_\+generator\texorpdfstring{$<$}{<}In\+Type\texorpdfstring{$>$}{>})} where {\ttfamily Out\+Type} is the transformed readable stream passed from the {\ttfamily transform} function. Some examples of this are shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{}
+\DoxyCodeLine{async\_readable\_stream<std::string>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ab1e6d4ed87247b8982c2536eeb7220e5}{transform}}([](async\_generator<int>\ gen)\ \{}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{async__generator_8hpp_a4d7b3885bfafff1b24249b43416127d2}{for\_each\_async}}(value,\ gen,\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_yield}\ std::to\_string(value);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_yield}\ std::to\_string(value\ *\ 2);}
+\DoxyCodeLine{\ \ \ \ \});}
+\DoxyCodeLine{\});}
+\DoxyCodeLine{\textcolor{comment}{//\ the\ value\ of\ this\ is\ ["{}1"{},\ "{}2"{},\ "{}2"{},\ "{}4"{},\ "{}3"{},\ "{}6"{},\ "{}4"{},\ "{}8"{},\ "{}5"{},\ "{}10"{}]}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md9}{}\doxysubsubsection{\texorpdfstring{Map adaptor}{Map adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md9}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ InType,\ \textcolor{keyword}{typename}\ Func,\ \textcolor{keyword}{typename}\ OutType\ =\ std::invoke\_result\_t<Func,\ InType>>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}(Func\ \&\&fn)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you create a new readable stream which has the values from the old stream mapped using the function passed. An example of this is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{}
+\DoxyCodeLine{async\_readable\_stream<std::string>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}([](\textcolor{keywordtype}{int}\ value)\ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{return}\ std::to\_string(value);}
+\DoxyCodeLine{\});}
+\DoxyCodeLine{\textcolor{comment}{//\ the\ value\ of\ this\ is\ ["{}1"{},\ "{}2"{},\ "{}3"{},\ "{}4"{},\ "{}5"{}]}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md10}{}\doxysubsubsection{\texorpdfstring{Pipe adaptor}{Pipe adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md10}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{requires}\ std::is\_copy\_assignable\_v<T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ade46e7a4ed2b78a5081564b197a8ea57}{pipe}}(async\_writable\_stream<T>\ \textcolor{keyword}{auto}\ \&str)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you create a new readable stream on which when read, also forwards the read value into the writable stream provided. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ rstream(\{1,2,3,4,5\});}
+\DoxyCodeLine{mock\_writable\_stream<int>\ wstream;}
+\DoxyCodeLine{}
+\DoxyCodeLine{async\_readable\_stream<int>\ \textcolor{keyword}{auto}\ new\_stream\ =\ rstream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ade46e7a4ed2b78a5081564b197a8ea57}{pipe}}(wstream);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keywordflow}{while}\ (\textcolor{keyword}{auto}\ opt\ =\ \textcolor{keyword}{co\_await}\ new\_stream.recv())\ \{}
+\DoxyCodeLine{\ \ \ \ assert(wstream.received\_value(*opt));}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md11}{}\doxysubsubsection{\texorpdfstring{Filter adaptor}{Filter adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md11}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_adda76c1251d855604fa6c9f4b752de2c}{filter}}(Func\ \&\&predicate)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to filter out values in the streams which you do want to retain. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{async\_readable\_stream<int>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_adda76c1251d855604fa6c9f4b752de2c}{filter}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \});}
+\DoxyCodeLine{\textcolor{comment}{//\ streams\ returned\ is\ [2,4]}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md12}{}\doxysubsubsection{\texorpdfstring{Limit adaptor}{Limit adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md12}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a7f89d23f44cca5e13f844ad7c5b3282d}{limit}}(\textcolor{keywordtype}{size\_t}\ size)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to limit the amount of values sent through the stream. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{async\_readable\_stream<int>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a7f89d23f44cca5e13f844ad7c5b3282d}{limit}}(3);}
+\DoxyCodeLine{\textcolor{comment}{//\ streams\ returned\ is\ [1,2,3]}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md13}{}\doxysubsubsection{\texorpdfstring{Skip adaptor}{Skip adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md13}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a5102607d13477fb88df1a0b93c50e6d1}{skip}}(\textcolor{keywordtype}{size\_t}\ size)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to skip the amount of values sent through the stream. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{async\_readable\_stream<int>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a5102607d13477fb88df1a0b93c50e6d1}{skip}}(2);}
+\DoxyCodeLine{\textcolor{comment}{//\ streams\ returned\ is\ [3,4,5]}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md14}{}\doxysubsubsection{\texorpdfstring{Take while adaptor}{Take while adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md14}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a16136cc18f9808fabc53ff6ab854d997}{take\_while}}(Func\&\&\ func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to take the values sent through the stream while the predicate defined by {\ttfamily Func} yields true. {\ttfamily Func} must have the following type signature {\ttfamily bool(const T\&)}. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{async\_readable\_stream<int>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a16136cc18f9808fabc53ff6ab854d997}{take\_while}}([](\textcolor{keywordtype}{int}\ i)\ \{\ \textcolor{keywordflow}{return}\ i\ <\ 2;\ \});}
+\DoxyCodeLine{\textcolor{comment}{//\ streams\ returned\ is\ [1,2]}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md15}{}\doxysubsubsection{\texorpdfstring{Drop while adaptor}{Drop while adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md15}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ad7cac35a119147fb1d053553ff1ce6f4}{drop\_while}}(Func\&\&\ func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to drop the values sent through the stream while the predicate defined by {\ttfamily Func} yields true. {\ttfamily Func} must have the following type signature {\ttfamily bool(const T\&)}. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{async\_readable\_stream<int>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ad7cac35a119147fb1d053553ff1ce6f4}{drop\_while}}([](\textcolor{keywordtype}{int}\ i)\ \{\ \textcolor{keywordflow}{return}\ i\ <\ 2;\ \});}
+\DoxyCodeLine{\textcolor{comment}{//\ streams\ returned\ is\ [3,4,5]}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md16}{}\doxysubsubsection{\texorpdfstring{Collect adaptor}{Collect adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md16}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ ToType,\ \textcolor{keyword}{typename}\ StreamType>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }collector\ =\ std::is\_invocable\_r\_v<task<ToType>,\ Derived,\ async\_generator<StreamType>>;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ ToType,\ \textcolor{keyword}{typename}\ StreamType,\ collector<ToType,\ StreamType>\ Collector>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ac259db7916278ffc530b8c127be7a191}{collect}}(Collector\ \&\&collector\_func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}ll be able to convert the readable stream into something more tangible like another object or a {\ttfamily std\+::vector} of an object. This would be really useful especially for processing of REST requests when they give you a stream of bytes, you\textquotesingle{}ll be able to collect it into a JSON object.
+
+There are many ways to create your own collector, you can create your own, for example to convert a stream of bytes into a JSON object, or you can use some of the in-\/built ones\+:
+
+
+\begin{DoxyItemize}
+\item reduce
+\item joining
+\item to\+\_\+vector
+\item group\+\_\+by
+\end{DoxyItemize}\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md17}{}\doxyparagraph{\texorpdfstring{Reduce collector}{Reduce collector}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md17}
+Defined as shown\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors_a7daa10abd28848093f764efd3678bc98}{reduce}}(std::function<T(T,\ T)>\ \&\&func);}
+
+\end{DoxyCode}
+
+
+When collected, this will return a {\ttfamily task\texorpdfstring{$<$}{<}T\texorpdfstring{$>$}{>}} which can be awaited to give you the result. For example\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{int}\ values\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ac259db7916278ffc530b8c127be7a191}{collect}}(collectors::reduce([](\textcolor{keywordtype}{int}\ first,\ \textcolor{keywordtype}{int}\ second)\ \{\ \textcolor{keywordflow}{return}\ first\ +\ second;\ \})));}
+\DoxyCodeLine{assert(values\ ==\ 15);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md18}{}\doxyparagraph{\texorpdfstring{Joining collector}{Joining collector}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md18}
+Defined as shown\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{requires}\ std::is\_convertible\_v<T,\ std::string>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors_adc8e437445f9247f3e767b485f468b5d}{joining}}(std::string\ separator\ =\ \textcolor{stringliteral}{"{}"{}},\ std::string\ prefix\ =\ \textcolor{stringliteral}{"{}"{}},\ std::string\ suffix\ =\ \textcolor{stringliteral}{"{}"{}})}
+
+\end{DoxyCode}
+
+
+When collected, this will return a {\ttfamily task\texorpdfstring{$<$}{<}std\+::string\texorpdfstring{$>$}{>}} which can be awaited to give you the result. For example\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{\textcolor{stringliteral}{"{}1"{}},\textcolor{stringliteral}{"{}2"{}},\textcolor{stringliteral}{"{}3"{}},\textcolor{stringliteral}{"{}4"{}},\textcolor{stringliteral}{"{}5"{}}\});}
+\DoxyCodeLine{std::string\ values\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ac259db7916278ffc530b8c127be7a191}{collect}}(collectors::joinin(\textcolor{stringliteral}{"{},"{}})));}
+\DoxyCodeLine{assert(values\ ==\ \textcolor{stringliteral}{"{}1,2,3,4,5"{}});}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md19}{}\doxyparagraph{\texorpdfstring{To Vector collector}{To Vector collector}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md19}
+Defined as shown\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors_a1064184038eb4e5d67a1763dbc2c33f9}{to\_vector}}();}
+
+\end{DoxyCode}
+
+
+When collected, this will return a {\ttfamily task\texorpdfstring{$<$}{<}std\+::vector\texorpdfstring{$<$}{<}T\texorpdfstring{$>$}{>}\texorpdfstring{$>$}{>}} which can be awaited to give you the result. For example\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{std::vector<int>\ values\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ac259db7916278ffc530b8c127be7a191}{collect}}(collectors::to\_vector()));}
+\DoxyCodeLine{\textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{int}\ i\ =\ 0;\ i\ <\ values.size();\ i++)\ \{}
+\DoxyCodeLine{\ \ \ \ assert(values[i]\ ==\ i\ +\ 1);}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md20}{}\doxyparagraph{\texorpdfstring{Group By collector}{Group By collector}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md20}
+Defined as shown\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ KeyType>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors_a2e67493f2e10fee623eb18b43d02ea71}{group\_by}}(std::function<KeyType(\textcolor{keyword}{const}\ T\ \&)>\ key\_function);}
+
+\end{DoxyCode}
+
+
+When collected, this will return a {\ttfamily task\texorpdfstring{$<$}{<}std\+::unordered\+\_\+map\texorpdfstring{$<$}{<}Key\+Type, std\+::vector\texorpdfstring{$<$}{<}T\texorpdfstring{$>$}{>}\texorpdfstring{$>$}{>}\texorpdfstring{$>$}{>}} which can be awaited to give you the result. Example\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<std::string>\ stream(\{\textcolor{stringliteral}{"{}AB"{}},\ \textcolor{stringliteral}{"{}BC"{}},\ \textcolor{stringliteral}{"{}AC"{}},\ \textcolor{stringliteral}{"{}BD"{}},\ \textcolor{stringliteral}{"{}CD"{}}\});}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ mapper\ =\ [](std::string\ value)\ -\/>\ std::string\ \{\ \textcolor{comment}{//\ groups\ it\ by\ the\ first\ letter}}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{return}\ std::string(value[0]);\ \textcolor{comment}{//\ A*\ -\/>\ A,\ B*\ -\/>\ B}}
+\DoxyCodeLine{\}}
+\DoxyCodeLine{}
+\DoxyCodeLine{std::unordered\_map<std::string,\ std::vector<std::string>>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a467323c557b8245b25c7cc5c6cd28e22}{map}}\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_ac259db7916278ffc530b8c127be7a191}{collect}}(collectors::group\_by(mapper)));}
+\DoxyCodeLine{\textcolor{comment}{//\ \ returns\ a\ \{\ \{"{}A"{},\ ["{}AB"{},"{}AC"{}]\},\ \{"{}B"{},\ ["{}BC"{},"{}BD"{}]\},\ \{"{}C"{},\ ["{}CD"{}]\}\ \}}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md21}{}\doxysubsubsection{\texorpdfstring{Forward To adaptor}{Forward To adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md21}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a9ddb8e7a2a4c065a9340e9800ff7f0ed}{forward\_to}}(async\_writable\_stream<T>\ \textcolor{keyword}{auto}\ \&stream)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}ll be able to forward all objects coming from the readable stream into the output stream passed. When applied, the adaptor will return a {\ttfamily task\texorpdfstring{$<$}{<}void\texorpdfstring{$>$}{>}} which you can await for all the values to be sent into the stream. An example of this is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ rstream(\{1,2,3,4,5\});}
+\DoxyCodeLine{mock\_writable\_stream<int>\ wstream;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{co\_await}\ (rstream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a9ddb8e7a2a4c065a9340e9800ff7f0ed}{forward\_to}}(wstream));}
+\DoxyCodeLine{\textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{int}\ i\ =\ 1;\ i\ <=\ 5;\ i++)\ \{}
+\DoxyCodeLine{\ \ \ \ assert(wstream.received(i));}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md22}{}\doxysubsubsection{\texorpdfstring{Min adaptor}{Min adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md22}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{requires}\ std::totally\_ordered<T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_abe983922626e1ab45c906444bbf74239}{min}}()\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to find the minimum value sent through the stream. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{int}\ min\_value\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_abe983922626e1ab45c906444bbf74239}{min}}());}
+\DoxyCodeLine{assert(min\_value\ ==\ 1);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md23}{}\doxysubsubsection{\texorpdfstring{Max adaptor}{Max adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md23}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{requires}\ std::totally\_ordered<T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a5d9d3a60fa12ea699dc5fc59ae5d0f63}{max}}()\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to find the maximum value sent through the stream. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{int}\ max\_value\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a5d9d3a60fa12ea699dc5fc59ae5d0f63}{max}}());}
+\DoxyCodeLine{assert(max\_value\ ==\ 5);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md24}{}\doxysubsubsection{\texorpdfstring{Sum adaptor}{Sum adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md24}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }closure\_under\_addition\ =\ \textcolor{keyword}{requires}(T\ a,\ T\ b)\ \{}
+\DoxyCodeLine{\ \ \ \ \{\ a\ +\ b\ \}\ -\/>\ std::convertible\_to<T>;}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{requires}\ closure\_under\_addition<T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a01eae8f829e97817419aed01f5ad37dc}{sum}}()\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to find the sum of the values sent through the stream. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{int}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a01eae8f829e97817419aed01f5ad37dc}{sum}}\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a01eae8f829e97817419aed01f5ad37dc}{sum}}());}
+\DoxyCodeLine{assert(sum\ ==\ 15);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md25}{}\doxysubsubsection{\texorpdfstring{Find first adaptor}{Find first adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md25}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_afea35e0603fe1056bdc052faa20b8411}{find\_first}}(Func\&\&\ func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to find the first value sent through the stream which matches the following predicate. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{int}\ value\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_afea35e0603fe1056bdc052faa20b8411}{find\_first}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(value\ ==\ 2);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md26}{}\doxysubsubsection{\texorpdfstring{Find last adaptor}{Find last adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md26}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a21b0723e172b9758a9e78ae20dbe3bf1}{find\_last}}(Func\&\&\ func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to find the last value sent through the stream which matches the following predicate. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream(\{1,2,3,4,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{int}\ value\ =\ \textcolor{keyword}{co\_await}\ (stream\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a21b0723e172b9758a9e78ae20dbe3bf1}{find\_last}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(value\ ==\ 4);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md27}{}\doxysubsubsection{\texorpdfstring{Any matches adaptor}{Any matches adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md27}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_af103d36599b9cd7baf15f2c7e75e70b9}{any\_matches}}(Func\&\&\ func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to check if there are any values which match the predicate. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream\_1(\{2,4,3,5\});}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream\_2(\{1,3,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{bool}\ check1\ =\ \textcolor{keyword}{co\_await}\ (stream\_1\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_af103d36599b9cd7baf15f2c7e75e70b9}{any\_matches}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(check1);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keywordtype}{bool}\ check2\ =\ \textcolor{keyword}{co\_await}\ (stream\_2\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_af103d36599b9cd7baf15f2c7e75e70b9}{any\_matches}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(!check2);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md28}{}\doxysubsubsection{\texorpdfstring{All matches adaptor}{All matches adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md28}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a1566ca935350435b72631ee11d574ee7}{all\_matches}}(Func\&\&\ func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to check if all values which match the predicate. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream\_1(\{2,4,6,8\});}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream\_2(\{2,4,6,7\});}
+\DoxyCodeLine{\textcolor{keywordtype}{bool}\ check1\ =\ \textcolor{keyword}{co\_await}\ (stream\_1\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a1566ca935350435b72631ee11d574ee7}{all\_matches}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(check1);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keywordtype}{bool}\ check2\ =\ \textcolor{keyword}{co\_await}\ (stream\_2\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_a1566ca935350435b72631ee11d574ee7}{all\_matches}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(!check2);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md29}{}\doxysubsubsection{\texorpdfstring{None matches adaptor}{None matches adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md29}
+Definition is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ Func>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_af103d36599b9cd7baf15f2c7e75e70b9}{any\_matches}}(Func\&\&\ func)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor, you\textquotesingle{}d be able to check if all values do not match the predicate. An example is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream\_1(\{2,4,3,5\});}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream\_2(\{1,3,5\});}
+\DoxyCodeLine{\textcolor{keywordtype}{bool}\ check1\ =\ \textcolor{keyword}{co\_await}\ (stream\_1\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_af0226fefe32175663e7ab469a785566c}{none\_matches}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(!check1);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keywordtype}{bool}\ check2\ =\ \textcolor{keyword}{co\_await}\ (stream\_2\ |\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1adaptors_af0226fefe32175663e7ab469a785566c}{none\_matches}}([](\textcolor{keywordtype}{int}\ value)\ \{\ \textcolor{keywordflow}{return}\ value\ \%\ 2\ ==\ 0;\ \}));}
+\DoxyCodeLine{assert(check2);}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md30}{}\doxysubsection{\texorpdfstring{Some of the adaptors are planned to be implemented in this framework\+:}{Some of the adaptors are planned to be implemented in this framework:}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md30}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md31}{}\doxysubsubsection{\texorpdfstring{Sorted adaptor}{Sorted adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md31}
+Definition is as shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T>}
+\DoxyCodeLine{\textcolor{keyword}{requires}\ std::totally\_ordered<T>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ sorted()\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{requires}\ std::totally\_ordered<R>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ sorted(std::function<R(T)>\ comparator)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor on a readable stream will create a new sorted readable stream from the old stream (all values will be sorted in the order specified). An example of the usage is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ values\_1(\{5,1,3,6,4,2\});}
+\DoxyCodeLine{async\_readable\_stream<int>\ \textcolor{keyword}{auto}\ new\_stream\_1\ =\ values\_1\ |\ sorted();\ \textcolor{comment}{//\ 1,2,3,4,5,6}}
+\DoxyCodeLine{\textcolor{comment}{//\ the\ new\ steam\ satisfies\ async\_readable\_stream<1>}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{comment}{//\ another\ example}}
+\DoxyCodeLine{mock\_readable\_stream<std::pair<int,\ std::string>>\ values\_2(\{\{5,\textcolor{stringliteral}{"{}5"{}}\},\ \{1,\textcolor{stringliteral}{"{}1"{}}\},\ \{\textcolor{stringliteral}{"{}3"{}},3\},\ \{6,\textcolor{stringliteral}{"{}6"{}}\},\ \{4,\textcolor{stringliteral}{"{}4"{}}\},\{2,\textcolor{stringliteral}{"{}2"{}}\}\});}
+\DoxyCodeLine{async\_readable\_stream<std::pair<int,\ std::string>>\ \textcolor{keyword}{auto}\ new\_stream\_2\ =\ values\_2\ |\ sorted([](\textcolor{keyword}{auto}\ value)\ \{\ \textcolor{keywordflow}{return}\ value.key;\ \});\ \textcolor{comment}{//\ \{1,"{}1"{}\},\{2,"{}2"{}\},\{3,"{}3"{}\},\{4,"{}4"{}\},\{5,"{}5"{}\},\{6,"{}6"{}\}}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md32}{}\doxysubsubsection{\texorpdfstring{Zip adaptor}{Zip adaptor}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md32}
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ zip\_inner(async\_readable\_stream<R>\ str)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ zip\_left(async\_readable\_stream<R>\ str)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ zip\_right(async\_readable\_stream<R>\ str)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T,\ \textcolor{keyword}{typename}\ R>}
+\DoxyCodeLine{\textcolor{keyword}{auto}\ zip\_full(async\_readable\_stream<R>\ str)\ -\/>\ std::is\_derived\_from<async\_readable\_stream\_adaptor>;}
+
+\end{DoxyCode}
+
+
+Using this adaptor you\textquotesingle{}ll be able to group 2 streams together into one. An example of this is shown below\+:
+
+
+\begin{DoxyCode}{0}
+\DoxyCodeLine{mock\_readable\_stream<int>\ stream1(\{1,2,3,4,5\});}
+\DoxyCodeLine{mock\_readable\_stream<std::string>\ stream2(\{\textcolor{stringliteral}{"{}1"{}},\textcolor{stringliteral}{"{}2"{}},\textcolor{stringliteral}{"{}3"{}},\textcolor{stringliteral}{"{}4"{}},\textcolor{stringliteral}{"{}5"{}}\});}
+\DoxyCodeLine{}
+\DoxyCodeLine{async\_readable\_stream<std::pair<std::optional<int>,\ std::optional<std::string>>>\ \textcolor{keyword}{auto}\ new\_stream\ =\ stream1\ |\ zip\_full(stream2);\ \textcolor{comment}{//\ \{1,"{}1"{}\},\{2,"{}2"{}\},\{3,"{}3"{}\},\{4,"{}4"{}\},\{5,"{}5"{}\},\{6,"{}6"{}\}}}
+\DoxyCodeLine{\textcolor{comment}{//\ the\ new\ steam\ satisfies\ async\_readable\_stream<std::pair<std::optional<int>,\ std::optional<std::string>>>}}
+
+\end{DoxyCode}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md33}{}\doxysection{\texorpdfstring{Async File I/O}{Async File I/O}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md33}
+Async File I/O is handled differently on different platforms. Here are some of the provided features of these on the different platforms by the different frameworks\+:
+
+\tabulinesep=1mm
+\begin{longtabu}spread 0pt [c]{*{7}{|X[-1]}|}
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Read?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Write?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-7}
+\endfirsthead
+\hline
+\endfoot
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Read?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Write?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-7}
+\endhead
+IO Completion Ports   &Windows Only ({\ttfamily \texorpdfstring{$<$}{<}windows.\+h\texorpdfstring{$>$}{>}})   &Synchronous but sets up async IO\+:\href{https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea}{\texttt{ {\ttfamily Create\+File\+Ex}}} + \href{https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport}{\texttt{ {\ttfamily Create\+IOCompletion\+Port}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile}{\texttt{ {\ttfamily Read\+File}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-writefile}{\texttt{ {\ttfamily Write\+File}}}   &No Async Version. Just \href{https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle}{\texttt{ {\ttfamily Close\+Handle}}}   &{\bfseries{Summary\+:}} Synchronous create and close and async read and write but only for windows.    \\\cline{1-7}
+io\+\_\+uring   &Linux Only ({\ttfamily \texorpdfstring{$<$}{<}liburing.\+h\texorpdfstring{$>$}{>}})   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_open.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+open}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+read}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+write}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+close}}}   &{\bfseries{Summary\+:}} Has async support for all file functions but only for linux    \\\cline{1-7}
+kqueue + aio   &Pure BSD-\/based systems like Free\+BSD ({\ttfamily \texorpdfstring{$<$}{<}sys/event.\+h\texorpdfstring{$>$}{>}} + {\ttfamily \texorpdfstring{$<$}{<}aio.\+h\texorpdfstring{$>$}{>}})   &Synchronous\+: Use POSIX{\ttfamily open}   &Use{\ttfamily aio\+\_\+read} with kqueue   &Use{\ttfamily aio\+\_\+write} with   &Synchronous\+: Use {\ttfamily close}   &{\bfseries{NOTE\+: Make sure when the kqueue result has returned to call {\ttfamily aio\+\_\+return}.}}    \\\cline{1-7}
+Thread pool   &Mac\+OS or any other system which does not support Async File I/O natively   &Synchronous\+: Use POSIX{\ttfamily open}   &Use{\ttfamily read} on thread pool   &Use{\ttfamily write} on thread   &Synchronous\+: Use{\ttfamily close}   &Use a thread pool    \\\cline{1-7}
+GCD   &Mac\+OS Only -\/ plan on implementing this in the next PR   &tbd   &tdb   &tdb   &tdb   &Need to look into this more   \\\cline{1-7}
+\end{longtabu}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md34}{}\doxysection{\texorpdfstring{Async Socket I/O}{Async Socket I/O}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md34}
+Async Socket I/O is handled differently on different platforms.\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md35}{}\doxysubsection{\texorpdfstring{TCP Sockets}{TCP Sockets}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md35}
+\tabulinesep=1mm
+\begin{longtabu}spread 0pt [c]{*{9}{|X[-1]}|}
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Connect?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Read?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Write?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Shutdown?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-9}
+\endfirsthead
+\hline
+\endfoot
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Connect?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Read?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Write?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Shutdown?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-9}
+\endhead
+io\+\_\+uring   &Linux   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+socket}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_connect.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+connect}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_read.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+read}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_write.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+write}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+close}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_shutdown.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+shutdown}}}   &{\bfseries{NOTE\+: All the functions are async just linux only.}}    \\\cline{1-9}
+IOCP   &Windows   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-socket}{\texttt{ {\ttfamily socket}}} + \href{https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport}{\texttt{ {\ttfamily Create\+IOCompletion\+Port}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_connectex}{\texttt{ {\ttfamily Connect\+Ex}}}   &\href{https://learn.microsoft.com/en-gb/windows/win32/api/winsock2/nf-winsock2-wsarecv}{\texttt{ {\ttfamily WSARecv}}}   &\href{https://learn.microsoft.com/en-gb/windows/win32/api/winsock2/nf-winsock2-wsasend}{\texttt{ {\ttfamily WSASend}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-closesocket}{\texttt{ {\ttfamily closesocket}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-shutdown}{\texttt{ {\ttfamily shutdown}}}   &{\bfseries{NOTE\+: A call to {\ttfamily bind()} must be made before calling Connect\+Ex otherwise socket will be invalid.}}    \\\cline{1-9}
+kqueue   &BSD based systems   &{\ttfamily socket}   &{\ttfamily connect}   &{\ttfamily read}   &{\ttfamily write}   &{\ttfamily close}   &{\ttfamily shutdown}   &{\bfseries{NOTE\+: It seems like it\textquotesingle{}s all just synchronous API calls but kqueue lets us know when to call what under the hood. Kqueue will be our notification agent and we\textquotesingle{}ll use channels and other forms of asynchronous delivery to let us know when to resume. Refer to the kqueue example below.}}   \\\cline{1-9}
+\end{longtabu}
+
+
+Some docs\+:
+\begin{DoxyItemize}
+\item \href{https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_connectex}{\texttt{ https\+://learn.\+microsoft.\+com/en-\/us/windows/win32/api/mswsock/nc-\/mswsock-\/lpfn\+\_\+connectex}}
+\item \href{https://gist.github.com/joeyadams/4158972}{\texttt{ https\+://gist.\+github.\+com/joeyadams/4158972}}
+\item \href{https://stackoverflow.com/questions/13598530/connectex-requires-the-socket-to-be-initially-bound-but-to-what}{\texttt{ https\+://stackoverflow.\+com/questions/13598530/connectex-\/requires-\/the-\/socket-\/to-\/be-\/initially-\/bound-\/but-\/to-\/what}}
+\end{DoxyItemize}\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md36}{}\doxysubsection{\texorpdfstring{TCP Listeners}{TCP Listeners}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md36}
+\tabulinesep=1mm
+\begin{longtabu}spread 0pt [c]{*{8}{|X[-1]}|}
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Bind?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Listen?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Accept   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-8}
+\endfirsthead
+\hline
+\endfoot
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Bind?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Listen?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Accept   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-8}
+\endhead
+io\+\_\+uring   &Linux   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+socket}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_bind.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+bind}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_listen.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+listen}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_accept.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+accept}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+close}}}   &{\bfseries{NOTE\+: All the functions are async just linux only.}}    \\\cline{1-8}
+IOCP   &Windows   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-socket}{\texttt{ {\ttfamily socket}}} + \href{https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport}{\texttt{ {\ttfamily Create\+IOCompletion\+Port}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-bind}{\texttt{ {\ttfamily bind}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen}{\texttt{ {\ttfamily listen}}}   &\href{https://learn.microsoft.com/en-gb/windows/win32/api/mswsock/nf-mswsock-acceptex}{\texttt{ {\ttfamily Accept\+Ex}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-closesocket}{\texttt{ {\ttfamily closesocket}}}   &\\\cline{1-8}
+kqueue   &BSD based systems   &{\ttfamily socket}   &{\ttfamily bind}   &{\ttfamily listen}   &{\ttfamily accept}   &{\ttfamily close}   &{\bfseries{NOTE\+: It seems like it\textquotesingle{}s all just synchronous API calls but kqueue lets us know when to call what under the hood. Kqueue will be our notification agent and we\textquotesingle{}ll use channels and other forms of asynchronous delivery to let us know when to resume. Refer to the kqueue example below.}}   \\\cline{1-8}
+\end{longtabu}
+
+
+Examples\+:
+\begin{DoxyItemize}
+\item \href{https://learn.microsoft.com/en-gb/windows/win32/api/mswsock/nf-mswsock-acceptex\#example-code}{\texttt{ https\+://learn.\+microsoft.\+com/en-\/gb/windows/win32/api/mswsock/nf-\/mswsock-\/acceptex\#example-\/code}}
+\item \href{https://gist.github.com/josephg/6c078a241b0e9e538ac04ef28be6e787}{\texttt{ https\+://gist.\+github.\+com/josephg/6c078a241b0e9e538ac04ef28be6e787}}
+\item KQUEUE Example\+: \href{https://dev.to/frevib/a-tcp-server-with-kqueue-527}{\texttt{ https\+://dev.\+to/frevib/a-\/tcp-\/server-\/with-\/kqueue-\/527}}
+\end{DoxyItemize}\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md37}{}\doxysection{\texorpdfstring{Planned implementation\+:}{Planned implementation:}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md37}
+Async Read \& Async Write will be based on what\textquotesingle{}s in the {\bfseries{Async Read}} and {\bfseries{Async Write}} columns. Closing will still happen with RAII (which would be a synchronous close on everything but linux) but on linux we\textquotesingle{}ll send a fire-\/and-\/forget request with {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+close}. For async creation it can either be with synchronous or asynchronous, the bottleneck wouldn\textquotesingle{}t be too big of an issue.
+
+This is the following specification for using the {\bfseries{Async File I/O}} API\+: 
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{namespace\ }detail}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }file\_descriptor}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{protected}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::ios\_base::openmode\ mode;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ file\_descriptor(std::ios\_base::openmode\ mode)\ :\ mode(mode)\ \{\}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \string~file\_descriptor()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{comment}{//\ virtual\ because\ we\ want\ to\ allow\ platform\ specific\ implementation}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<size\_t>\ read(std::span<char>\ buffer)\ =\ 0;\ \ \textcolor{comment}{//\ internally\ should\ check\ if\ openmode\ is\ for\ read}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<size\_t>\ write(std::span<char>\ buffer)\ =\ 0;\ \textcolor{comment}{//\ internally\ should\ check\ if\ openmode\ is\ for\ write\ or\ append}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<void>\ close()\ =\ 0;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ will\ spawn\ a\ fire\ and\ forget\ task\ (essentially\ use\ async\ apis\ but\ provide\ null\ callback)}}
+\DoxyCodeLine{\ \ \ \ \};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<std::shared\_ptr<file\_descriptor>>\ make\_file\_descriptor(std::filesystem::path\ p,\ std::ios\_base::openmode\ mode);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }file\_stream}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{protected}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::shared\_ptr<file\_descriptor>\ fd;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::atomic<bool>\ closed\{\textcolor{keyword}{false}\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{explicit}\ file\_stream(std::shared\_ptr<file\_descriptor>\ fd)\ :\ fd(std::move(fd))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \string~file\_stream()\ noexcept}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (fd)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_a367712ca561ac34d7d28f495a6462c09}{sync\_wait}}(close());}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ task<void>\ close()\ noexcept}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{bool}\ expected\ =\ \textcolor{keyword}{false};}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (closed.compare\_exchange\_strong(expected,\ \textcolor{keyword}{true},\ std::memory\_order\_acq\_rel))}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ fd-\/>close();}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \};}
+\DoxyCodeLine{\}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }file\_rstream\ :\ \textcolor{keyword}{public}\ detail::file\_stream}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ file\_rstream(std::shared\_ptr<detail::file\_descriptor>\ fd)\ :\ detail::file\_stream(std::move(fd))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~file\_rstream()\ noexcept\ =\ default;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ file\_rstream(file\_rstream\ \&\&)\ noexcept\ =\ default;}
+\DoxyCodeLine{\ \ \ \ file\_rstream\ \&operator=(file\_rstream\ \&\&)\ noexcept\ =\ default;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<\textcolor{keywordtype}{size\_t}>\ recv(std::span<\textcolor{keywordtype}{char}>\ buffer)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ fd-\/>read(buffer);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<char>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_aaaf5c2dda44d2ea9c9518aa85bf729c1}{recv}}()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::array<char,\ 1>\ buf;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_aaaf5c2dda44d2ea9c9518aa85bf729c1}{recv}}(buf);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_return}\ buf[0];}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_readable\_stream<file\_rstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_buffered\_readable\_stream<file\_rstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_closeable\_stream<file\_rstream,\ char>);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }file\_wstream\ :\ \textcolor{keyword}{public}\ detail::file\_stream}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{explicit}\ file\_wstream(std::shared\_ptr<file\_descriptor>\ fd)\ :\ detail::file\_stream(std::move(fd))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~file\_wstream()\ noexcept\ =\ default;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ file\_wstream(file\_wstream\ \&\&)\ noexcept\ =\ default;}
+\DoxyCodeLine{\ \ \ \ file\_wstream\ \&operator=(file\_wstream\ \&\&)\ noexcept\ =\ default;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<\textcolor{keywordtype}{size\_t}>\ send(std::span<\textcolor{keywordtype}{char}>\ buffer)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ fd-\/>write(buffer);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<bool>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_af2b81544adcc4ba129f31b5797a43670}{send}}(\textcolor{keywordtype}{char}\ b)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::array<char,\ 1>\ buf;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ buf[0]\ =\ b;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_af2b81544adcc4ba129f31b5797a43670}{send}}(buf);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_return}\ \textcolor{keyword}{true};}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_writable\_stream<file\_wstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_buffered\_writable\_stream<file\_wstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_closeable\_stream<file\_wstream,\ char>);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }file}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{private}:}
+\DoxyCodeLine{\ \ \ \ std::filesystem::path\ p;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ file(std::filesystem::path\ p)\ :\ p(std::move(p))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~file()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<file\_rstream>\ open\_readable\_stream()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ descriptor\ =\ \textcolor{keyword}{co\_await}\ detail::make\_file\_descriptor(p,\ std::ios\_base::in);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_return}\ file\_rstream(descriptor);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<file\_wstream>\ open\_writable\_stream(\textcolor{keywordtype}{bool}\ append)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ descriptor\ =\ \textcolor{keyword}{co\_await}\ detail::make\_file\_descriptor(p,\ append\ ?\ std::ios\_base::app\ :\ std::ios\_base::out);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_return}\ file\_wstream(std::move(descriptor));}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{const}\ std::filesystem::path\ get\_path()\textcolor{keyword}{\ const\ }\{\ \textcolor{keywordflow}{return}\ p;\ \}}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{constexpr}\ \textcolor{keyword}{operator}\ \textcolor{keyword}{const}\ std::filesystem::path\ \&()\ \textcolor{keyword}{const}\ \{\ \textcolor{keywordflow}{return}\ p;\ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{file\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1fs_a8d8e45ed576cda72f736cd9e66952947}{make\_file}}(std::filesystem::path\ p)}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{return}\ file(p);}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+
+
+This is the following specification for using the {\bfseries{Async TCP Socket and Listener I/O}} API\+: 
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\textcolor{keyword}{struct\ }connection\_info}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\ \ \ \ std::string\ host;}
+\DoxyCodeLine{\ \ \ \ uint16\_t\ port;}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{enum\ class}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a9f2887d3f56db5de0b9d3a9bc63b8688}{socket\_stream\_mode}}}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a9f2887d3f56db5de0b9d3a9bc63b8688a3466fab4975481651940ed328aa990e4}{READ}},}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a9f2887d3f56db5de0b9d3a9bc63b8688ad4b9e47f65b6e79b010582f15785867e}{WRITE}}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{namespace\ }detail}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }tcp\_descriptor\_base}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ tcp\_descriptor\_base()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \string~tcp\_descriptor\_base()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<void>\ close()\ =\ 0;\ \textcolor{comment}{//\ Close\ the\ socket}}
+\DoxyCodeLine{\ \ \ \ \};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }tcp\_socket\_descriptor\ :\ \textcolor{keyword}{public}\ tcp\_descriptor\_base}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ tcp\_socket\_descriptor()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \string~tcp\_socket\_descriptor()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<void>\ connect(\textcolor{keyword}{const}\ connection\_info\ \&info)\ =\ 0;\ \ \textcolor{comment}{//\ Connect\ to\ a\ server}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<size\_t>\ read(std::span<char>\ buffer)\ =\ 0;\ \ \ \ \ \ \ \ \textcolor{comment}{//\ Read\ data\ from\ the\ socket}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<size\_t>\ write(std::span<const\ char>\ buffer)\ =\ 0;\ \textcolor{comment}{//\ Write\ data\ to\ the\ socket}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<void>\ \mbox{\hyperlink{namespacewebcraft_1_1async_a32cc887e48f12d360656c6f023977a2d}{shutdown}}(socket\_stream\_mode\ mode)\ =\ 0;\ \ \ \ \ \textcolor{comment}{//\ Shutdown\ the\ socket}}
+\DoxyCodeLine{\ \ \ \ \};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }tcp\_listener\_descriptor\ :\ \textcolor{keyword}{public}\ tcp\_descriptor\_base}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ tcp\_listener\_descriptor()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \string~tcp\_listener\_descriptor()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<void>\ bind(\textcolor{keyword}{const}\ connection\_info\ \&info)\ =\ 0;\ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Bind\ the\ listener\ to\ an\ address}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<void>\ listen(\textcolor{keywordtype}{int}\ backlog)\ =\ 0;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Start\ listening\ for\ incoming\ connections}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ task<std::unique\_ptr<tcp\_socket\_descriptor>>\ accept()\ =\ 0;\ \textcolor{comment}{//\ Accept\ a\ new\ connection}}
+\DoxyCodeLine{\ \ \ \ \};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<std::shared\_ptr<tcp\_socket\_descriptor>>\ make\_tcp\_socket\_descriptor();}
+\DoxyCodeLine{\ \ \ \ task<std::shared\_ptr<tcp\_listener\_descriptor>>\ make\_tcp\_listener\_descriptor();}
+\DoxyCodeLine{}
+\DoxyCodeLine{\}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }tcp\_rstream}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{private}:}
+\DoxyCodeLine{\ \ \ \ std::shared\_ptr<detail::tcp\_socket\_descriptor>\ descriptor;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ tcp\_rstream(std::shared\_ptr<detail::tcp\_socket\_descriptor>\ desc)\ :\ descriptor(std::move(desc))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~tcp\_rstream()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<size\_t>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_aaaf5c2dda44d2ea9c9518aa85bf729c1}{recv}}(std::span<char>\ buffer)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ descriptor-\/>read(buffer);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<char>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_aaaf5c2dda44d2ea9c9518aa85bf729c1}{recv}}()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::array<char,\ 1>\ buf;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_aaaf5c2dda44d2ea9c9518aa85bf729c1}{recv}}(buf);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_return}\ buf[0];}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<void>\ close()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ descriptor-\/>shutdown(socket\_stream\_mode::READ);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_writable\_stream<tcp\_rstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_buffered\_writable\_stream<tcp\_rstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_closeable\_stream<tcp\_rstream,\ char>);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }tcp\_wstream}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{private}:}
+\DoxyCodeLine{\ \ \ \ std::shared\_ptr<detail::tcp\_socket\_descriptor>\ descriptor;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ tcp\_wstream(std::shared\_ptr<detail::tcp\_socket\_descriptor>\ desc)\ :\ descriptor(std::move(desc))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~tcp\_wstream()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<size\_t>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_af2b81544adcc4ba129f31b5797a43670}{send}}(std::span<const\ char>\ buffer)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ descriptor-\/>write(buffer);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<bool>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_af2b81544adcc4ba129f31b5797a43670}{send}}(\textcolor{keywordtype}{char}\ b)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ std::array<char,\ 1>\ buf;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ buf[0]\ =\ b;}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_af2b81544adcc4ba129f31b5797a43670}{send}}(buf);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_return}\ \textcolor{keyword}{true};}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<void>\ close()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ descriptor-\/>shutdown(socket\_stream\_mode::WRITE);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_writable\_stream<tcp\_wstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_buffered\_writable\_stream<tcp\_wstream,\ char>);}
+\DoxyCodeLine{\textcolor{keyword}{static\_assert}(async\_closeable\_stream<tcp\_wstream,\ char>);}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }tcp\_socket}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{private}:}
+\DoxyCodeLine{\ \ \ \ std::shared\_ptr<detail::tcp\_socket\_descriptor>\ descriptor;}
+\DoxyCodeLine{\ \ \ \ std::unique\_ptr<tcp\_rstream>\ read\_stream;}
+\DoxyCodeLine{\ \ \ \ std::unique\_ptr<tcp\_wstream>\ write\_stream;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ tcp\_socket(std::shared\_ptr<detail::tcp\_socket\_descriptor>\ desc)\ :\ descriptor(std::move(desc))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~tcp\_socket()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (read\_stream)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ read\_stream-\/>close();}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (write\_stream)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ write\_stream-\/>close();}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (descriptor)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_a367712ca561ac34d7d28f495a6462c09}{sync\_wait}}(descriptor-\/>close());}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<void>\ connect(\textcolor{keyword}{const}\ connection\_info\ \&info)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ descriptor-\/>connect(info);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ read\_stream\ =\ std::make\_unique<tcp\_rstream>(descriptor);}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ write\_stream\ =\ std::make\_unique<tcp\_wstream>(descriptor);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ tcp\_rstream\ \&get\_readable\_stream()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!read\_stream)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Read\ stream\ is\ not\ initialized."{}});}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ *read\_stream;}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ tcp\_wstream\ \&get\_writable\_stream()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!write\_stream)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Write\ stream\ is\ not\ initialized."{}});}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ *write\_stream;}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<void>\ shutdown\_channel(socket\_stream\_mode\ mode)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (mode\ ==\ socket\_stream\_mode::READ\ \&\&\ read\_stream)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ read\_stream-\/>close();}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{else}\ \textcolor{keywordflow}{if}\ (mode\ ==\ socket\_stream\_mode::WRITE\ \&\&\ write\_stream)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ write\_stream-\/>close();}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }tcp\_listener}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{private}:}
+\DoxyCodeLine{\ \ \ \ std::shared\_ptr<detail::tcp\_listener\_descriptor>\ descriptor;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ tcp\_listener(std::shared\_ptr<detail::tcp\_listener\_descriptor>\ desc)\ :\ descriptor(std::move(desc))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~tcp\_listener()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (descriptor)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_a367712ca561ac34d7d28f495a6462c09}{sync\_wait}}(descriptor-\/>close());}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<void>\ bind(\textcolor{keyword}{const}\ connection\_info\ \&info)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ descriptor-\/>bind(info);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<void>\ listen(\textcolor{keywordtype}{int}\ backlog)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ descriptor-\/>listen(backlog);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ task<std::unique\_ptr<tcp\_socket>>\ accept()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ client\_desc\ =\ \textcolor{keyword}{co\_await}\ descriptor-\/>accept();}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_return}\ std::make\_unique<tcp\_socket>(std::move(client\_desc));}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
+\DoxyCodeLine{task<tcp\_socket>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a482e358e1f53606e06109999484276b3}{make\_tcp\_socket}}()}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{auto}\ descriptor\ =\ \textcolor{keyword}{co\_await}\ detail::make\_tcp\_socket\_descriptor();}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{co\_return}\ tcp\_socket(std::move(descriptor));}
+\DoxyCodeLine{\}}
+\DoxyCodeLine{}
+\DoxyCodeLine{task<tcp\_listener>\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a861e0c806d177e378bae72a3cfb5f0e2}{make\_tcp\_listener}}()}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{auto}\ descriptor\ =\ \textcolor{keyword}{co\_await}\ detail::make\_tcp\_listener\_descriptor();}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{co\_return}\ tcp\_listener(std::move(descriptor));}
+\DoxyCodeLine{\}}
+
+\end{DoxyCode}
+
+
+The platform will implement {\ttfamily make\+\_\+file\+\_\+descriptor}, {\ttfamily make\+\_\+tcp\+\_\+socket\+\_\+descriptor}, and {\ttfamily make\+\_\+tcp\+\_\+socket\+\_\+descriptor} while also making their own implementations of the socket and file descriptors and returning a shared pointer via the functions mentioned. 
