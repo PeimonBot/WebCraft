@@ -11,7 +11,7 @@ using namespace webcraft::async;
 using namespace webcraft::async::io::adaptors;
 using namespace webcraft::async::io::fs;
 
-TEST_CASE(TestFilePathComplatibility)
+TEST_CASE(TestFilePathCompatibility)
 {
     std::filesystem::path p1("/path/to/file");
 
