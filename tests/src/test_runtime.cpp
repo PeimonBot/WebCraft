@@ -1,6 +1,10 @@
-#define TEST_SUITE_NAME RuntimeTestSuite
+///////////////////////////////////////////////////////////////////////////////
+// Copyright (c) Aditya Rao
+// Licenced under MIT license. See LICENSE.txt for details.
+///////////////////////////////////////////////////////////////////////////////
 
-// #define WEBCRAFT_ASYNC_RUNTIME_MOCK
+
+#define TEST_SUITE_NAME RuntimeTestSuite
 
 #include "test_suite.hpp"
 #include <webcraft/async/async.hpp>

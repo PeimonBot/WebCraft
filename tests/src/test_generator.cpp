@@ -23,8 +23,7 @@ TEST_CASE(ReturnsCopyTest)
 
     auto gen = f();
     auto iter = gen.begin();
-    // TODO: Should this really be required?
-    // static_assert(std::is_same<decltype(*iter), float>::value, "operator* should return float by value");
+    
     EXPECT_TRUE(*iter == 1.0f);
     ++iter;
     EXPECT_TRUE(*iter == 2.0f);
