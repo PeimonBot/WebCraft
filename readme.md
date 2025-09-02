@@ -1,5 +1,7 @@
 # WebCraft
 
+> An async first framework leveraging powerful features of C++23 built for scale, speed, and ease.
+
 NOTE: This codebase is recommended to run on C++ 23 since most of the features are geared to it. If its possible try to get your compiler to compile with experimental libraries enabled (which will enable all the features the compiler may not have implemented for C++ 23).
 
 The following compilers (and anything newer) are supported: GCC 13, MSVC 2022, Clang 17

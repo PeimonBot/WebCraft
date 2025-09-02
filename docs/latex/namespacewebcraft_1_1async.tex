@@ -1,0 +1,263 @@
+\doxysection{webcraft\+::async Namespace Reference}
+\hypertarget{namespacewebcraft_1_1async}{}\label{namespacewebcraft_1_1async}\index{webcraft::async@{webcraft::async}}
+\doxysubsubsection*{Namespaces}
+\begin{DoxyCompactItemize}
+\item 
+namespace \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io}{io}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Classes}
+\begin{DoxyCompactItemize}
+\item 
+struct \mbox{\hyperlink{structwebcraft_1_1async_1_1async__event}{async\+\_\+event}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1event__signal}{event\+\_\+signal}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1fire__and__forget__task}{fire\+\_\+and\+\_\+forget\+\_\+task}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1immovable}{immovable}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1runtime__context}{runtime\+\_\+context}}
+\begin{DoxyCompactList}\small\item\em Acts as a context for the async runtime, managing the lifecycle of async operations. This class is designed to be used as a singleton within the async runtime but won\textquotesingle{}t be created like a singleton, more like a guard. \end{DoxyCompactList}\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task_3_01void_01_4}{task$<$ void $>$}}
+\item 
+struct \mbox{\hyperlink{structwebcraft_1_1async_1_1task__adaptor__closure}{task\+\_\+adaptor\+\_\+closure}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task__completion__source}{task\+\_\+completion\+\_\+source}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task__completion__source_3_01void_01_4}{task\+\_\+completion\+\_\+source$<$ void $>$}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task__completion__source__base}{task\+\_\+completion\+\_\+source\+\_\+base}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task__promise}{task\+\_\+promise}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1task__promise_3_01void_01_4}{task\+\_\+promise$<$ void $>$}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool}{thread\+\_\+pool}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool__shutdown__error}{thread\+\_\+pool\+\_\+shutdown\+\_\+error}}
+\item 
+class \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool__worker}{thread\+\_\+pool\+\_\+worker}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Concepts}
+\begin{DoxyCompactItemize}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1has__member__operator__co__await__v}{has\+\_\+member\+\_\+operator\+\_\+co\+\_\+await\+\_\+v}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1is__awaitable__suspend__type}{is\+\_\+awaitable\+\_\+suspend\+\_\+type}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1has__awaitable__elements}{has\+\_\+awaitable\+\_\+elements}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1has__non__member__operator__co__await__v}{has\+\_\+non\+\_\+member\+\_\+operator\+\_\+co\+\_\+await\+\_\+v}}
+\item 
+concept \mbox{\hyperlink{conceptwebcraft_1_1async_1_1awaitable__t}{awaitable\+\_\+t}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Typedefs}
+\begin{DoxyCompactItemize}
+\item 
+{\footnotesize template$<$awaitable\+\_\+t T$>$ }\\using \mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\+\_\+resume\+\_\+t}} = decltype(detail\+::get\+\_\+awaiter(std\+::declval$<$ T $>$()).await\+\_\+resume())
+\item 
+{\footnotesize template$<$typename T $>$ }\\using \mbox{\hyperlink{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715}{normalized\+\_\+result\+\_\+t}} = std\+::conditional\+\_\+t$<$ std\+::is\+\_\+void\+\_\+v$<$ \mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\+\_\+resume\+\_\+t}}$<$ T $>$ $>$, std\+::monostate, \mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\+\_\+resume\+\_\+t}}$<$ T $>$ $>$
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+\mbox{\hyperlink{classwebcraft_1_1async_1_1fire__and__forget__task}{fire\+\_\+and\+\_\+forget\+\_\+task}} \mbox{\hyperlink{namespacewebcraft_1_1async_aa32214c386ded164491af1d325b36e11}{fire\+\_\+and\+\_\+forget}} (\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ t)
+\item 
+std\+::stop\+\_\+token \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\+\_\+stop\+\_\+token}} ()
+\begin{DoxyCompactList}\small\item\em Gets the stop token for the current async runtime. \end{DoxyCompactList}\item 
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_a99e5bf717ae187ed2c3eaeea49c7f885}{yield}} ()
+\begin{DoxyCompactList}\small\item\em Yields control back to the async runtime, allowing other tasks to run. \end{DoxyCompactList}\item 
+{\footnotesize template$<$typename Rep , typename Period $>$ }\\\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_a3ca6a5c7afbc6ff19d3757b8982794f6}{sleep\+\_\+for}} (std\+::chrono\+::duration$<$ Rep, Period $>$ duration, std\+::stop\+\_\+token token=\mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\+\_\+stop\+\_\+token}}())
+\begin{DoxyCompactList}\small\item\em Sleeps for a specified duration, allowing other tasks to run during the sleep. \end{DoxyCompactList}\item 
+{\footnotesize template$<$typename Rep , typename Period $>$ }\\\mbox{\hyperlink{classwebcraft_1_1async_1_1fire__and__forget__task}{fire\+\_\+and\+\_\+forget\+\_\+task}} \mbox{\hyperlink{namespacewebcraft_1_1async_a956a68bbb57834f7dd09decdbac3053a}{set\+\_\+timeout}} (std\+::function$<$ void()$>$ func, std\+::chrono\+::duration$<$ Rep, Period $>$ duration, std\+::stop\+\_\+token token=\mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\+\_\+stop\+\_\+token}}())
+\item 
+{\footnotesize template$<$typename Rep , typename Period $>$ }\\\mbox{\hyperlink{classwebcraft_1_1async_1_1fire__and__forget__task}{fire\+\_\+and\+\_\+forget\+\_\+task}} \mbox{\hyperlink{namespacewebcraft_1_1async_a33e3ad8fe28c5febe5782a0b74d1366c}{set\+\_\+interval}} (std\+::function$<$ void()$>$ func, std\+::chrono\+::duration$<$ Rep, Period $>$ duration, std\+::stop\+\_\+token token=\mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\+\_\+stop\+\_\+token}}())
+\item 
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_a32cc887e48f12d360656c6f023977a2d}{shutdown}} ()
+\item 
+{\footnotesize template$<$awaitable\+\_\+t T$>$ }\\\mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\+\_\+resume\+\_\+t}}$<$ T $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_a367712ca561ac34d7d28f495a6462c09}{sync\+\_\+wait}} (T \&\&awaitable)
+\item 
+{\footnotesize template$<$typename Func $>$ }\\auto \mbox{\hyperlink{namespacewebcraft_1_1async_aa2f7829b92b3c6f724586abddbe4147c}{then}} (Func \&\&func)
+\item 
+{\footnotesize template$<$typename Func $>$ }\\auto \mbox{\hyperlink{namespacewebcraft_1_1async_a4cdc12c581f571e77dba6f036250a51a}{upon\+\_\+error}} (Func \&\&handler)
+\item 
+{\footnotesize template$<$std\+::ranges\+::input\+\_\+range Range, typename T  = std\+::ranges\+::range\+\_\+value\+\_\+t$<$\+Range$>$, typename Result  = awaitable\+\_\+resume\+\_\+t$<$\+T$>$$>$ \newline
+requires awaitable\+\_\+t$<$T$>$ \&\& (!std\+::is\+\_\+void\+\_\+v$<$Result$>$)}\\\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ std\+::vector$<$ Result $>$ $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_adefc58a669759c7bf7067728c34cfbf5}{when\+\_\+all}} (Range \&\&tasks)
+\item 
+{\footnotesize template$<$std\+::ranges\+::input\+\_\+range Range, typename T  = std\+::ranges\+::range\+\_\+value\+\_\+t$<$\+Range$>$, typename Result  = awaitable\+\_\+resume\+\_\+t$<$\+T$>$$>$ \newline
+requires awaitable\+\_\+t$<$T$>$ \&\& std\+::is\+\_\+void\+\_\+v$<$Result$>$}\\\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_ab5be7b95a948cae4e62eae315112097d}{when\+\_\+all}} (Range \&\&tasks)
+\item 
+{\footnotesize template$<$typename... Tasks$>$ \newline
+requires (awaitable\+\_\+t$<$Tasks$>$ \&\& ...)}\\\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ std\+::tuple$<$ \mbox{\hyperlink{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715}{normalized\+\_\+result\+\_\+t}}$<$ Tasks $>$... $>$ $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_a8101de822056b473833adc0e5408022b}{when\+\_\+all}} (std\+::tuple$<$ Tasks... $>$ tasks)
+\item 
+{\footnotesize template$<$typename... Tasks$>$ \newline
+requires (awaitable\+\_\+t$<$Tasks$>$ \&\& ...)}\\auto \mbox{\hyperlink{namespacewebcraft_1_1async_a13bbc27f5b631d3acb57bf3376614164}{when\+\_\+all}} (Tasks \&\&...tasks)
+\item 
+{\footnotesize template$<$std\+::ranges\+::input\+\_\+range Range, typename T  = std\+::ranges\+::range\+\_\+value\+\_\+t$<$\+Range$>$, typename Result  = awaitable\+\_\+resume\+\_\+t$<$\+T$>$$>$ \newline
+requires awaitable\+\_\+t$<$T$>$}\\\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ Result $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_a2c5d38e8801b57b1ab7200366a8e22dc}{when\+\_\+any}} (Range \&\&tasks)
+\item 
+{\footnotesize template$<$awaitable\+\_\+t... Tasks$>$ }\\\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ std\+::variant$<$ \mbox{\hyperlink{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715}{normalized\+\_\+result\+\_\+t}}$<$ Tasks $>$... $>$ $>$ \mbox{\hyperlink{namespacewebcraft_1_1async_a9ca722dc3d2eed95e56f4d1d0b352673}{when\+\_\+any}} (Tasks \&\&...tasks)
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Typedef Documentation}
+\Hypertarget{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}\label{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01} 
+\index{webcraft::async@{webcraft::async}!awaitable\_resume\_t@{awaitable\_resume\_t}}
+\index{awaitable\_resume\_t@{awaitable\_resume\_t}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{awaitable\_resume\_t}{awaitable\_resume\_t}}
+{\footnotesize\ttfamily template$<$awaitable\+\_\+t T$>$ \\
+using \mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{webcraft\+::async\+::awaitable\+\_\+resume\+\_\+t}} = typedef decltype(detail\+::get\+\_\+awaiter(std\+::declval$<$T$>$()).await\+\_\+resume())}
+
+\Hypertarget{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715}\label{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715} 
+\index{webcraft::async@{webcraft::async}!normalized\_result\_t@{normalized\_result\_t}}
+\index{normalized\_result\_t@{normalized\_result\_t}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{normalized\_result\_t}{normalized\_result\_t}}
+{\footnotesize\ttfamily template$<$typename T $>$ \\
+using \mbox{\hyperlink{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715}{webcraft\+::async\+::normalized\+\_\+result\+\_\+t}} = typedef std\+::conditional\+\_\+t$<$ std\+::is\+\_\+void\+\_\+v$<$\mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\+\_\+resume\+\_\+t}}$<$T$>$ $>$, std\+::monostate, \mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\+\_\+resume\+\_\+t}}$<$T$>$ $>$}
+
+
+
+\doxysubsection{Function Documentation}
+\Hypertarget{namespacewebcraft_1_1async_aa32214c386ded164491af1d325b36e11}\label{namespacewebcraft_1_1async_aa32214c386ded164491af1d325b36e11} 
+\index{webcraft::async@{webcraft::async}!fire\_and\_forget@{fire\_and\_forget}}
+\index{fire\_and\_forget@{fire\_and\_forget}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{fire\_and\_forget()}{fire\_and\_forget()}}
+{\footnotesize\ttfamily \mbox{\hyperlink{classwebcraft_1_1async_1_1fire__and__forget__task}{fire\+\_\+and\+\_\+forget\+\_\+task}} webcraft\+::async\+::fire\+\_\+and\+\_\+forget (\begin{DoxyParamCaption}\item[{\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$}]{t }\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+\Hypertarget{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}\label{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f} 
+\index{webcraft::async@{webcraft::async}!get\_stop\_token@{get\_stop\_token}}
+\index{get\_stop\_token@{get\_stop\_token}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{get\_stop\_token()}{get\_stop\_token()}}
+{\footnotesize\ttfamily std\+::stop\+\_\+token webcraft\+::async\+::get\+\_\+stop\+\_\+token (\begin{DoxyParamCaption}{ }\end{DoxyParamCaption})}
+
+
+
+Gets the stop token for the current async runtime. 
+
+\begin{DoxyReturn}{Returns}
+the stop token associated with the async runtime. 
+\end{DoxyReturn}
+\Hypertarget{namespacewebcraft_1_1async_a33e3ad8fe28c5febe5782a0b74d1366c}\label{namespacewebcraft_1_1async_a33e3ad8fe28c5febe5782a0b74d1366c} 
+\index{webcraft::async@{webcraft::async}!set\_interval@{set\_interval}}
+\index{set\_interval@{set\_interval}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{set\_interval()}{set\_interval()}}
+{\footnotesize\ttfamily template$<$typename Rep , typename Period $>$ \\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1fire__and__forget__task}{fire\+\_\+and\+\_\+forget\+\_\+task}} webcraft\+::async\+::set\+\_\+interval (\begin{DoxyParamCaption}\item[{std\+::function$<$ void()$>$}]{func,  }\item[{std\+::chrono\+::duration$<$ Rep, Period $>$}]{duration,  }\item[{std\+::stop\+\_\+token}]{token = {\ttfamily \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\+\_\+stop\+\_\+token}}()} }\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+\Hypertarget{namespacewebcraft_1_1async_a956a68bbb57834f7dd09decdbac3053a}\label{namespacewebcraft_1_1async_a956a68bbb57834f7dd09decdbac3053a} 
+\index{webcraft::async@{webcraft::async}!set\_timeout@{set\_timeout}}
+\index{set\_timeout@{set\_timeout}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{set\_timeout()}{set\_timeout()}}
+{\footnotesize\ttfamily template$<$typename Rep , typename Period $>$ \\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1fire__and__forget__task}{fire\+\_\+and\+\_\+forget\+\_\+task}} webcraft\+::async\+::set\+\_\+timeout (\begin{DoxyParamCaption}\item[{std\+::function$<$ void()$>$}]{func,  }\item[{std\+::chrono\+::duration$<$ Rep, Period $>$}]{duration,  }\item[{std\+::stop\+\_\+token}]{token = {\ttfamily \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\+\_\+stop\+\_\+token}}()} }\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+\Hypertarget{namespacewebcraft_1_1async_a32cc887e48f12d360656c6f023977a2d}\label{namespacewebcraft_1_1async_a32cc887e48f12d360656c6f023977a2d} 
+\index{webcraft::async@{webcraft::async}!shutdown@{shutdown}}
+\index{shutdown@{shutdown}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{shutdown()}{shutdown()}}
+{\footnotesize\ttfamily \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ webcraft\+::async\+::shutdown (\begin{DoxyParamCaption}{ }\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+\Hypertarget{namespacewebcraft_1_1async_a3ca6a5c7afbc6ff19d3757b8982794f6}\label{namespacewebcraft_1_1async_a3ca6a5c7afbc6ff19d3757b8982794f6} 
+\index{webcraft::async@{webcraft::async}!sleep\_for@{sleep\_for}}
+\index{sleep\_for@{sleep\_for}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{sleep\_for()}{sleep\_for()}}
+{\footnotesize\ttfamily template$<$typename Rep , typename Period $>$ \\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ webcraft\+::async\+::sleep\+\_\+for (\begin{DoxyParamCaption}\item[{std\+::chrono\+::duration$<$ Rep, Period $>$}]{duration,  }\item[{std\+::stop\+\_\+token}]{token = {\ttfamily \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\+\_\+stop\+\_\+token}}()} }\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Sleeps for a specified duration, allowing other tasks to run during the sleep. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em duration} & The duration to sleep. \\
+\hline
+{\em token} & The stop token to check for cancellation requests. \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+A task that completes when the sleep operation is done. 
+\end{DoxyReturn}
+\Hypertarget{namespacewebcraft_1_1async_a367712ca561ac34d7d28f495a6462c09}\label{namespacewebcraft_1_1async_a367712ca561ac34d7d28f495a6462c09} 
+\index{webcraft::async@{webcraft::async}!sync\_wait@{sync\_wait}}
+\index{sync\_wait@{sync\_wait}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{sync\_wait()}{sync\_wait()}}
+{\footnotesize\ttfamily template$<$awaitable\+\_\+t T$>$ \\
+\mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\+\_\+resume\+\_\+t}}$<$ T $>$ webcraft\+::async\+::sync\+\_\+wait (\begin{DoxyParamCaption}\item[{T \&\&}]{awaitable }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_aa2f7829b92b3c6f724586abddbe4147c}\label{namespacewebcraft_1_1async_aa2f7829b92b3c6f724586abddbe4147c} 
+\index{webcraft::async@{webcraft::async}!then@{then}}
+\index{then@{then}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{then()}{then()}}
+{\footnotesize\ttfamily template$<$typename Func $>$ \\
+auto webcraft\+::async\+::then (\begin{DoxyParamCaption}\item[{Func \&\&}]{func }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_a4cdc12c581f571e77dba6f036250a51a}\label{namespacewebcraft_1_1async_a4cdc12c581f571e77dba6f036250a51a} 
+\index{webcraft::async@{webcraft::async}!upon\_error@{upon\_error}}
+\index{upon\_error@{upon\_error}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{upon\_error()}{upon\_error()}}
+{\footnotesize\ttfamily template$<$typename Func $>$ \\
+auto webcraft\+::async\+::upon\+\_\+error (\begin{DoxyParamCaption}\item[{Func \&\&}]{handler }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_adefc58a669759c7bf7067728c34cfbf5}\label{namespacewebcraft_1_1async_adefc58a669759c7bf7067728c34cfbf5} 
+\index{webcraft::async@{webcraft::async}!when\_all@{when\_all}}
+\index{when\_all@{when\_all}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{when\_all()}{when\_all()}\hspace{0.1cm}{\footnotesize\ttfamily [1/4]}}
+{\footnotesize\ttfamily template$<$std\+::ranges\+::input\+\_\+range Range, typename T  = std\+::ranges\+::range\+\_\+value\+\_\+t$<$\+Range$>$, typename Result  = awaitable\+\_\+resume\+\_\+t$<$\+T$>$$>$ \newline
+requires awaitable\+\_\+t$<$T$>$ \&\& (!std\+::is\+\_\+void\+\_\+v$<$Result$>$)\\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ std\+::vector$<$ Result $>$ $>$ webcraft\+::async\+::when\+\_\+all (\begin{DoxyParamCaption}\item[{Range \&\&}]{tasks }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_ab5be7b95a948cae4e62eae315112097d}\label{namespacewebcraft_1_1async_ab5be7b95a948cae4e62eae315112097d} 
+\index{webcraft::async@{webcraft::async}!when\_all@{when\_all}}
+\index{when\_all@{when\_all}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{when\_all()}{when\_all()}\hspace{0.1cm}{\footnotesize\ttfamily [2/4]}}
+{\footnotesize\ttfamily template$<$std\+::ranges\+::input\+\_\+range Range, typename T  = std\+::ranges\+::range\+\_\+value\+\_\+t$<$\+Range$>$, typename Result  = awaitable\+\_\+resume\+\_\+t$<$\+T$>$$>$ \newline
+requires awaitable\+\_\+t$<$T$>$ \&\& std\+::is\+\_\+void\+\_\+v$<$Result$>$\\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ webcraft\+::async\+::when\+\_\+all (\begin{DoxyParamCaption}\item[{Range \&\&}]{tasks }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_a8101de822056b473833adc0e5408022b}\label{namespacewebcraft_1_1async_a8101de822056b473833adc0e5408022b} 
+\index{webcraft::async@{webcraft::async}!when\_all@{when\_all}}
+\index{when\_all@{when\_all}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{when\_all()}{when\_all()}\hspace{0.1cm}{\footnotesize\ttfamily [3/4]}}
+{\footnotesize\ttfamily template$<$typename... Tasks$>$ \newline
+requires (awaitable\+\_\+t$<$Tasks$>$ \&\& ...)\\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ std\+::tuple$<$ \mbox{\hyperlink{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715}{normalized\+\_\+result\+\_\+t}}$<$ Tasks $>$... $>$ $>$ webcraft\+::async\+::when\+\_\+all (\begin{DoxyParamCaption}\item[{std\+::tuple$<$ Tasks... $>$}]{tasks }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_a13bbc27f5b631d3acb57bf3376614164}\label{namespacewebcraft_1_1async_a13bbc27f5b631d3acb57bf3376614164} 
+\index{webcraft::async@{webcraft::async}!when\_all@{when\_all}}
+\index{when\_all@{when\_all}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{when\_all()}{when\_all()}\hspace{0.1cm}{\footnotesize\ttfamily [4/4]}}
+{\footnotesize\ttfamily template$<$typename... Tasks$>$ \newline
+requires (awaitable\+\_\+t$<$Tasks$>$ \&\& ...)\\
+auto webcraft\+::async\+::when\+\_\+all (\begin{DoxyParamCaption}\item[{Tasks \&\&...}]{tasks }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_a2c5d38e8801b57b1ab7200366a8e22dc}\label{namespacewebcraft_1_1async_a2c5d38e8801b57b1ab7200366a8e22dc} 
+\index{webcraft::async@{webcraft::async}!when\_any@{when\_any}}
+\index{when\_any@{when\_any}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{when\_any()}{when\_any()}\hspace{0.1cm}{\footnotesize\ttfamily [1/2]}}
+{\footnotesize\ttfamily template$<$std\+::ranges\+::input\+\_\+range Range, typename T  = std\+::ranges\+::range\+\_\+value\+\_\+t$<$\+Range$>$, typename Result  = awaitable\+\_\+resume\+\_\+t$<$\+T$>$$>$ \newline
+requires awaitable\+\_\+t$<$T$>$\\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ Result $>$ webcraft\+::async\+::when\+\_\+any (\begin{DoxyParamCaption}\item[{Range \&\&}]{tasks }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_a9ca722dc3d2eed95e56f4d1d0b352673}\label{namespacewebcraft_1_1async_a9ca722dc3d2eed95e56f4d1d0b352673} 
+\index{webcraft::async@{webcraft::async}!when\_any@{when\_any}}
+\index{when\_any@{when\_any}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{when\_any()}{when\_any()}\hspace{0.1cm}{\footnotesize\ttfamily [2/2]}}
+{\footnotesize\ttfamily template$<$awaitable\+\_\+t... Tasks$>$ \\
+\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ std\+::variant$<$ \mbox{\hyperlink{namespacewebcraft_1_1async_a8174852e651e90c6f296a823928af715}{normalized\+\_\+result\+\_\+t}}$<$ Tasks $>$... $>$ $>$ webcraft\+::async\+::when\+\_\+any (\begin{DoxyParamCaption}\item[{Tasks \&\&...}]{tasks }\end{DoxyParamCaption})}
+
+\Hypertarget{namespacewebcraft_1_1async_a99e5bf717ae187ed2c3eaeea49c7f885}\label{namespacewebcraft_1_1async_a99e5bf717ae187ed2c3eaeea49c7f885} 
+\index{webcraft::async@{webcraft::async}!yield@{yield}}
+\index{yield@{yield}!webcraft::async@{webcraft::async}}
+\doxysubsubsection{\texorpdfstring{yield()}{yield()}}
+{\footnotesize\ttfamily \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task}}$<$ void $>$ webcraft\+::async\+::yield (\begin{DoxyParamCaption}{ }\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
+
+
+
+Yields control back to the async runtime, allowing other tasks to run. 
+
+\begin{DoxyReturn}{Returns}
+A task that completes when the yield operation is done. 
+\end{DoxyReturn}
