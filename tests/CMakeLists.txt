@@ -9,4 +9,7 @@ target_include_directories(webcraft_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/in
 target_link_libraries(webcraft_tests PRIVATE WebCraft GTest::gtest GTest::gtest_main)
 
 include(GoogleTest)
-gtest_discover_tests(webcraft_tests)
+gtest_discover_tests(webcraft_tests
+    DISCOVERY_TIMEOUT 30
+    PROPERTIES TIMEOUT 10
+)
