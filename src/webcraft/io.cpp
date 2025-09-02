@@ -1173,8 +1173,6 @@ public:
 
     void bind(const webcraft::async::io::socket::connection_info &info) override
     {
-        this->host = info.host;
-        this->port = info.port;
 
         // Prepare address string for getaddrinfo
         std::string port_str = std::to_string(info.port);
