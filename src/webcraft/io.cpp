@@ -698,8 +698,6 @@ BOOL WSAAcceptEx(SOCKET sListenSocket, SOCKET sAcceptSocket, PVOID lpOutputBuffe
     return get_extension_manager().AcceptEx(sListenSocket, sAcceptSocket, lpOutputBuffer, dwReceiveDataLength, dwLocalAddressLength, dwRemoteAddressLength, lpdwBytesReceived, lpOverlapped);
 }
 
-#if defined(WEBCRAFT_WIN32_SYNC_SOCKETS)
-
 static webcraft::async::thread_pool pool(std::thread::hardware_concurrency(), std::thread::hardware_concurrency() * 2);
 
 struct iocp_tcp_socket_descriptor : public tcp_socket_descriptor
@@ -775,6 +773,8 @@ public:
                 ::closesocket(fd);
                 throw std::runtime_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
             }
+
+            // TODO: Make this async using WSAConnectEx
 
             int result = ::connect(fd, res->ai_addr, (int)res->ai_addrlen);
             if (result == SOCKET_ERROR)
@@ -879,8 +879,6 @@ std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make
 {
     return std::make_shared<iocp_tcp_socket_descriptor>();
 }
-
-#endif
 
 #elif defined(__APPLE__)
 
@@ -1381,32 +1379,27 @@ public:
 
     task<std::shared_ptr<tcp_socket_descriptor>> accept() override
     {
+
+        // TODO: make this async via WSAAcceptEx and GetAcceptExSockaddrs
         SOCKET fd = this->socket;
 
-        SOCKET acceptSocket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        task_completion_source<SOCKET> accept_socket_source;
+        struct sockaddr_storage addr;
+        socklen_t addr_len = sizeof(addr);
+
+        pool.submit([fd, &addr, &addr_len, &accept_socket_source]
+                    {
+            SOCKET result = ::accept(fd, (struct sockaddr *)&addr, &addr_len);
+            accept_socket_source.set_value(result); });
+
+        SOCKET acceptSocket = co_await accept_socket_source.task();
+
         if (acceptSocket == INVALID_SOCKET)
         {
-            throw std::ios_base::failure("Failed to create accept socket: " + std::to_string(WSAGetLastError()));
+            co_return nullptr;
         }
 
-        constexpr DWORD addrLen = sizeof(SOCKADDR_STORAGE) + 16;
-        char buffer[addrLen * 2];
-
-        auto event = webcraft::async::detail::as_awaitable(webcraft::async::detail::windows::create_async_socket_overlapped_event(acceptSocket, [fd, acceptSocket, &buffer, addrLen](LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped)
-                                                                                                                                  { return WSAAcceptEx(fd, acceptSocket, buffer, 0, addrLen, addrLen, numberOfBytesTransfered, overlapped); }));
-
-        co_await event;
-
-        struct sockaddr_storage local_addr, remote_addr;
-        int local_len = 0, remote_len = 0;
-
-        GetAcceptExSockaddrs(buffer, 0, addrLen, addrLen, (SOCKADDR **)&buffer, (LPINT)&local_len, (SOCKADDR **)&buffer + addrLen, (LPINT)&remote_len);
-
-        auto [local_host, local_port] = addr_to_host_port(local_addr);
-        auto [remote_host, remote_port] = addr_to_host_port(remote_addr);
-
-        std::cout << "local host: " << local_host << ", local port: " << local_port << std::endl;
-        std::cout << "remote host: " << remote_host << ", remote port: " << remote_port << std::endl;
+        auto [remote_host, remote_port] = addr_to_host_port(addr);
 
         co_return std::make_shared<iocp_tcp_socket_descriptor>(acceptSocket, remote_host, remote_port);
     }
