@@ -13,7 +13,6 @@
 #include <functional>
 #include <type_traits>
 
-using namespace std::chrono_literals;
 
 namespace webcraft::async
 {
