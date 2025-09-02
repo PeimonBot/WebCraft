@@ -78,27 +78,6 @@ jobs:
                   echo "C Compiler: ${{ matrix.c_compiler }}"
                   echo "C++ Compiler: ${{ matrix.cpp_compiler }}"
 
-            - name: Setup Homebrew for MacOS
-              if: ${{ matrix.os == 'macos-latest' }}
-              id: setup_homebrew
-              uses: Homebrew/actions/setup-homebrew@master
-
-            - name: Upgrade Clang
-              if: ${{ matrix.c_compiler == 'clang' }}
-              run: |
-                  if [[ ${{ matrix.os }} == 'macos-latest' ]]; then
-                    clang++ --version
-                    brew install llvm
-                    echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
-                    echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
-                    echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
-                  else
-                    wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 17
-                  fi
-                  echo "C Compiler: ${{ matrix.c_compiler }}"
-                  echo "C++ Compiler: ${{ matrix.cpp_compiler }}"
-                  echo $(${{ matrix.c_compiler }} --version)
-
             - name: Configure CMake not for MacOS
               if: ${{ matrix.os != 'macos-latest' }}
               # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -115,27 +94,12 @@ jobs:
             - name: Configure CMake for MacOS
               if: ${{ matrix.os == 'macos-latest' }}
               run: |
-                  if [[ ${{ matrix.c_compiler }} == 'clang' ]]; then
-                    clang++ --version
-                    cmake \
-                    --preset=${{ matrix.preset }} \
-                    -B ${{ steps.strings.outputs.build-output-dir }} \
-                    -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-                    -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
-                    -S ${{ github.workspace }}
-                  else
-                    brew install gcc
-                    echo "C Compiler: gcc-15"
-                    echo "C++ Compiler: g++-15"
-                    echo "CC=$(brew --prefix gcc)/bin/gcc" >> $GITHUB_ENV
-                    echo "CXX=$(brew --prefix gcc)/bin/g++" >> $GITHUB_ENV
-                    echo "PATH=$(brew --prefix gcc)/bin:$PATH" >> $GITHUB_ENV
-                    cmake \
-                    --preset=${{ matrix.preset }} \
-                    -B ${{ steps.strings.outputs.build-output-dir }} \
-                    -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-                    -S ${{ github.workspace }}
-                  fi
+                  cmake \
+                  --preset=${{ matrix.preset }} \
+                  -B ${{ steps.strings.outputs.build-output-dir }} \
+                  -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+                  -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+                  -S ${{ github.workspace }}
 
             - name: Build not for MacOS
               if: ${{ matrix.os != 'macos-latest' }}
@@ -145,10 +109,6 @@ jobs:
             - name: Build for MacOS
               if: ${{ matrix.os == 'macos-latest' }}
               run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
-
-            # - name: Run the executable
-            # Run the executable that was built. The executable name is assumed to be 'my_executable' in this example.
-            # run: ${{ steps.strings.outputs.build-output-dir }}/${{ matrix.name }}
 
             - name: Test
               working-directory: ${{ steps.strings.outputs.build-output-dir }}
