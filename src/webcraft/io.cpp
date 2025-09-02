@@ -1,3 +1,9 @@
+///////////////////////////////////////////////////////////////////////////////
+// Copyright (c) Aditya Rao
+// Licenced under MIT license. See LICENSE.txt for details.
+///////////////////////////////////////////////////////////////////////////////
+
+
 #include <webcraft/async/io/io.hpp>
 #include <webcraft/async/runtime.hpp>
 #include <webcraft/async/task_completion_source.hpp>
@@ -78,7 +84,6 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 
 #elif defined(__linux__)
 
-// TODO: implement internal buffering for recv() for files so it doesn't just read one byte at a time
 
 int ios_to_posix(std::ios_base::openmode mode)
 {
@@ -774,7 +779,6 @@ public:
                 throw std::runtime_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
             }
 
-            // TODO: Make this async using WSAConnectEx
 
             int result = ::connect(fd, res->ai_addr, (int)res->ai_addrlen);
             if (result == SOCKET_ERROR)
@@ -1376,7 +1380,6 @@ public:
     task<std::shared_ptr<tcp_socket_descriptor>> accept() override
     {
 
-        // TODO: make this async via WSAAcceptEx and GetAcceptExSockaddrs
         SOCKET fd = this->socket;
 
         task_completion_source<SOCKET> accept_socket_source;
