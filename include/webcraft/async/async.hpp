@@ -10,3 +10,6 @@
 #include "task.hpp"
 #include "when_all.hpp"
 #include "when_any.hpp"
+
+#define co_async [&]() -> ::webcraft::async::task<void>
+#define async_t(T) ::webcraft::async::task<T>

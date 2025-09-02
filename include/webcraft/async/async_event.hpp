@@ -39,5 +39,10 @@ namespace webcraft::async
         {
             return flag.load(std::memory_order_acquire);
         }
+
+        void reset()
+        {
+            flag = false;
+        }
     };
 }

@@ -9,6 +9,7 @@
 
 #include <webcraft/async/task.hpp>
 #include <webcraft/async/sync_wait.hpp>
+#include <webcraft/async/fire_and_forget_task.hpp>
 
 namespace webcraft::async
 {
@@ -19,7 +20,16 @@ namespace webcraft::async
 
         void shutdown_runtime() noexcept;
 
-        class runtime_event
+        class runtime_callback
+        {
+        public:
+            /// @brief Tries to execute the callback and gives result to consumer
+            /// @param result the result of runtime event
+            /// @param cancelled the cancellation status
+            virtual void try_execute(int result, bool cancelled = false) = 0;
+        };
+
+        class runtime_event : public runtime_callback
         {
         private:
             std::function<void()> callback;
@@ -46,7 +56,7 @@ namespace webcraft::async
             /// @brief Tries to execute the callback and gives result to consumer
             /// @param result the result of runtime event
             /// @param cancelled the cancellation status
-            void try_execute(int result, bool cancelled = false)
+            void try_execute(int result, bool cancelled = false) override
             {
                 bool expected = false;
                 if (finished.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
@@ -97,38 +107,67 @@ namespace webcraft::async
             { t.is_cancelled() } -> std::convertible_to<bool>;
         };
 
-        inline awaitable_event_t auto as_awaitable(std::unique_ptr<runtime_event> &event)
+        template <typename SmartPtrType>
+        struct runtime_event_awaiter
         {
-            struct awaiter
-            {
-                std::unique_ptr<runtime_event> &event;
-                bool cancelled;
+            SmartPtrType event;
+            bool cancelled;
+            std::exception_ptr ptr{nullptr};
 
-                bool await_ready() const noexcept { return false; }
-                void await_suspend(std::coroutine_handle<> h) noexcept
+            bool await_ready() const noexcept { return false; }
+            void await_suspend(std::coroutine_handle<> h)
+            {
+                try
                 {
                     event->start_async([h]
                                        { h.resume(); });
                 }
-                void await_resume() noexcept {}
-
-                int get_result()
+                catch (...)
                 {
-                    return event->get_result();
+                    ptr = std::current_exception();
+                    h.resume();
                 }
-
-                bool is_cancelled()
+            }
+            void await_resume()
+            {
+                if (ptr)
                 {
-                    return event->is_cancelled();
+                    std::rethrow_exception(ptr);
                 }
-            };
-            return awaiter{event};
+            }
+
+            int get_result()
+            {
+                return event->get_result();
+            }
+
+            bool is_cancelled()
+            {
+                return event->is_cancelled();
+            }
+        };
+
+        template <typename T>
+            requires std::is_base_of_v<runtime_event, T>
+        awaitable_event_t auto as_awaitable(std::unique_ptr<T> &event)
+        {
+            return runtime_event_awaiter{event};
+        }
+
+        template <typename T>
+            requires std::is_base_of_v<runtime_event, T>
+        awaitable_event_t auto as_awaitable(std::unique_ptr<T> &&event)
+        {
+            return runtime_event_awaiter{std::move(event)};
         }
 
         uint64_t get_native_handle();
 
 #ifdef __linux__
         std::mutex &get_runtime_mutex();
+#elif defined(__APPLE__)
+        int16_t get_kqueue_filter();
+        uint32_t get_kqueue_flags();
 #endif
     };
 
@@ -174,6 +213,50 @@ namespace webcraft::async
             co_return;
 
         co_await detail::as_awaitable(detail::post_sleep_event(duration, token));
+    }
+
+    // TODO: create test cases for `set_timeout` and `set_interval`
+    /**
+     * Something simple like the following:
+     * ```
+     * // set timeout test
+     * runtime_context ctx;
+     *
+     * event_signal signal;
+     *
+     * auto f = async {
+     *
+     *   set_timeout([signal]() { signal.set(); }, 100ms);
+     *
+     *   await sleep_for(100ms);
+     *
+     *   EXPECT_TRUE(signal.is_set());
+     * };
+     *
+     * sync_wait(f());
+     * ```
+     *
+     * Maybe an atomic counter for the set_interval?
+     */
+    template <typename Rep, typename Period>
+    inline fire_and_forget_task set_timeout(std::function<void()> func, std::chrono::duration<Rep, Period> duration, std::stop_token token = get_stop_token())
+    {
+        co_await sleep_for(duration, token);
+        if (token.stop_requested())
+            co_return;
+        func();
+    }
+
+    template <typename Rep, typename Period>
+    inline fire_and_forget_task set_interval(std::function<void()> func, std::chrono::duration<Rep, Period> duration, std::stop_token token = get_stop_token())
+    {
+        while (!token.stop_requested())
+        {
+            co_await sleep_for(duration, token);
+            if (token.stop_requested())
+                co_return;
+            func();
+        }
     }
 
     inline task<void> shutdown()
