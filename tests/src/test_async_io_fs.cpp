@@ -108,7 +108,7 @@ TEST_CASE(TestFileAppendableStreamDoesNotTruncate)
 
     std::string content = get_test_file_contents();
 
-    EXPECT_EQ(content, test_data) << "File contents should be truncated";
+    EXPECT_EQ(content, test_data) << "File contents should not be truncated";
 
     cleanup_test_file();
 }
