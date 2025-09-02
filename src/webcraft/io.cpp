@@ -317,7 +317,7 @@ public:
 
             co_return event.get_result();
         }
-        throw std::ios_base::failure("The file is not opened in read mode");
+        throw std::ios_base::failure("The file is not opened in write mode");
     }
 
     task<void> close()
