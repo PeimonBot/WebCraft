@@ -147,8 +147,8 @@ namespace webcraft::async::io::fs
             co_return file_wstream(descriptor);
         }
 
-        constexpr const std::filesystem::path get_path() const { return p; }
-        constexpr operator const std::filesystem::path &() const { return p; }
+        const std::filesystem::path get_path() const { return p; }
+        operator const std::filesystem::path &() const { return p; }
     };
 
     inline file make_file(std::filesystem::path p)

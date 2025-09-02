@@ -614,7 +614,7 @@ public:
             throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
     }
 
-    void shutdown(webcraft::async::io::socket::socket_stream_mode mode)
+    void shutdown(webcraft::async::io::socket::socket_stream_mode mode) override
     {
         int fd = this->fd;
 
