@@ -310,7 +310,7 @@ public:
 
             if (event.get_result() < 0)
             {
-                throw std::ios_base::failure("Writing the file failed with error code: " + GetLastError());
+                throw std::ios_base::failure("Writing the file failed with error code: " + std::to_string(GetLastError()));
             }
 
             fileOffset += event.get_result();
