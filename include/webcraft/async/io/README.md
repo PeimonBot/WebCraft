@@ -1,6 +1,6 @@
-# Asynchronous I/O Implemented in WebCraft
+# Asynchronous I/O in WebCraft
 
-This readme will go over how WebCraft handles **Asynchronous I/O** powered with the latest C++ coroutine features.
+This readme covers how WebCraft handles **Asynchronous I/O** powered with C++ coroutines.
 
 Table of Contents:
 
@@ -11,79 +11,79 @@ Table of Contents:
 
 ## Async Streams
 
-Async I/O in webcraft is implemented using the concept of Streams (similar to Java Streams API and Java Input and Output Streams).
-There are 2 types of async streams defined in here: the async readable stream and async writable stream.
+Async I/O in webcraft is implemented using the concept of Streams (similar to Java Streams API and Input/Output Streams).
+There are 2 types of async streams defined in the `webcraft::async::io` namespace: async readable streams and async writable streams.
 
 ### Async readable streams
 
-The definition of it is shown below:
+The definition is shown below:
 
 ```cpp
 template <typename Derived, typename R>
 concept async_readable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream) {
-    { stream.recv() } -> std::same_as<task<std::optional<R>>>;
+    { stream.recv() } -> std::same_as<webcraft::async::task<std::optional<R>>>;
 };
 ```
 
-The any type which models `async_readable_stream<R>` must have a function `recv()` which takes in no arguments and returns a `task<std::optional<R>>`.
-Here `R` represents the type of value streamed to the client. The end of the stream is denoted when the result of the task is a `std::nullopt` which subsequent calls to `recv()` will result in.
+Any type which models `async_readable_stream<Derived, R>` must have a function `recv()` which takes no arguments and returns a `webcraft::async::task<std::optional<R>>`.
+Here `R` represents the type of value streamed to the client. The end of the stream is denoted when the result of the task is `std::nullopt`; subsequent calls to `recv()` will also result in `std::nullopt`.
 
-There is also a buffered variant as shown below for streams which implement buffering internally:
+There is also a buffered variant for streams which implement buffering internally:
 
 ```cpp
 template <typename Derived, typename R>
 concept async_buffered_readable_stream = async_readable_stream<Derived, R> && requires(Derived &stream, std::span<R> buffer) {
-    { stream.recv(buffer) } -> std::same_as<task<std::size_t>>;
+    { stream.recv(buffer) } -> std::same_as<webcraft::async::task<std::size_t>>;
 };
 ```
 
-The buffered variant allows you to send in multiple objects at once into the stream. Internally, the regular `recv()` variant will either call the buffered variant with size of 1 or it will internally buffer it so if the values already exist in the queue, it only needs to pop it from there instead of waiting.
+The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular `recv()` variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting.
 
 ### Async writable streams
 
-The definition of it is shown below:
+The definition is shown below:
 
 ```cpp
 template <typename Derived, typename R>
 concept async_writable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream, R &&value) {
-    { stream.send(std::forward<R>(value)) } -> std::same_as<task<bool>>;
+    { stream.send(std::forward<R>(value)) } -> std::same_as<webcraft::async::task<bool>>;
 };
 ```
 
-Any type which models `async_writable_stream<R>` must have a function `send(R&& )` which takes in an lvalue for R (to be moved into the stream) and returns a `task<bool>` which indicates that the value has been written or not.
+Any type which models `async_writable_stream<Derived, R>` must have a function `send(R&&)` which takes an rvalue reference for R (to be moved into the stream) and returns a `webcraft::async::task<bool>` indicating whether the value was successfully written.
 
-There is also a buffered variant which allows you to write multiple objects at once (better for batching).
+There is also a buffered variant which allows you to write multiple objects at once (better for batching):
 
 ```cpp
 template <typename Derived, typename R>
 concept async_buffered_writable_stream = async_writable_stream<Derived, R> && requires(Derived &stream, std::span<R> buffer) {
-    { stream.send(buffer) } -> std::same_as<task<size_t>>;
+    { stream.send(buffer) } -> std::same_as<webcraft::async::task<size_t>>;
 };
 ```
 
-This version accepts a span of values which will be written to the stream.
+This version accepts a span of values which will be written to the stream and returns the number of values actually written.
 
 ### Async stream helpers
 
-For those who do want to read and write multiple values without knowing whether the implementation provides buffering or not, we've created some helper functions:
+For those who want to read and write multiple values without knowing whether the implementation provides buffering, we provide helper functions in the `webcraft::async::io` namespace:
 
 ```cpp
 template <typename R, async_readable_stream<R> RStream, size_t BufferSize>
-task<std::size_t> recv(RStream &stream, std::span<R, BufferSize> buffer);
+webcraft::async::task<std::size_t> recv(RStream &stream, std::span<R, BufferSize> buffer);
 
 template <typename R, async_writable_stream<R> WStream, size_t BufferSize>
-task<size_t> send(WStream &stream, std::span<R, BufferSize> buffer);
+webcraft::async::task<size_t> send(WStream &stream, std::span<R, BufferSize> buffer);
 
 template <typename R, async_readable_stream<R> RStream>
-async_generator<R> to_async_generator(RStream &&stream);
+cppcoro::async_generator<R> to_async_generator(RStream &&stream);
 
 template <typename R>
-async_readable_stream<R> auto to_readable_stream(async_generator<R> &&gen);
+async_readable_stream<R> auto to_readable_stream(cppcoro::async_generator<R> &&gen);
 ```
 
-The batched `recv()` and `send()` call the buffered streams variants of `recv()` and `send()` if a buffered stream is passed, otherwise it will call enough `recv()` and `send()` from the non buffered variants until the span is filled or until we can't read or write anymore from the stream.
+The batched `recv()` and `send()` functions call the buffered stream variants if a buffered stream is passed, otherwise they call the non-buffered variants repeatedly until the span is filled or until no more data can be read/written.
 
-The conversion to and from async generators are added for readable streams since it would be really nice to be able to do something like this:
+The conversion to and from async generators are provided for readable streams since it enables powerful functional-style stream processing:
 
 ```cpp
 auto fn = [](size_t limit) -> async_generator<int> {
@@ -94,130 +94,79 @@ auto fn = [](size_t limit) -> async_generator<int> {
     }
 };
 
-auto rstream = to_readable_stream(fn(10));
-while (auto opt = co_await rstream.next()) {
+auto rstream = webcraft::async::io::to_readable_stream(fn(10));
+while (auto opt = co_await rstream.recv()) {
     handle(opt.value());
 }
 ```
 
-This will allow us to add a powerful set of adaptors onto async streams similar to the adaptors added with the ranges library onto iterables. From this, we can build powerful stream processing and pub/sub systems which can do a variety of processing without ever requiring us to have to manually process the stream ourselves
+This will allow us to add a powerful set of adaptors onto async streams similar to the adaptors added with the ranges library onto iterables. From this, we can build powerful stream processing and pub/sub systems which can do a variety of processing without requiring manual stream processing.
+
+**Note:** All examples in this document use the `webcraft::async::io` namespace. For brevity, some code examples may omit the full namespace qualification, but all types and functions are within this namespace.
 
 ### Channels
 
-Channels are a mechanism to transfer data from a publisher to a subscriber. The model that we have implemented our channels is through MPSC (multiple publishers to a single consumer - since it only makes sense to deal with one event at a time).
-You can create an MPSC channel as shown below (NOTE: you have to specify data type of channel otherwise what data will you be sending over in the first place):
+Channels are a mechanism to transfer data from a publisher to a subscriber. The model implemented is MPSC (Multiple Producer, Single Consumer) since it only makes sense to deal with one event at a time.
+You can create an MPSC channel as shown below:
 
 ```cpp
-auto [rstream, wstream] = make_mpsc_channel<int>();
+auto [rstream, wstream] = webcraft::async::io::make_mpsc_channel<int>();
 ```
 
-The type of `rstream` satisfies `async_readable_stream` and the type of `wstream` satisfies `async_writable_stream`. This effectively is an asynchronous pipe. Concurrency here is not required to be a concern since whenever the "send()" on the writeable stream occurs, we resume the existing read.
+The type of `rstream` satisfies `async_readable_stream` and the type of `wstream` satisfies `async_writable_stream`. This effectively creates an asynchronous pipe. Concurrency is handled automatically - whenever `send()` is called on the writable stream, any waiting read operations are resumed.
 
-**NOTE: DO NOT TRY AND PIPE `rstream` into `wstream` as it will cause an infinite loop (more so a stackoverflow exception) since all values received from read will be sent into write which will be sent into read and you get the rest.**
+**NOTE: DO NOT pipe `rstream` into `wstream` as it will cause an infinite loop since all values received from read will be sent to write, which will trigger another read, creating a stack overflow.**
 
-Working with this becomes really useful as you can build highly scalable Publisher Subscriber Applications based off of channels as your data sending medium. Most microservices use this message queues which internally uses channels since it makes working with event streams a lot easier.
-I myself am planning on using channels for managing async socket I/O and async file I/O.
+Working with channels becomes useful for building highly scalable Publisher-Subscriber applications. Most microservices use message queues which internally use channels since they make working with event streams much easier.
+Channels are used internally for managing async socket I/O and async file I/O.
 
 ## Async Readable Stream Adaptors
 
-Stream's aren't really useful by themselves. Most of the time, we want to turn our raw data into something useful to then deal with it. This is the idea of a **stream adaptor**. We take a readable stream of one data type, then we apply some kind of operation on it (mapping, filtering, transforming), then we get a stream of another data type, something more useful to deal with.
+Streams aren't really useful by themselves. Most of the time, we want to transform raw data into something useful. This is the idea of a **stream adaptor**. We take a readable stream of one data type, apply some operation (mapping, filtering, transforming), and get a stream of another data type.
 
-Here is an example:
+Here's an example:
 
-Suppose, we want to group the students into a map where we assign a lesson grade (A for 80-100, B for 70-80, C for 60-70, and D for 50-60) as showing and get rid of any students which are failing and have the students sorted in each grouping in order:
+Suppose we want to group students into a map by letter grade (A for 80-100, B for 70-80, C for 60-70, D for 50-60), filter out failing students, and sort students within each group:
 
 ```cpp
 struct student {
     std::string name;
-    std::vector<double> marks;
-    std::string grade;
+    double average;
 };
 ```
 
-The non-adaptor based solution would look something like this:
-
-```cpp
-task<std::unordered_map<std::string, std::vector<student>>> get_student_grade_groupings(async_readable_stream<student> students) {
-    std::unordered_map<std::string, student> map;
-    map["A"] = {};
-    map["B"] = {};
-    map["C"] = {};
-    map["D"] = {};
-    while (auto st = co_await students)
-    {
-        std::vector<double> marks = st.marks;
-        double sum_of_marks = std::accumulate(marks.begin(), marks.end(), 0.0));
-        size_t num_of_marks = marks.size();
-        double average = sum_of_marks / num_of_marks;
-
-        if (average >= 80.0) {
-            map["A"].push_back(*st);
-        } else if (average >= 70.0) {
-            map["B"].push_back(*st);
-        } else if (average >= 60.0) {
-            map["C"].push_back(*st);
-        } else if (average >= 50.0) {
-            map["D"].push_back(*st);
-        }
-    }
-
-    std::sort(map["A"]);
-    std::sort(map["B"]);
-    std::sort(map["C"]);
-    std::sort(map["D"]);
-
-    return map;
-}
-```
-
-The adaptor based solution would be as follows:
+The adaptor-based solution using WebCraft's stream adaptors:
 
 ```cpp
 std::string average_to_grade(double average) {
-    if (average >= 80.0) {
-        return "A";
-    } else if (average >= 70.0) {
-        return "B";
-    } else if (average >= 60.0) {
-        return "C";
-    } else if (average >= 50) {
-        return "D";
-    } else {
-        return "F";
-    }
+    if (average >= 80.0) return "A";
+    if (average >= 70.0) return "B";
+    if (average >= 60.0) return "C";
+    return "D";
 }
 
-double get_average(student st) {
-    std::vector<double> marks = st.marks;
-    double sum_of_marks = std::accumulate(marks.begin(), marks.end(), 0.0));
-    size_t num_of_marks = marks.size();
-    double average = sum_of_marks / num_of_marks;
-    return average;
-}
-
-
-task<std::unordered_map<std::string, std::vector<student>>> get_student_grade_groupings(async_readable_stream<student> students) {
-    return students | filter([](auto st) {
-        return get_average(st) >= 50;
-    }) | sorted([](auto pair) {
-        return pair.key; 
-    }) | group_by([](auto st) {
-        return average_to_grade(get_average(st));
-    });
+webcraft::async::task<std::unordered_map<std::string, std::vector<student>>> 
+get_student_grade_groupings(webcraft::async::io::async_readable_stream<student> auto students) {
+    using namespace webcraft::async::io::adaptors;
+    
+    co_return co_await (std::move(students) 
+        | filter([](const auto& st) { return st.average >= 50.0; })
+        | collect(collectors::group_by([](const student& st) { 
+            return average_to_grade(st.average); 
+          })));
 }
 ```
 
-This is just one example which would greatly reduce the amount of code and logic involved to write a program. There are many other uses for having async streams including when dealing with pub/sub streams.
+This greatly reduces the amount of code and logic required. There are many other uses for async streams, especially when dealing with pub/sub systems.
 
-### Some of the adaptors have already been implemented in this framework:
+### Stream Adaptors Implementation
 
-All stream adaptors have to inherit the `async_readable_stream_adaptor`. The definition of it is shown below:
+All stream adaptors inherit from `async_readable_stream_adaptor`. The definition is shown below:
 
 ```cpp
 template <typename Derived, typename T>
 struct async_readable_stream_adaptor
 {
-
     friend auto operator|(async_readable_stream<T> auto &&stream, Derived &adaptor)
     {
         return std::invoke(adaptor, std::move(stream));
@@ -232,64 +181,64 @@ struct async_readable_stream_adaptor
 
 #### Transform adaptor
 
-Definition is shown below:
+Definition:
 
 ```cpp
 template <typename InType, typename Func>
-auto transform(Func &&fn) -> std::is_derived_from<async_readable_stream_adaptor>;
+auto transform(Func &&fn) -> /* adaptor type */;
 ```
 
-Using this you'll be able transform the existing async_readable_stream to another async_readable_stream. The function that is passed has to be of signature `async_generator<OutType>(async_generator<InType>)` where `OutType` is the transformed readable stream passed from the `transform` function. Some examples of this are shown below:
+Transform an existing async_readable_stream to another async_readable_stream. The function must have signature `cppcoro::async_generator<OutType>(cppcoro::async_generator<InType>)`. Example:
 
 ```cpp
 mock_readable_stream stream({1,2,3,4,5});
 
-async_readable_stream<std::string> auto new_stream = stream | transform([](async_generator<int> gen) {
+auto new_stream = stream | webcraft::async::io::adaptors::transform<int>([](cppcoro::async_generator<int> gen) -> cppcoro::async_generator<std::string> {
     for_each_async(value, gen, {
         co_yield std::to_string(value);
-        co_yield std::to_string(value * 2);
+        co_yield std::to_string(value * 2); // Duplicate and double
     });
 });
-// the value of this is ["1", "2", "2", "4", "3", "6", "4", "8", "5", "10"]
+// Result: ["1", "2", "2", "4", "3", "6", "4", "8", "5", "10"]
 ```
 
 #### Map adaptor
 
-Definition is shown below:
+Definition:
 
 ```cpp
 template <typename InType, typename Func, typename OutType = std::invoke_result_t<Func, InType>>
-auto map(Func &&fn) -> std::is_derived_from<async_readable_stream_adaptor>;
+auto map(Func &&fn) -> /* adaptor type */;
 ```
 
-Using this adaptor, you create a new readable stream which has the values from the old stream mapped using the function passed. An example of this is shown below:
+Create a new readable stream with values mapped using the provided function. Example:
 
 ```cpp
 mock_readable_stream stream({1,2,3,4,5});
 
-async_readable_stream<std::string> auto new_stream = stream | map([](int value) {
+auto new_stream = stream | webcraft::async::io::adaptors::map<int>([](int value) {
     return std::to_string(value);
 });
-// the value of this is ["1", "2", "3", "4", "5"]
+// Result: ["1", "2", "3", "4", "5"]
 ```
 
 #### Pipe adaptor
 
-Definition is shown below:
+Definition:
 
 ```cpp
 template <typename T>
     requires std::is_copy_assignable_v<T>
-auto pipe(async_writable_stream<T> auto &str) -> std::is_derived_from<async_readable_stream_adaptor>;
+auto pipe(webcraft::async::io::async_writable_stream<T> auto &str) -> /* adaptor type */;
 ```
 
-Using this adaptor, you create a new readable stream on which when read, also forwards the read value into the writable stream provided. An example is shown below:
+Create a new readable stream that forwards read values to the provided writable stream. Example:
 
 ```cpp
 mock_readable_stream<int> rstream({1,2,3,4,5});
 mock_writable_stream<int> wstream;
 
-async_readable_stream<int> auto new_stream = rstream | pipe(wstream);
+auto new_stream = rstream | webcraft::async::io::adaptors::pipe(wstream);
 
 while (auto opt = co_await new_stream.recv()) {
     assert(wstream.received_value(*opt));
@@ -298,53 +247,55 @@ while (auto opt = co_await new_stream.recv()) {
 
 #### Filter adaptor
 
-Definition is shown below:
+Definition:
 
 ```cpp
 template <typename T, typename Func>
-auto filter(Func &&predicate) -> std::is_derived_from<async_readable_stream_adaptor>;
+auto filter(Func &&predicate) -> /* adaptor type */;
 ```
 
-Using this adaptor, you'd be able to filter out values in the streams which you do want to retain. An example is shown below:
+Filter values in the stream based on a predicate. Example:
 
 ```cpp
 mock_readable_stream<int> stream({1,2,3,4,5});
-async_readable_stream<int> auto new_stream = stream | filter([](int value) { return value % 2 == 0; });
-// streams returned is [2,4]
+auto new_stream = stream | webcraft::async::io::adaptors::filter<int>([](int value) { 
+    return value % 2 == 0; 
+});
+// Result: [2,4]
 ```
 
 #### Limit adaptor
 
-Definition is shown below:
+Definition:
 
 ```cpp
 template <typename T>
-auto limit(size_t size) -> std::is_derived_from<async_readable_stream_adaptor>;
+auto limit(size_t size) -> /* adaptor type */;
 ```
 
-Using this adaptor, you'd be able to limit the amount of values sent through the stream. An example is shown below:
+Limit the number of values sent through the stream. Example:
 
 ```cpp
 mock_readable_stream<int> stream({1,2,3,4,5});
-async_readable_stream<int> auto new_stream = stream | limit(3);
-// streams returned is [1,2,3]
+auto new_stream = stream | webcraft::async::io::adaptors::limit<int>(3);
+// Result: [1,2,3]
 ```
 
 #### Skip adaptor
 
-Definition is shown below:
+Definition:
 
 ```cpp
 template <typename T>
-auto skip(size_t size) -> std::is_derived_from<async_readable_stream_adaptor>;
+auto skip(size_t size) -> /* adaptor type */;
 ```
 
-Using this adaptor, you'd be able to skip the amount of values sent through the stream. An example is shown below:
+Skip a number of values at the beginning of the stream. Example:
 
 ```cpp
 mock_readable_stream<int> stream({1,2,3,4,5});
-async_readable_stream<int> auto new_stream = stream | skip(2);
-// streams returned is [3,4,5]
+auto new_stream = stream | webcraft::async::io::adaptors::skip<int>(2);
+// Result: [3,4,5]
 ```
 
 #### Take while adaptor
@@ -710,7 +661,9 @@ async_readable_stream<std::pair<std::optional<int>, std::optional<std::string>>>
 
 ## Async File I/O
 
-Async File I/O is handled differently on different platforms. Here are some of the provided features of these on the different platforms by the different frameworks:
+Async File I/O is handled differently on different platforms using the `webcraft::async::io::fs` namespace. The framework provides a unified interface while leveraging platform-specific optimizations:
+
+### File Operations Table
 
 
 | Library | Platforms Supported | Special Create? | Async Read? | Async Write? | Async Close? | Notes |
@@ -723,9 +676,9 @@ Async File I/O is handled differently on different platforms. Here are some of t
 
 ## Async Socket I/O
 
-Async Socket I/O is handled differently on different platforms.
+Async Socket I/O is handled differently on different platforms using the `webcraft::async::io::socket` namespace.
 
-### TCP Sockets
+### TCP Sockets Table
 
 
 | Library  | Platforms Supported | Special Create? | Async Connect? | Async Read? | Async Write? | Async Close? | Async Shutdown? | Notes |
@@ -740,7 +693,7 @@ Some docs:
 - https://gist.github.com/joeyadams/4158972
 - https://stackoverflow.com/questions/13598530/connectex-requires-the-socket-to-be-initially-bound-but-to-what
 
-### TCP Listeners
+### TCP Listeners Table
 
 
 | Library  | Platforms Supported | Special Create? | Async Bind? | Async Listen? | Async Accept | Async Close? | Notes |
@@ -924,7 +877,7 @@ namespace detail
         virtual task<void> connect(const connection_info &info) = 0;  // Connect to a server
         virtual task<size_t> read(std::span<char> buffer) = 0;        // Read data from the socket
         virtual task<size_t> write(std::span<const char> buffer) = 0; // Write data to the socket
-        virtual task<void> shutdown(socket_stream_mode mode) = 0;     // Shutdown the socket
+        virtual void shutdown(socket_stream_mode mode) = 0;     // Shutdown the socket
     };
 
     class tcp_listener_descriptor : public tcp_descriptor_base
@@ -933,13 +886,13 @@ namespace detail
         tcp_listener_descriptor() = default;
         virtual ~tcp_listener_descriptor() = default;
 
-        virtual task<void> bind(const connection_info &info) = 0;          // Bind the listener to an address
-        virtual task<void> listen(int backlog) = 0;                        // Start listening for incoming connections
+        virtual void bind(const connection_info &info) = 0;          // Bind the listener to an address
+        virtual void listen(int backlog) = 0;                        // Start listening for incoming connections
         virtual task<std::unique_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
     };
 
-    task<std::shared_ptr<tcp_socket_descriptor>> make_tcp_socket_descriptor();
-    task<std::shared_ptr<tcp_listener_descriptor>> make_tcp_listener_descriptor();
+    std::shared_ptr<tcp_socket_descriptor> make_tcp_socket_descriptor();
+    std::shared_ptr<tcp_listener_descriptor> make_tcp_listener_descriptor();
 
 }
 
@@ -966,7 +919,8 @@ public:
 
     task<void> close()
     {
-        co_await descriptor->shutdown(socket_stream_mode::READ);
+        descriptor->shutdown(socket_stream_mode::READ);
+        co_return;
     }
 };
 
@@ -998,7 +952,8 @@ public:
 
     task<void> close()
     {
-        co_await descriptor->shutdown(socket_stream_mode::WRITE);
+        descriptor->shutdown(socket_stream_mode::WRITE);
+        co_return;
     }
 };
 
@@ -1006,67 +961,99 @@ static_assert(async_writable_stream<tcp_wstream, char>);
 static_assert(async_buffered_writable_stream<tcp_wstream, char>);
 static_assert(async_closeable_stream<tcp_wstream, char>);
 
+
 class tcp_socket
 {
 private:
     std::shared_ptr<detail::tcp_socket_descriptor> descriptor;
-    std::unique_ptr<tcp_rstream> read_stream;
-    std::unique_ptr<tcp_wstream> write_stream;
+    tcp_rstream read_stream;
+    tcp_wstream write_stream;
+    bool read_shutdown{false};
+    bool write_shutdown{false};
 
 public:
-    tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+    tcp_socket(std::shared_ptr<detail::tcp_socket_descriptor> desc) : descriptor(desc), read_stream(descriptor), write_stream(descriptor)
+    {
+    }
+
     ~tcp_socket()
     {
-        if (read_stream)
-        {
-            read_stream->close();
-        }
-        if (write_stream)
-        {
-            write_stream->close();
-        }
+        fire_and_forget(close());
+    }
 
-        if (descriptor)
+    tcp_socket(tcp_socket &&other) noexcept
+        : descriptor(std::exchange(other.descriptor, nullptr)),
+            read_stream(std::move(other.read_stream)),
+            write_stream(std::move(other.write_stream))
+    {
+    }
+
+    tcp_socket &operator=(tcp_socket &&other) noexcept
+    {
+        if (this != &other)
         {
-            sync_wait(descriptor->close());
+            descriptor = std::exchange(other.descriptor, nullptr);
+            read_stream = std::move(other.read_stream);
+            write_stream = std::move(other.write_stream);
         }
+        return *this;
     }
 
     task<void> connect(const connection_info &info)
     {
+        if (!descriptor)
+            throw std::runtime_error("Descriptor is null");
+
         co_await descriptor->connect(info);
-        read_stream = std::make_unique<tcp_rstream>(descriptor);
-        write_stream = std::make_unique<tcp_wstream>(descriptor);
     }
 
     tcp_rstream &get_readable_stream()
     {
-        if (!read_stream)
-        {
-            throw std::runtime_error("Read stream is not initialized.");
-        }
-        return *read_stream;
+        if (!descriptor)
+            throw std::runtime_error("Descriptor is null");
+        return read_stream;
     }
 
     tcp_wstream &get_writable_stream()
     {
-        if (!write_stream)
-        {
-            throw std::runtime_error("Write stream is not initialized.");
-        }
-        return *write_stream;
+        if (!descriptor)
+            throw std::runtime_error("Descriptor is null");
+        return write_stream;
     }
 
-    task<void> shutdown_channel(socket_stream_mode mode)
+    void shutdown_channel(socket_stream_mode mode)
     {
-        if (mode == socket_stream_mode::READ && read_stream)
+        if (mode == socket_stream_mode::READ && !read_shutdown)
         {
-            co_await read_stream->close();
+            descriptor->shutdown(socket_stream_mode::READ);
+            this->read_shutdown = true;
         }
-        else if (mode == socket_stream_mode::WRITE && write_stream)
+        else if (mode == socket_stream_mode::WRITE && !write_shutdown)
         {
-            co_await write_stream->close();
+            descriptor->shutdown(socket_stream_mode::WRITE);
+            this->write_shutdown = true;
         }
+    }
+
+    task<void> close()
+    {
+        if (descriptor)
+        {
+            shutdown_channel(socket_stream_mode::READ);
+            shutdown_channel(socket_stream_mode::WRITE);
+            co_await descriptor->close();
+            descriptor.reset();
+        }
+    }
+
+    inline std::string get_remote_host()
+    {
+        return descriptor->get_remote_host();
+    }
+
+    inline uint16_t get_remote_port()
+    {
+        return descriptor->get_remote_port();
     }
 };
 
@@ -1081,26 +1068,26 @@ public:
     {
         if (descriptor)
         {
-            sync_wait(descriptor->close());
+            fire_and_forget(descriptor->close());
         }
     }
 
-    task<void> bind(const connection_info &info)
+    void bind(const connection_info &info)
     {
-        return descriptor->bind(info);
+        descriptor->bind(info);
     }
 
-    task<void> listen(int backlog)
+    void listen(int backlog)
     {
-        return descriptor->listen(backlog);
+        descriptor->listen(backlog);
     }
 
-    task<std::unique_ptr<tcp_socket>> accept()
+    task<tcp_socket> accept()
     {
-        auto client_desc = co_await descriptor->accept();
-        co_return std::make_unique<tcp_socket>(std::move(client_desc));
+        co_return co_await descriptor->accept();
     }
 };
+
 
 task<tcp_socket> make_tcp_socket()
 {
@@ -1115,4 +1102,12 @@ task<tcp_listener> make_tcp_listener()
 }
 ```
 
-The platform will implement `make_file_descriptor`, `make_tcp_socket_descriptor`, and `make_tcp_socket_descriptor` while also making their own implementations of the socket and file descriptors and returning a shared pointer via the functions mentioned.
+## Implementation Details
+
+The WebCraft framework implements platform-specific optimizations through:
+
+- `webcraft::async::io::fs::detail::make_file_descriptor()` - Creates platform-optimized file descriptors
+- `webcraft::async::io::socket::detail::make_tcp_socket_descriptor()` - Creates platform-optimized TCP socket descriptors  
+- `webcraft::async::io::socket::detail::make_tcp_listener_descriptor()` - Creates platform-optimized TCP listener descriptors
+
+All functions return `std::shared_ptr` to the appropriate descriptor types, providing automatic resource management and platform abstraction.
