@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.9.8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>WebCraft: Asynchronous I/O Implemented in WebCraft</title>
+<title>WebCraft: Asynchronous I/O in WebCraft</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -90,10 +90,10 @@ $(document).ready(function(){initNavTree('md_include_2webcraft_2async_2io_2READM
 </div>
 
 <div><div class="header">
-  <div class="headertitle"><div class="title">Asynchronous I/O Implemented in WebCraft</div></div>
+  <div class="headertitle"><div class="title">Asynchronous I/O in WebCraft</div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><p><a class="anchor" id="autotoc_md0"></a> This readme will go over how WebCraft handles <b>Asynchronous I/O</b> powered with the latest C++ coroutine features.</p>
+<div class="textblock"><p><a class="anchor" id="autotoc_md0"></a> This readme covers how WebCraft handles <b>Asynchronous I/O</b> powered with C++ coroutines.</p>
 <p>Table of Contents:</p>
 <ol type="1">
 <li>Async Streams</li>
@@ -103,51 +103,53 @@ $(document).ready(function(){initNavTree('md_include_2webcraft_2async_2io_2READM
 </ol>
 <h1><a class="anchor" id="autotoc_md1"></a>
 Async Streams</h1>
-<p>Async I/O in webcraft is implemented using the concept of Streams (similar to Java Streams API and Java Input and Output Streams). There are 2 types of async streams defined in here: the async readable stream and async writable stream.</p>
+<p>Async I/O in webcraft is implemented using the concept of Streams (similar to Java Streams API and Input/Output Streams). There are 2 types of async streams defined in the <code><a class="el" href="namespacewebcraft_1_1async_1_1io.html">webcraft::async::io</a></code> namespace: async readable streams and async writable streams.</p>
 <h2><a class="anchor" id="autotoc_md2"></a>
 Async readable streams</h2>
-<p>The definition of it is shown below:</p>
+<p>The definition is shown below:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> R&gt;</div>
 <div class="line"><span class="keyword">concept </span>async_readable_stream = std::is_move_constructible_v&lt;Derived&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream) {</div>
-<div class="line">    { stream.recv() } -&gt; std::same_as&lt;task&lt;std::optional&lt;R&gt;&gt;&gt;;</div>
+<div class="line">    { stream.recv() } -&gt; std::same_as&lt;webcraft::async::task&lt;std::optional&lt;R&gt;&gt;&gt;;</div>
 <div class="line">};</div>
-</div><!-- fragment --><p>The any type which models <code>async_readable_stream&lt;R&gt;</code> must have a function <code>recv()</code> which takes in no arguments and returns a <code>task&lt;std::optional&lt;R&gt;&gt;</code>. Here <code>R</code> represents the type of value streamed to the client. The end of the stream is denoted when the result of the task is a <code>std::nullopt</code> which subsequent calls to <code>recv()</code> will result in.</p>
-<p>There is also a buffered variant as shown below for streams which implement buffering internally:</p>
+</div><!-- fragment --><p>Any type which models <code>async_readable_stream&lt;Derived, R&gt;</code> must have a function <code>recv()</code> which takes no arguments and returns a <code><a class="el" href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a>&lt;std::optional&lt;R&gt;&gt;</code>. Here <code>R</code> represents the type of value streamed to the client. The end of the stream is denoted when the result of the task is <code>std::nullopt</code>; subsequent calls to <code>recv()</code> will also result in <code>std::nullopt</code>.</p>
+<p>There is also a buffered variant for streams which implement buffering internally:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> R&gt;</div>
 <div class="line"><span class="keyword">concept </span>async_buffered_readable_stream = async_readable_stream&lt;Derived, R&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream, std::span&lt;R&gt; buffer) {</div>
-<div class="line">    { stream.recv(buffer) } -&gt; std::same_as&lt;task&lt;std::size_t&gt;&gt;;</div>
+<div class="line">    { stream.recv(buffer) } -&gt; std::same_as&lt;webcraft::async::task&lt;std::size_t&gt;&gt;;</div>
 <div class="line">};</div>
-</div><!-- fragment --><p>The buffered variant allows you to send in multiple objects at once into the stream. Internally, the regular <code>recv()</code> variant will either call the buffered variant with size of 1 or it will internally buffer it so if the values already exist in the queue, it only needs to pop it from there instead of waiting.</p>
+</div><!-- fragment --><p>The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular <code>recv()</code> variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting.</p>
 <h2><a class="anchor" id="autotoc_md3"></a>
 Async writable streams</h2>
-<p>The definition of it is shown below:</p>
+<p>The definition is shown below:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> R&gt;</div>
 <div class="line"><span class="keyword">concept </span>async_writable_stream = std::is_move_constructible_v&lt;Derived&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream, R &amp;&amp;value) {</div>
-<div class="line">    { stream.send(std::forward&lt;R&gt;(value)) } -&gt; std::same_as&lt;task&lt;bool&gt;&gt;;</div>
+<div class="line">    { stream.send(std::forward&lt;R&gt;(value)) } -&gt; std::same_as&lt;webcraft::async::task&lt;bool&gt;&gt;;</div>
 <div class="line">};</div>
-</div><!-- fragment --><p>Any type which models <code>async_writable_stream&lt;R&gt;</code> must have a function <code>send(R&amp;&amp; )</code> which takes in an lvalue for R (to be moved into the stream) and returns a <code>task&lt;bool&gt;</code> which indicates that the value has been written or not.</p>
-<p>There is also a buffered variant which allows you to write multiple objects at once (better for batching).</p>
+</div><!-- fragment --><p>Any type which models <code>async_writable_stream&lt;Derived, R&gt;</code> must have a function <code>send(R&amp;&amp;)</code> which takes an rvalue reference for R (to be moved into the stream) and returns a <code><a class="el" href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a>&lt;bool&gt;</code> indicating whether the value was successfully written.</p>
+<p>There is also a buffered variant which allows you to write multiple objects at once (better for batching):</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> R&gt;</div>
 <div class="line"><span class="keyword">concept </span>async_buffered_writable_stream = async_writable_stream&lt;Derived, R&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream, std::span&lt;R&gt; buffer) {</div>
-<div class="line">    { stream.send(buffer) } -&gt; std::same_as&lt;task&lt;size_t&gt;&gt;;</div>
+<div class="line">    { stream.send(buffer) } -&gt; std::same_as&lt;webcraft::async::task&lt;size_t&gt;&gt;;</div>
 <div class="line">};</div>
-</div><!-- fragment --><p>This version accepts a span of values which will be written to the stream.</p>
+</div><!-- fragment --><p>This version accepts a span of values which will be written to the stream and returns the number of values actually written.</p>
 <h2><a class="anchor" id="autotoc_md4"></a>
 Async stream helpers</h2>
-<p>For those who do want to read and write multiple values without knowing whether the implementation provides buffering or not, we've created some helper functions:</p>
+<p>For those who want to read and write multiple values without knowing whether the implementation provides buffering, we provide helper functions in the <code><a class="el" href="namespacewebcraft_1_1async_1_1io.html">webcraft::async::io</a></code> namespace:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> R, async_readable_stream&lt;R&gt; RStream, <span class="keywordtype">size_t</span> BufferSize&gt;</div>
-<div class="line">task&lt;std::size_t&gt; recv(RStream &amp;stream, std::span&lt;R, BufferSize&gt; buffer);</div>
+<div class="line"><a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">webcraft::async::task&lt;std::size_t&gt;</a> recv(RStream &amp;stream, std::span&lt;R, BufferSize&gt; buffer);</div>
 <div class="line"> </div>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> R, async_writable_stream&lt;R&gt; WStream, <span class="keywordtype">size_t</span> BufferSize&gt;</div>
-<div class="line">task&lt;size_t&gt; send(WStream &amp;stream, std::span&lt;R, BufferSize&gt; buffer);</div>
+<div class="line"><a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">webcraft::async::task&lt;size_t&gt;</a> send(WStream &amp;stream, std::span&lt;R, BufferSize&gt; buffer);</div>
 <div class="line"> </div>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> R, async_readable_stream&lt;R&gt; RStream&gt;</div>
-<div class="line">async_generator&lt;R&gt; to_async_generator(RStream &amp;&amp;stream);</div>
+<div class="line"><a class="code hl_class" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator&lt;R&gt;</a> to_async_generator(RStream &amp;&amp;stream);</div>
 <div class="line"> </div>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> R&gt;</div>
-<div class="line">async_readable_stream&lt;R&gt; <span class="keyword">auto</span> to_readable_stream(async_generator&lt;R&gt; &amp;&amp;gen);</div>
-</div><!-- fragment --><p>The batched <code>recv()</code> and <code>send()</code> call the buffered streams variants of <code>recv()</code> and <code>send()</code> if a buffered stream is passed, otherwise it will call enough <code>recv()</code> and <code>send()</code> from the non buffered variants until the span is filled or until we can't read or write anymore from the stream.</p>
-<p>The conversion to and from async generators are added for readable streams since it would be really nice to be able to do something like this:</p>
+<div class="line">async_readable_stream&lt;R&gt; <span class="keyword">auto</span> to_readable_stream(<a class="code hl_class" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator&lt;R&gt;</a> &amp;&amp;gen);</div>
+<div class="ttc" id="aclasscppcoro_1_1async__generator_html"><div class="ttname"><a href="classcppcoro_1_1async__generator.html">cppcoro::async_generator</a></div><div class="ttdef"><b>Definition</b> async_generator.hpp:340</div></div>
+<div class="ttc" id="aclasswebcraft_1_1async_1_1task_html"><div class="ttname"><a href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a></div><div class="ttdef"><b>Definition</b> task.hpp:103</div></div>
+</div><!-- fragment --><p>The batched <code>recv()</code> and <code>send()</code> functions call the buffered stream variants if a buffered stream is passed, otherwise they call the non-buffered variants repeatedly until the span is filled or until no more data can be read/written.</p>
+<p>The conversion to and from async generators are provided for readable streams since it enables powerful functional-style stream processing:</p>
 <div class="fragment"><div class="line"><span class="keyword">auto</span> fn = [](<span class="keywordtype">size_t</span> limit) -&gt; async_generator&lt;int&gt; {</div>
 <div class="line">    <span class="keywordtype">size_t</span> count = 0;</div>
 <div class="line">    <span class="keywordflow">while</span> (count &lt; limit) {</div>
@@ -156,105 +158,57 @@ Async stream helpers</h2>
 <div class="line">    }</div>
 <div class="line">};</div>
 <div class="line"> </div>
-<div class="line"><span class="keyword">auto</span> rstream = <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#a65fdb2f3bc3e4af76fe30526dcb1e4b1">to_readable_stream</a>(fn(10));</div>
-<div class="line"><span class="keywordflow">while</span> (<span class="keyword">auto</span> opt = <span class="keyword">co_await</span> rstream.next()) {</div>
+<div class="line"><span class="keyword">auto</span> rstream = <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#a65fdb2f3bc3e4af76fe30526dcb1e4b1">webcraft::async::io::to_readable_stream</a>(fn(10));</div>
+<div class="line"><span class="keywordflow">while</span> (<span class="keyword">auto</span> opt = <span class="keyword">co_await</span> rstream.recv()) {</div>
 <div class="line">    handle(opt.value());</div>
 <div class="line">}</div>
 <div class="ttc" id="anamespacewebcraft_1_1async_1_1io_html_a65fdb2f3bc3e4af76fe30526dcb1e4b1"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io.html#a65fdb2f3bc3e4af76fe30526dcb1e4b1">webcraft::async::io::to_readable_stream</a></div><div class="ttdeci">async_readable_stream&lt; R &gt; auto to_readable_stream(async_generator&lt; R &gt; &amp;&amp;gen)</div><div class="ttdef"><b>Definition</b> core.hpp:126</div></div>
-</div><!-- fragment --><p>This will allow us to add a powerful set of adaptors onto async streams similar to the adaptors added with the ranges library onto iterables. From this, we can build powerful stream processing and pub/sub systems which can do a variety of processing without ever requiring us to have to manually process the stream ourselves</p>
+</div><!-- fragment --><p>This will allow us to add a powerful set of adaptors onto async streams similar to the adaptors added with the ranges library onto iterables. From this, we can build powerful stream processing and pub/sub systems which can do a variety of processing without requiring manual stream processing.</p>
+<p><b>Note:</b> All examples in this document use the <code><a class="el" href="namespacewebcraft_1_1async_1_1io.html">webcraft::async::io</a></code> namespace. For brevity, some code examples may omit the full namespace qualification, but all types and functions are within this namespace.</p>
 <h2><a class="anchor" id="autotoc_md5"></a>
 Channels</h2>
-<p>Channels are a mechanism to transfer data from a publisher to a subscriber. The model that we have implemented our channels is through MPSC (multiple publishers to a single consumer - since it only makes sense to deal with one event at a time). You can create an MPSC channel as shown below (NOTE: you have to specify data type of channel otherwise what data will you be sending over in the first place):</p>
-<div class="fragment"><div class="line"><span class="keyword">auto</span> [rstream, wstream] = make_mpsc_channel&lt;int&gt;();</div>
-</div><!-- fragment --><p>The type of <code>rstream</code> satisfies <code>async_readable_stream</code> and the type of <code>wstream</code> satisfies <code>async_writable_stream</code>. This effectively is an asynchronous pipe. Concurrency here is not required to be a concern since whenever the "send()" on the writeable stream occurs, we resume the existing read.</p>
-<p><b>NOTE: DO NOT TRY AND PIPE <code>rstream</code> into <code>wstream</code> as it will cause an infinite loop (more so a stackoverflow exception) since all values received from read will be sent into write which will be sent into read and you get the rest.</b></p>
-<p>Working with this becomes really useful as you can build highly scalable Publisher Subscriber Applications based off of channels as your data sending medium. Most microservices use this message queues which internally uses channels since it makes working with event streams a lot easier. I myself am planning on using channels for managing async socket I/O and async file I/O.</p>
+<p>Channels are a mechanism to transfer data from a publisher to a subscriber. The model implemented is MPSC (Multiple Producer, Single Consumer) since it only makes sense to deal with one event at a time. You can create an MPSC channel as shown below:</p>
+<div class="fragment"><div class="line"><span class="keyword">auto</span> [rstream, wstream] = webcraft::async::io::make_mpsc_channel&lt;int&gt;();</div>
+</div><!-- fragment --><p>The type of <code>rstream</code> satisfies <code>async_readable_stream</code> and the type of <code>wstream</code> satisfies <code>async_writable_stream</code>. This effectively creates an asynchronous pipe. Concurrency is handled automatically - whenever <code>send()</code> is called on the writable stream, any waiting read operations are resumed.</p>
+<p><b>NOTE: DO NOT pipe <code>rstream</code> into <code>wstream</code> as it will cause an infinite loop since all values received from read will be sent to write, which will trigger another read, creating a stack overflow.</b></p>
+<p>Working with channels becomes useful for building highly scalable Publisher-Subscriber applications. Most microservices use message queues which internally use channels since they make working with event streams much easier. Channels are used internally for managing async socket I/O and async file I/O.</p>
 <h1><a class="anchor" id="autotoc_md6"></a>
 Async Readable Stream Adaptors</h1>
-<p>Stream's aren't really useful by themselves. Most of the time, we want to turn our raw data into something useful to then deal with it. This is the idea of a <b>stream adaptor</b>. We take a readable stream of one data type, then we apply some kind of operation on it (mapping, filtering, transforming), then we get a stream of another data type, something more useful to deal with.</p>
-<p>Here is an example:</p>
-<p>Suppose, we want to group the students into a map where we assign a lesson grade (A for 80-100, B for 70-80, C for 60-70, and D for 50-60) as showing and get rid of any students which are failing and have the students sorted in each grouping in order:</p>
+<p>Streams aren't really useful by themselves. Most of the time, we want to transform raw data into something useful. This is the idea of a <b>stream adaptor</b>. We take a readable stream of one data type, apply some operation (mapping, filtering, transforming), and get a stream of another data type.</p>
+<p>Here's an example:</p>
+<p>Suppose we want to group students into a map by letter grade (A for 80-100, B for 70-80, C for 60-70, D for 50-60), filter out failing students, and sort students within each group:</p>
 <div class="fragment"><div class="line"><span class="keyword">struct </span>student {</div>
 <div class="line">    std::string name;</div>
-<div class="line">    std::vector&lt;double&gt; marks;</div>
-<div class="line">    std::string grade;</div>
+<div class="line">    <span class="keywordtype">double</span> average;</div>
 <div class="line">};</div>
-</div><!-- fragment --><p>The non-adaptor based solution would look something like this:</p>
-<div class="fragment"><div class="line">task&lt;std::unordered_map&lt;std::string, std::vector&lt;student&gt;&gt;&gt; get_student_grade_groupings(async_readable_stream&lt;student&gt; students) {</div>
-<div class="line">    std::unordered_map&lt;std::string, student&gt; map;</div>
-<div class="line">    map[<span class="stringliteral">&quot;A&quot;</span>] = {};</div>
-<div class="line">    map[<span class="stringliteral">&quot;B&quot;</span>] = {};</div>
-<div class="line">    <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a>[<span class="stringliteral">&quot;C&quot;</span>] = {};</div>
-<div class="line">    <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a>[<span class="stringliteral">&quot;D&quot;</span>] = {};</div>
-<div class="line">    <span class="keywordflow">while</span> (<span class="keyword">auto</span> st = <span class="keyword">co_await</span> students)</div>
-<div class="line">    {</div>
-<div class="line">        std::vector&lt;double&gt; marks = st.marks;</div>
-<div class="line">        <span class="keywordtype">double</span> sum_of_marks = std::accumulate(marks.begin(), marks.end(), 0.0));</div>
-<div class="line">        <span class="keywordtype">size_t</span> num_of_marks = marks.size();</div>
-<div class="line">        <span class="keywordtype">double</span> average = sum_of_marks / num_of_marks;</div>
-<div class="line"> </div>
-<div class="line">        <span class="keywordflow">if</span> (average &gt;= 80.0) {</div>
-<div class="line">            <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a>[<span class="stringliteral">&quot;A&quot;</span>].push_back(*st);</div>
-<div class="line">        } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (average &gt;= 70.0) {</div>
-<div class="line">            <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a>[<span class="stringliteral">&quot;B&quot;</span>].push_back(*st);</div>
-<div class="line">        } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (average &gt;= 60.0) {</div>
-<div class="line">            <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a>[<span class="stringliteral">&quot;C&quot;</span>].push_back(*st);</div>
-<div class="line">        } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (average &gt;= 50.0) {</div>
-<div class="line">            <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a>[<span class="stringliteral">&quot;D&quot;</span>].push_back(*st);</div>
-<div class="line">        }</div>
-<div class="line">    }</div>
-<div class="line"> </div>
-<div class="line">    std::sort(map[<span class="stringliteral">&quot;A&quot;</span>]);</div>
-<div class="line">    std::sort(map[<span class="stringliteral">&quot;B&quot;</span>]);</div>
-<div class="line">    std::sort(map[<span class="stringliteral">&quot;C&quot;</span>]);</div>
-<div class="line">    std::sort(map[<span class="stringliteral">&quot;D&quot;</span>]);</div>
-<div class="line"> </div>
-<div class="line">    <span class="keywordflow">return</span> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a>;</div>
-<div class="line">}</div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_a467323c557b8245b25c7cc5c6cd28e22"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">webcraft::async::io::adaptors::map</a></div><div class="ttdeci">auto map(Func &amp;&amp;fn)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:71</div></div>
-</div><!-- fragment --><p>The adaptor based solution would be as follows:</p>
+</div><!-- fragment --><p>The adaptor-based solution using WebCraft's stream adaptors:</p>
 <div class="fragment"><div class="line">std::string average_to_grade(<span class="keywordtype">double</span> average) {</div>
-<div class="line">    <span class="keywordflow">if</span> (average &gt;= 80.0) {</div>
-<div class="line">        <span class="keywordflow">return</span> <span class="stringliteral">&quot;A&quot;</span>;</div>
-<div class="line">    } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (average &gt;= 70.0) {</div>
-<div class="line">        <span class="keywordflow">return</span> <span class="stringliteral">&quot;B&quot;</span>;</div>
-<div class="line">    } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (average &gt;= 60.0) {</div>
-<div class="line">        <span class="keywordflow">return</span> <span class="stringliteral">&quot;C&quot;</span>;</div>
-<div class="line">    } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (average &gt;= 50) {</div>
-<div class="line">        <span class="keywordflow">return</span> <span class="stringliteral">&quot;D&quot;</span>;</div>
-<div class="line">    } <span class="keywordflow">else</span> {</div>
-<div class="line">        <span class="keywordflow">return</span> <span class="stringliteral">&quot;F&quot;</span>;</div>
-<div class="line">    }</div>
+<div class="line">    <span class="keywordflow">if</span> (average &gt;= 80.0) <span class="keywordflow">return</span> <span class="stringliteral">&quot;A&quot;</span>;</div>
+<div class="line">    <span class="keywordflow">if</span> (average &gt;= 70.0) <span class="keywordflow">return</span> <span class="stringliteral">&quot;B&quot;</span>;</div>
+<div class="line">    <span class="keywordflow">if</span> (average &gt;= 60.0) <span class="keywordflow">return</span> <span class="stringliteral">&quot;C&quot;</span>;</div>
+<div class="line">    <span class="keywordflow">return</span> <span class="stringliteral">&quot;D&quot;</span>;</div>
 <div class="line">}</div>
 <div class="line"> </div>
-<div class="line"><span class="keywordtype">double</span> get_average(student st) {</div>
-<div class="line">    std::vector&lt;double&gt; marks = st.marks;</div>
-<div class="line">    <span class="keywordtype">double</span> sum_of_marks = std::accumulate(marks.begin(), marks.end(), 0.0));</div>
-<div class="line">    <span class="keywordtype">size_t</span> num_of_marks = marks.size();</div>
-<div class="line">    <span class="keywordtype">double</span> average = sum_of_marks / num_of_marks;</div>
-<div class="line">    <span class="keywordflow">return</span> average;</div>
+<div class="line"><a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">webcraft::async::task&lt;std::unordered_map&lt;std::string, std::vector&lt;student&gt;</a>&gt;&gt; </div>
+<div class="line">get_student_grade_groupings(<a class="code hl_concept" href="conceptwebcraft_1_1async_1_1io_1_1async__readable__stream.html">webcraft::async::io::async_readable_stream&lt;student&gt;</a> <span class="keyword">auto</span> students) {</div>
+<div class="line">    <span class="keyword">using namespace </span><a class="code hl_namespace" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html">webcraft::async::io::adaptors</a>;</div>
+<div class="line">    </div>
+<div class="line">    <span class="keyword">co_return</span> <span class="keyword">co_await</span> (std::move(students) </div>
+<div class="line">        | filter([](<span class="keyword">const</span> <span class="keyword">auto</span>&amp; st) { <span class="keywordflow">return</span> st.average &gt;= 50.0; })</div>
+<div class="line">        | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ac259db7916278ffc530b8c127be7a191">collect</a>(collectors::group_by([](<span class="keyword">const</span> student&amp; st) { </div>
+<div class="line">            <span class="keywordflow">return</span> average_to_grade(st.average); </div>
+<div class="line">          })));</div>
 <div class="line">}</div>
-<div class="line"> </div>
-<div class="line"> </div>
-<div class="line">task&lt;std::unordered_map&lt;std::string, std::vector&lt;student&gt;&gt;&gt; get_student_grade_groupings(async_readable_stream&lt;student&gt; students) {</div>
-<div class="line">    <span class="keywordflow">return</span> students | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#adda76c1251d855604fa6c9f4b752de2c">filter</a>([](<span class="keyword">auto</span> st) {</div>
-<div class="line">        <span class="keywordflow">return</span> get_average(st) &gt;= 50;</div>
-<div class="line">    }) | sorted([](<span class="keyword">auto</span> pair) {</div>
-<div class="line">        <span class="keywordflow">return</span> pair.key; </div>
-<div class="line">    }) | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors.html#a2e67493f2e10fee623eb18b43d02ea71">group_by</a>([](<span class="keyword">auto</span> st) {</div>
-<div class="line">        <span class="keywordflow">return</span> average_to_grade(get_average(st));</div>
-<div class="line">    });</div>
-<div class="line">}</div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors_html_a2e67493f2e10fee623eb18b43d02ea71"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors_1_1collectors.html#a2e67493f2e10fee623eb18b43d02ea71">webcraft::async::io::adaptors::collectors::group_by</a></div><div class="ttdeci">auto group_by(std::function&lt; KeyType(const T &amp;)&gt; key_function)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:351</div></div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_adda76c1251d855604fa6c9f4b752de2c"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#adda76c1251d855604fa6c9f4b752de2c">webcraft::async::io::adaptors::filter</a></div><div class="ttdeci">auto filter(Func &amp;&amp;predicate)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:137</div></div>
-</div><!-- fragment --><p>This is just one example which would greatly reduce the amount of code and logic involved to write a program. There are many other uses for having async streams including when dealing with pub/sub streams.</p>
+<div class="ttc" id="aconceptwebcraft_1_1async_1_1io_1_1async__readable__stream_html"><div class="ttname"><a href="conceptwebcraft_1_1async_1_1io_1_1async__readable__stream.html">webcraft::async::io::async_readable_stream</a></div><div class="ttdef"><b>Definition</b> core.hpp:26</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html">webcraft::async::io::adaptors</a></div><div class="ttdef"><b>Definition</b> adaptors.hpp:19</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_ac259db7916278ffc530b8c127be7a191"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ac259db7916278ffc530b8c127be7a191">webcraft::async::io::adaptors::collect</a></div><div class="ttdeci">auto collect(Collector &amp;&amp;collector_func)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:117</div></div>
+</div><!-- fragment --><p>This greatly reduces the amount of code and logic required. There are many other uses for async streams, especially when dealing with pub/sub systems.</p>
 <h2><a class="anchor" id="autotoc_md7"></a>
-Some of the adaptors have already been implemented in this framework:</h2>
-<p>All stream adaptors have to inherit the <code>async_readable_stream_adaptor</code>. The definition of it is shown below:</p>
+Stream Adaptors Implementation</h2>
+<p>All stream adaptors inherit from <code>async_readable_stream_adaptor</code>. The definition is shown below:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> T&gt;</div>
-<div class="line"><span class="keyword">struct </span>async_readable_stream_adaptor</div>
+<div class="line"><span class="keyword">struct </span><a class="code hl_struct" href="structwebcraft_1_1async_1_1io_1_1adaptors_1_1async__readable__stream__adaptor.html">async_readable_stream_adaptor</a></div>
 <div class="line">{</div>
-<div class="line"> </div>
 <div class="line">    <span class="keyword">friend</span> <span class="keyword">auto</span> operator|(async_readable_stream&lt;T&gt; <span class="keyword">auto</span> &amp;&amp;stream, Derived &amp;adaptor)</div>
 <div class="line">    {</div>
 <div class="line">        <span class="keywordflow">return</span> std::invoke(adaptor, std::move(stream));</div>
@@ -265,76 +219,81 @@ Some of the adaptors have already been implemented in this framework:</h2>
 <div class="line">        <span class="keywordflow">return</span> std::invoke(std::move(adaptor), std::forward&lt;<span class="keyword">decltype</span>(stream)&gt;(stream));</div>
 <div class="line">    }</div>
 <div class="line">};</div>
+<div class="ttc" id="astructwebcraft_1_1async_1_1io_1_1adaptors_1_1async__readable__stream__adaptor_html"><div class="ttname"><a href="structwebcraft_1_1async_1_1io_1_1adaptors_1_1async__readable__stream__adaptor.html">webcraft::async::io::adaptors::async_readable_stream_adaptor</a></div><div class="ttdef"><b>Definition</b> adaptors.hpp:23</div></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md8"></a>
 Transform adaptor</h3>
-<p>Definition is shown below:</p>
+<p>Definition:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> InType, <span class="keyword">typename</span> Func&gt;</div>
-<div class="line"><span class="keyword">auto</span> transform(Func &amp;&amp;fn) -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
-</div><!-- fragment --><p>Using this you'll be able transform the existing async_readable_stream to another async_readable_stream. The function that is passed has to be of signature <code>async_generator&lt;OutType&gt;(async_generator&lt;InType&gt;)</code> where <code>OutType</code> is the transformed readable stream passed from the <code>transform</code> function. Some examples of this are shown below:</p>
+<div class="line"><span class="keyword">auto</span> transform(Func &amp;&amp;fn) -&gt; <span class="comment">/* adaptor type */</span>;</div>
+</div><!-- fragment --><p>Transform an existing async_readable_stream to another async_readable_stream. The function must have signature <code><a class="el" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator</a>&lt;OutType&gt;(<a class="el" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator</a>&lt;InType&gt;)</code>. Example:</p>
 <div class="fragment"><div class="line">mock_readable_stream stream({1,2,3,4,5});</div>
 <div class="line"> </div>
-<div class="line">async_readable_stream&lt;std::string&gt; <span class="keyword">auto</span> new_stream = stream | transform([](async_generator&lt;int&gt; gen) {</div>
+<div class="line"><span class="keyword">auto</span> new_stream = stream | webcraft::async::io::adaptors::transform&lt;int&gt;([](<a class="code hl_class" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator&lt;int&gt;</a> gen) -&gt; <a class="code hl_class" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator&lt;std::string&gt;</a> {</div>
 <div class="line">    <a class="code hl_define" href="async__generator_8hpp.html#a4d7b3885bfafff1b24249b43416127d2">for_each_async</a>(value, gen, {</div>
 <div class="line">        <span class="keyword">co_yield</span> std::to_string(value);</div>
-<div class="line">        <span class="keyword">co_yield</span> std::to_string(value * 2);</div>
+<div class="line">        <span class="keyword">co_yield</span> std::to_string(value * 2); <span class="comment">// Duplicate and double</span></div>
 <div class="line">    });</div>
 <div class="line">});</div>
-<div class="line"><span class="comment">// the value of this is [&quot;1&quot;, &quot;2&quot;, &quot;2&quot;, &quot;4&quot;, &quot;3&quot;, &quot;6&quot;, &quot;4&quot;, &quot;8&quot;, &quot;5&quot;, &quot;10&quot;]</span></div>
+<div class="line"><span class="comment">// Result: [&quot;1&quot;, &quot;2&quot;, &quot;2&quot;, &quot;4&quot;, &quot;3&quot;, &quot;6&quot;, &quot;4&quot;, &quot;8&quot;, &quot;5&quot;, &quot;10&quot;]</span></div>
 <div class="ttc" id="aasync__generator_8hpp_html_a4d7b3885bfafff1b24249b43416127d2"><div class="ttname"><a href="async__generator_8hpp.html#a4d7b3885bfafff1b24249b43416127d2">for_each_async</a></div><div class="ttdeci">#define for_each_async(value, gen, code)</div><div class="ttdef"><b>Definition</b> async_generator.hpp:422</div></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md9"></a>
 Map adaptor</h3>
-<p>Definition is shown below:</p>
+<p>Definition:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> InType, <span class="keyword">typename</span> Func, <span class="keyword">typename</span> OutType = std::invoke_result_t&lt;Func, InType&gt;&gt;</div>
-<div class="line"><span class="keyword">auto</span> map(Func &amp;&amp;fn) -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
-</div><!-- fragment --><p>Using this adaptor, you create a new readable stream which has the values from the old stream mapped using the function passed. An example of this is shown below:</p>
+<div class="line"><span class="keyword">auto</span> map(Func &amp;&amp;fn) -&gt; <span class="comment">/* adaptor type */</span>;</div>
+</div><!-- fragment --><p>Create a new readable stream with values mapped using the provided function. Example:</p>
 <div class="fragment"><div class="line">mock_readable_stream stream({1,2,3,4,5});</div>
 <div class="line"> </div>
-<div class="line">async_readable_stream&lt;std::string&gt; <span class="keyword">auto</span> new_stream = stream | map([](<span class="keywordtype">int</span> value) {</div>
+<div class="line"><span class="keyword">auto</span> new_stream = stream | webcraft::async::io::adaptors::map&lt;int&gt;([](<span class="keywordtype">int</span> value) {</div>
 <div class="line">    <span class="keywordflow">return</span> std::to_string(value);</div>
 <div class="line">});</div>
-<div class="line"><span class="comment">// the value of this is [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;, &quot;4&quot;, &quot;5&quot;]</span></div>
+<div class="line"><span class="comment">// Result: [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;, &quot;4&quot;, &quot;5&quot;]</span></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md10"></a>
 Pipe adaptor</h3>
-<p>Definition is shown below:</p>
+<p>Definition:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
 <div class="line">    <span class="keyword">requires</span> std::is_copy_assignable_v&lt;T&gt;</div>
-<div class="line"><span class="keyword">auto</span> pipe(async_writable_stream&lt;T&gt; <span class="keyword">auto</span> &amp;str) -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
-</div><!-- fragment --><p>Using this adaptor, you create a new readable stream on which when read, also forwards the read value into the writable stream provided. An example is shown below:</p>
+<div class="line"><span class="keyword">auto</span> pipe(<a class="code hl_concept" href="conceptwebcraft_1_1async_1_1io_1_1async__writable__stream.html">webcraft::async::io::async_writable_stream&lt;T&gt;</a> <span class="keyword">auto</span> &amp;str) -&gt; <span class="comment">/* adaptor type */</span>;</div>
+<div class="ttc" id="aconceptwebcraft_1_1async_1_1io_1_1async__writable__stream_html"><div class="ttname"><a href="conceptwebcraft_1_1async_1_1io_1_1async__writable__stream.html">webcraft::async::io::async_writable_stream</a></div><div class="ttdef"><b>Definition</b> core.hpp:36</div></div>
+</div><!-- fragment --><p>Create a new readable stream that forwards read values to the provided writable stream. Example:</p>
 <div class="fragment"><div class="line">mock_readable_stream&lt;int&gt; rstream({1,2,3,4,5});</div>
 <div class="line">mock_writable_stream&lt;int&gt; wstream;</div>
 <div class="line"> </div>
-<div class="line">async_readable_stream&lt;int&gt; <span class="keyword">auto</span> new_stream = rstream | pipe(wstream);</div>
+<div class="line"><span class="keyword">auto</span> new_stream = rstream | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ade46e7a4ed2b78a5081564b197a8ea57">webcraft::async::io::adaptors::pipe</a>(wstream);</div>
 <div class="line"> </div>
 <div class="line"><span class="keywordflow">while</span> (<span class="keyword">auto</span> opt = <span class="keyword">co_await</span> new_stream.recv()) {</div>
 <div class="line">    assert(wstream.received_value(*opt));</div>
 <div class="line">}</div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_ade46e7a4ed2b78a5081564b197a8ea57"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ade46e7a4ed2b78a5081564b197a8ea57">webcraft::async::io::adaptors::pipe</a></div><div class="ttdeci">auto pipe(async_writable_stream&lt; T &gt; auto &amp;str)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:82</div></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md11"></a>
 Filter adaptor</h3>
-<p>Definition is shown below:</p>
+<p>Definition:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T, <span class="keyword">typename</span> Func&gt;</div>
-<div class="line"><span class="keyword">auto</span> filter(Func &amp;&amp;predicate) -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
-</div><!-- fragment --><p>Using this adaptor, you'd be able to filter out values in the streams which you do want to retain. An example is shown below:</p>
+<div class="line"><span class="keyword">auto</span> filter(Func &amp;&amp;predicate) -&gt; <span class="comment">/* adaptor type */</span>;</div>
+</div><!-- fragment --><p>Filter values in the stream based on a predicate. Example:</p>
 <div class="fragment"><div class="line">mock_readable_stream&lt;int&gt; stream({1,2,3,4,5});</div>
-<div class="line">async_readable_stream&lt;int&gt; <span class="keyword">auto</span> new_stream = stream | filter([](<span class="keywordtype">int</span> value) { <span class="keywordflow">return</span> value % 2 == 0; });</div>
-<div class="line"><span class="comment">// streams returned is [2,4]</span></div>
+<div class="line"><span class="keyword">auto</span> new_stream = stream | webcraft::async::io::adaptors::filter&lt;int&gt;([](<span class="keywordtype">int</span> value) { </div>
+<div class="line">    <span class="keywordflow">return</span> value % 2 == 0; </div>
+<div class="line">});</div>
+<div class="line"><span class="comment">// Result: [2,4]</span></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md12"></a>
 Limit adaptor</h3>
-<p>Definition is shown below:</p>
+<p>Definition:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
-<div class="line"><span class="keyword">auto</span> limit(<span class="keywordtype">size_t</span> size) -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
-</div><!-- fragment --><p>Using this adaptor, you'd be able to limit the amount of values sent through the stream. An example is shown below:</p>
+<div class="line"><span class="keyword">auto</span> limit(<span class="keywordtype">size_t</span> size) -&gt; <span class="comment">/* adaptor type */</span>;</div>
+</div><!-- fragment --><p>Limit the number of values sent through the stream. Example:</p>
 <div class="fragment"><div class="line">mock_readable_stream&lt;int&gt; stream({1,2,3,4,5});</div>
-<div class="line">async_readable_stream&lt;int&gt; <span class="keyword">auto</span> new_stream = stream | limit(3);</div>
-<div class="line"><span class="comment">// streams returned is [1,2,3]</span></div>
+<div class="line"><span class="keyword">auto</span> new_stream = stream | webcraft::async::io::adaptors::limit&lt;int&gt;(3);</div>
+<div class="line"><span class="comment">// Result: [1,2,3]</span></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md13"></a>
 Skip adaptor</h3>
-<p>Definition is shown below:</p>
+<p>Definition:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
-<div class="line"><span class="keyword">auto</span> skip(<span class="keywordtype">size_t</span> size) -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
-</div><!-- fragment --><p>Using this adaptor, you'd be able to skip the amount of values sent through the stream. An example is shown below:</p>
+<div class="line"><span class="keyword">auto</span> skip(<span class="keywordtype">size_t</span> size) -&gt; <span class="comment">/* adaptor type */</span>;</div>
+</div><!-- fragment --><p>Skip a number of values at the beginning of the stream. Example:</p>
 <div class="fragment"><div class="line">mock_readable_stream&lt;int&gt; stream({1,2,3,4,5});</div>
-<div class="line">async_readable_stream&lt;int&gt; <span class="keyword">auto</span> new_stream = stream | skip(2);</div>
-<div class="line"><span class="comment">// streams returned is [3,4,5]</span></div>
+<div class="line"><span class="keyword">auto</span> new_stream = stream | webcraft::async::io::adaptors::skip&lt;int&gt;(2);</div>
+<div class="line"><span class="comment">// Result: [3,4,5]</span></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md14"></a>
 Take while adaptor</h3>
 <p>Definition is shown below:</p>
@@ -357,7 +316,7 @@ Drop while adaptor</h3>
 Collect adaptor</h3>
 <p>Definition is shown below:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> ToType, <span class="keyword">typename</span> StreamType&gt;</div>
-<div class="line"><span class="keyword">concept </span>collector = std::is_invocable_r_v&lt;task&lt;ToType&gt;, Derived, async_generator&lt;StreamType&gt;&gt;;</div>
+<div class="line"><span class="keyword">concept </span>collector = std::is_invocable_r_v&lt;task&lt;ToType&gt;, Derived, <a class="code hl_class" href="classcppcoro_1_1async__generator.html">async_generator&lt;StreamType&gt;</a>&gt;;</div>
 <div class="line"> </div>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> ToType, <span class="keyword">typename</span> StreamType, collector&lt;ToType, StreamType&gt; Collector&gt;</div>
 <div class="line"><span class="keyword">auto</span> collect(Collector &amp;&amp;collector_func) -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
@@ -412,7 +371,7 @@ Group By collector</h4>
 <div class="line"> </div>
 <div class="line">std::unordered_map&lt;std::string, std::vector&lt;std::string&gt;&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">map</a> = <span class="keyword">co_await</span> (stream | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ac259db7916278ffc530b8c127be7a191">collect</a>(collectors::group_by(mapper)));</div>
 <div class="line"><span class="comment">//  returns a { {&quot;A&quot;, [&quot;AB&quot;,&quot;AC&quot;]}, {&quot;B&quot;, [&quot;BC&quot;,&quot;BD&quot;]}, {&quot;C&quot;, [&quot;CD&quot;]} }</span></div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_ac259db7916278ffc530b8c127be7a191"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ac259db7916278ffc530b8c127be7a191">webcraft::async::io::adaptors::collect</a></div><div class="ttdeci">auto collect(Collector &amp;&amp;collector_func)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:117</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_a467323c557b8245b25c7cc5c6cd28e22"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a467323c557b8245b25c7cc5c6cd28e22">webcraft::async::io::adaptors::map</a></div><div class="ttdeci">auto map(Func &amp;&amp;fn)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:71</div></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md21"></a>
 Forward To adaptor</h3>
 <p>Definition is shown below:</p>
@@ -563,7 +522,9 @@ Zip adaptor</h3>
 <div class="line"><span class="comment">// the new steam satisfies async_readable_stream&lt;std::pair&lt;std::optional&lt;int&gt;, std::optional&lt;std::string&gt;&gt;&gt;</span></div>
 </div><!-- fragment --><h1><a class="anchor" id="autotoc_md33"></a>
 Async File I/O</h1>
-<p>Async File I/O is handled differently on different platforms. Here are some of the provided features of these on the different platforms by the different frameworks:</p>
+<p>Async File I/O is handled differently on different platforms using the <code><a class="el" href="namespacewebcraft_1_1async_1_1io_1_1fs.html">webcraft::async::io::fs</a></code> namespace. The framework provides a unified interface while leveraging platform-specific optimizations:</p>
+<h2><a class="anchor" id="autotoc_md34"></a>
+File Operations Table</h2>
 <table class="markdownTable">
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Library   </th><th class="markdownTableHeadNone">Platforms Supported   </th><th class="markdownTableHeadNone">Special Create?   </th><th class="markdownTableHeadNone">Async Read?   </th><th class="markdownTableHeadNone">Async Write?   </th><th class="markdownTableHeadNone">Async Close?   </th><th class="markdownTableHeadNone">Notes    </th></tr>
@@ -578,11 +539,11 @@ Async File I/O</h1>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone">GCD   </td><td class="markdownTableBodyNone">MacOS Only - plan on implementing this in the next PR   </td><td class="markdownTableBodyNone">tbd   </td><td class="markdownTableBodyNone">tdb   </td><td class="markdownTableBodyNone">tdb   </td><td class="markdownTableBodyNone">tdb   </td><td class="markdownTableBodyNone">Need to look into this more   </td></tr>
 </table>
-<h1><a class="anchor" id="autotoc_md34"></a>
+<h1><a class="anchor" id="autotoc_md35"></a>
 Async Socket I/O</h1>
-<p>Async Socket I/O is handled differently on different platforms.</p>
-<h2><a class="anchor" id="autotoc_md35"></a>
-TCP Sockets</h2>
+<p>Async Socket I/O is handled differently on different platforms using the <code><a class="el" href="namespacewebcraft_1_1async_1_1io_1_1socket.html">webcraft::async::io::socket</a></code> namespace.</p>
+<h2><a class="anchor" id="autotoc_md36"></a>
+TCP Sockets Table</h2>
 <table class="markdownTable">
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Library   </th><th class="markdownTableHeadNone">Platforms Supported   </th><th class="markdownTableHeadNone">Special Create?   </th><th class="markdownTableHeadNone">Async Connect?   </th><th class="markdownTableHeadNone">Async Read?   </th><th class="markdownTableHeadNone">Async Write?   </th><th class="markdownTableHeadNone">Async Close?   </th><th class="markdownTableHeadNone">Async Shutdown?   </th><th class="markdownTableHeadNone">Notes    </th></tr>
@@ -598,8 +559,8 @@ TCP Sockets</h2>
 <li><a href="https://gist.github.com/joeyadams/4158972">https://gist.github.com/joeyadams/4158972</a></li>
 <li><a href="https://stackoverflow.com/questions/13598530/connectex-requires-the-socket-to-be-initially-bound-but-to-what">https://stackoverflow.com/questions/13598530/connectex-requires-the-socket-to-be-initially-bound-but-to-what</a></li>
 </ul>
-<h2><a class="anchor" id="autotoc_md36"></a>
-TCP Listeners</h2>
+<h2><a class="anchor" id="autotoc_md37"></a>
+TCP Listeners Table</h2>
 <table class="markdownTable">
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Library   </th><th class="markdownTableHeadNone">Platforms Supported   </th><th class="markdownTableHeadNone">Special Create?   </th><th class="markdownTableHeadNone">Async Bind?   </th><th class="markdownTableHeadNone">Async Listen?   </th><th class="markdownTableHeadNone">Async Accept   </th><th class="markdownTableHeadNone">Async Close?   </th><th class="markdownTableHeadNone">Notes    </th></tr>
@@ -615,7 +576,7 @@ TCP Listeners</h2>
 <li><a href="https://gist.github.com/josephg/6c078a241b0e9e538ac04ef28be6e787">https://gist.github.com/josephg/6c078a241b0e9e538ac04ef28be6e787</a></li>
 <li>KQUEUE Example: <a href="https://dev.to/frevib/a-tcp-server-with-kqueue-527">https://dev.to/frevib/a-tcp-server-with-kqueue-527</a></li>
 </ul>
-<h1><a class="anchor" id="autotoc_md37"></a>
+<h1><a class="anchor" id="autotoc_md38"></a>
 Planned implementation:</h1>
 <p>Async Read &amp; Async Write will be based on what's in the <b>Async Read</b> and <b>Async Write</b> columns. Closing will still happen with RAII (which would be a synchronous close on everything but linux) but on linux we'll send a fire-and-forget request with <code>io_uring_prep_close</code>. For async creation it can either be with synchronous or asynchronous, the bottleneck wouldn't be too big of an issue.</p>
 <p>This is the following specification for using the <b>Async File I/O</b> API: </p><div class="fragment"><div class="line"><span class="keyword">namespace </span>detail</div>
@@ -631,12 +592,12 @@ Planned implementation:</h1>
 <div class="line">        <span class="keyword">virtual</span> ~file_descriptor() = <span class="keywordflow">default</span>;</div>
 <div class="line"> </div>
 <div class="line">        <span class="comment">// virtual because we want to allow platform specific implementation</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;size_t&gt; read(std::span&lt;char&gt; buffer) = 0;  <span class="comment">// internally should check if openmode is for read</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;size_t&gt; write(std::span&lt;char&gt; buffer) = 0; <span class="comment">// internally should check if openmode is for write or append</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;void&gt; close() = 0;                         <span class="comment">// will spawn a fire and forget task (essentially use async apis but provide null callback)</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> read(std::span&lt;char&gt; buffer) = 0;  <span class="comment">// internally should check if openmode is for read</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> write(std::span&lt;char&gt; buffer) = 0; <span class="comment">// internally should check if openmode is for write or append</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> close() = 0;                         <span class="comment">// will spawn a fire and forget task (essentially use async apis but provide null callback)</span></div>
 <div class="line">    };</div>
 <div class="line"> </div>
-<div class="line">    task&lt;std::shared_ptr&lt;file_descriptor&gt;&gt; make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode);</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;std::shared_ptr&lt;file_descriptor&gt;</a>&gt; make_file_descriptor(std::filesystem::path p, std::ios_base::openmode mode);</div>
 <div class="line"> </div>
 <div class="line">    <span class="keyword">class </span>file_stream</div>
 <div class="line">    {</div>
@@ -652,7 +613,7 @@ Planned implementation:</h1>
 <div class="line">                <a class="code hl_function" href="namespacewebcraft_1_1async.html#a367712ca561ac34d7d28f495a6462c09">sync_wait</a>(close());</div>
 <div class="line">        }</div>
 <div class="line"> </div>
-<div class="line">        task&lt;void&gt; close() noexcept</div>
+<div class="line">        <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> close() noexcept</div>
 <div class="line">        {</div>
 <div class="line">            <span class="keywordtype">bool</span> expected = <span class="keyword">false</span>;</div>
 <div class="line">            <span class="keywordflow">if</span> (closed.compare_exchange_strong(expected, <span class="keyword">true</span>, std::memory_order_acq_rel))</div>
@@ -672,12 +633,12 @@ Planned implementation:</h1>
 <div class="line">    file_rstream(file_rstream &amp;&amp;) noexcept = default;</div>
 <div class="line">    file_rstream &amp;operator=(file_rstream &amp;&amp;) noexcept = default;</div>
 <div class="line"> </div>
-<div class="line">    task&lt;<span class="keywordtype">size_t</span>&gt; recv(std::span&lt;<span class="keywordtype">char</span>&gt; buffer)</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task</a>&lt;<span class="keywordtype">size_t</span>&gt; recv(std::span&lt;<span class="keywordtype">char</span>&gt; buffer)</div>
 <div class="line">    {</div>
 <div class="line">        <span class="keywordflow">return</span> fd-&gt;read(buffer);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;char&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>()</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;char&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>()</div>
 <div class="line">    {</div>
 <div class="line">        std::array&lt;char, 1&gt; buf;</div>
 <div class="line">        <span class="keyword">co_await</span> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>(buf);</div>
@@ -698,12 +659,12 @@ Planned implementation:</h1>
 <div class="line">    file_wstream(file_wstream &amp;&amp;) noexcept = default;</div>
 <div class="line">    file_wstream &amp;operator=(file_wstream &amp;&amp;) noexcept = default;</div>
 <div class="line"> </div>
-<div class="line">    task&lt;<span class="keywordtype">size_t</span>&gt; send(std::span&lt;<span class="keywordtype">char</span>&gt; buffer)</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task</a>&lt;<span class="keywordtype">size_t</span>&gt; send(std::span&lt;<span class="keywordtype">char</span>&gt; buffer)</div>
 <div class="line">    {</div>
 <div class="line">        <span class="keywordflow">return</span> fd-&gt;write(buffer);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;bool&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#af2b81544adcc4ba129f31b5797a43670">send</a>(<span class="keywordtype">char</span> b)</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;bool&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#af2b81544adcc4ba129f31b5797a43670">send</a>(<span class="keywordtype">char</span> b)</div>
 <div class="line">    {</div>
 <div class="line">        std::array&lt;char, 1&gt; buf;</div>
 <div class="line">        buf[0] = b;</div>
@@ -725,13 +686,13 @@ Planned implementation:</h1>
 <div class="line">    file(std::filesystem::path p) : p(std::move(p)) {}</div>
 <div class="line">    ~file() = <span class="keywordflow">default</span>;</div>
 <div class="line"> </div>
-<div class="line">    task&lt;file_rstream&gt; open_readable_stream()</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;file_rstream&gt;</a> open_readable_stream()</div>
 <div class="line">    {</div>
 <div class="line">        <span class="keyword">auto</span> descriptor = <span class="keyword">co_await</span> detail::make_file_descriptor(p, std::ios_base::in);</div>
 <div class="line">        <span class="keyword">co_return</span> file_rstream(descriptor);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;file_wstream&gt; open_writable_stream(<span class="keywordtype">bool</span> append)</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;file_wstream&gt;</a> open_writable_stream(<span class="keywordtype">bool</span> append)</div>
 <div class="line">    {</div>
 <div class="line">        <span class="keyword">auto</span> descriptor = <span class="keyword">co_await</span> detail::make_file_descriptor(p, append ? std::ios_base::app : std::ios_base::out);</div>
 <div class="line">        <span class="keyword">co_return</span> file_wstream(std::move(descriptor));</div>
@@ -770,7 +731,7 @@ Planned implementation:</h1>
 <div class="line">        tcp_descriptor_base() = <span class="keywordflow">default</span>;</div>
 <div class="line">        <span class="keyword">virtual</span> ~tcp_descriptor_base() = <span class="keywordflow">default</span>;</div>
 <div class="line"> </div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;void&gt; close() = 0; <span class="comment">// Close the socket</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> close() = 0; <span class="comment">// Close the socket</span></div>
 <div class="line">    };</div>
 <div class="line"> </div>
 <div class="line">    <span class="keyword">class </span>tcp_socket_descriptor : <span class="keyword">public</span> tcp_descriptor_base</div>
@@ -779,10 +740,10 @@ Planned implementation:</h1>
 <div class="line">        tcp_socket_descriptor() = <span class="keywordflow">default</span>;</div>
 <div class="line">        <span class="keyword">virtual</span> ~tcp_socket_descriptor() = <span class="keywordflow">default</span>;</div>
 <div class="line"> </div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;void&gt; connect(<span class="keyword">const</span> connection_info &amp;info) = 0;  <span class="comment">// Connect to a server</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;size_t&gt; read(std::span&lt;char&gt; buffer) = 0;        <span class="comment">// Read data from the socket</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;size_t&gt; write(std::span&lt;const char&gt; buffer) = 0; <span class="comment">// Write data to the socket</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;void&gt; <a class="code hl_function" href="namespacewebcraft_1_1async.html#a32cc887e48f12d360656c6f023977a2d">shutdown</a>(socket_stream_mode mode) = 0;     <span class="comment">// Shutdown the socket</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> connect(<span class="keyword">const</span> connection_info &amp;info) = 0;  <span class="comment">// Connect to a server</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> read(std::span&lt;char&gt; buffer) = 0;        <span class="comment">// Read data from the socket</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> write(std::span&lt;const char&gt; buffer) = 0; <span class="comment">// Write data to the socket</span></div>
+<div class="line">        <span class="keyword">virtual</span> <span class="keywordtype">void</span> <a class="code hl_function" href="namespacewebcraft_1_1async.html#a32cc887e48f12d360656c6f023977a2d">shutdown</a>(socket_stream_mode mode) = 0;     <span class="comment">// Shutdown the socket</span></div>
 <div class="line">    };</div>
 <div class="line"> </div>
 <div class="line">    <span class="keyword">class </span>tcp_listener_descriptor : <span class="keyword">public</span> tcp_descriptor_base</div>
@@ -791,13 +752,13 @@ Planned implementation:</h1>
 <div class="line">        tcp_listener_descriptor() = <span class="keywordflow">default</span>;</div>
 <div class="line">        <span class="keyword">virtual</span> ~tcp_listener_descriptor() = <span class="keywordflow">default</span>;</div>
 <div class="line"> </div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;void&gt; bind(<span class="keyword">const</span> connection_info &amp;info) = 0;          <span class="comment">// Bind the listener to an address</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;void&gt; listen(<span class="keywordtype">int</span> backlog) = 0;                        <span class="comment">// Start listening for incoming connections</span></div>
-<div class="line">        <span class="keyword">virtual</span> task&lt;std::unique_ptr&lt;tcp_socket_descriptor&gt;&gt; accept() = 0; <span class="comment">// Accept a new connection</span></div>
+<div class="line">        <span class="keyword">virtual</span> <span class="keywordtype">void</span> bind(<span class="keyword">const</span> connection_info &amp;info) = 0;          <span class="comment">// Bind the listener to an address</span></div>
+<div class="line">        <span class="keyword">virtual</span> <span class="keywordtype">void</span> listen(<span class="keywordtype">int</span> backlog) = 0;                        <span class="comment">// Start listening for incoming connections</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;std::unique_ptr&lt;tcp_socket_descriptor&gt;</a>&gt; accept() = 0; <span class="comment">// Accept a new connection</span></div>
 <div class="line">    };</div>
 <div class="line"> </div>
-<div class="line">    task&lt;std::shared_ptr&lt;tcp_socket_descriptor&gt;&gt; make_tcp_socket_descriptor();</div>
-<div class="line">    task&lt;std::shared_ptr&lt;tcp_listener_descriptor&gt;&gt; make_tcp_listener_descriptor();</div>
+<div class="line">    std::shared_ptr&lt;tcp_socket_descriptor&gt; make_tcp_socket_descriptor();</div>
+<div class="line">    std::shared_ptr&lt;tcp_listener_descriptor&gt; make_tcp_listener_descriptor();</div>
 <div class="line"> </div>
 <div class="line">}</div>
 <div class="line"> </div>
@@ -810,21 +771,22 @@ Planned implementation:</h1>
 <div class="line">    tcp_rstream(std::shared_ptr&lt;detail::tcp_socket_descriptor&gt; desc) : descriptor(std::move(desc)) {}</div>
 <div class="line">    ~tcp_rstream() = <span class="keywordflow">default</span>;</div>
 <div class="line"> </div>
-<div class="line">    task&lt;size_t&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>(std::span&lt;char&gt; buffer)</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>(std::span&lt;char&gt; buffer)</div>
 <div class="line">    {</div>
 <div class="line">        <span class="keywordflow">return</span> descriptor-&gt;read(buffer);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;char&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>()</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;char&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>()</div>
 <div class="line">    {</div>
 <div class="line">        std::array&lt;char, 1&gt; buf;</div>
 <div class="line">        <span class="keyword">co_await</span> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#aaaf5c2dda44d2ea9c9518aa85bf729c1">recv</a>(buf);</div>
 <div class="line">        <span class="keyword">co_return</span> buf[0];</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;void&gt; close()</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> close()</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keyword">co_await</span> descriptor-&gt;shutdown(socket_stream_mode::READ);</div>
+<div class="line">        descriptor-&gt;shutdown(socket_stream_mode::READ);</div>
+<div class="line">        <span class="keyword">co_return</span>;</div>
 <div class="line">    }</div>
 <div class="line">};</div>
 <div class="line"> </div>
@@ -841,12 +803,12 @@ Planned implementation:</h1>
 <div class="line">    tcp_wstream(std::shared_ptr&lt;detail::tcp_socket_descriptor&gt; desc) : descriptor(std::move(desc)) {}</div>
 <div class="line">    ~tcp_wstream() = <span class="keywordflow">default</span>;</div>
 <div class="line"> </div>
-<div class="line">    task&lt;size_t&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#af2b81544adcc4ba129f31b5797a43670">send</a>(std::span&lt;const char&gt; buffer)</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#af2b81544adcc4ba129f31b5797a43670">send</a>(std::span&lt;const char&gt; buffer)</div>
 <div class="line">    {</div>
 <div class="line">        <span class="keywordflow">return</span> descriptor-&gt;write(buffer);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;bool&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#af2b81544adcc4ba129f31b5797a43670">send</a>(<span class="keywordtype">char</span> b)</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;bool&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io.html#af2b81544adcc4ba129f31b5797a43670">send</a>(<span class="keywordtype">char</span> b)</div>
 <div class="line">    {</div>
 <div class="line">        std::array&lt;char, 1&gt; buf;</div>
 <div class="line">        buf[0] = b;</div>
@@ -854,9 +816,10 @@ Planned implementation:</h1>
 <div class="line">        <span class="keyword">co_return</span> <span class="keyword">true</span>;</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;void&gt; close()</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> close()</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keyword">co_await</span> descriptor-&gt;shutdown(socket_stream_mode::WRITE);</div>
+<div class="line">        descriptor-&gt;shutdown(socket_stream_mode::WRITE);</div>
+<div class="line">        <span class="keyword">co_return</span>;</div>
 <div class="line">    }</div>
 <div class="line">};</div>
 <div class="line"> </div>
@@ -864,67 +827,99 @@ Planned implementation:</h1>
 <div class="line"><span class="keyword">static_assert</span>(async_buffered_writable_stream&lt;tcp_wstream, char&gt;);</div>
 <div class="line"><span class="keyword">static_assert</span>(async_closeable_stream&lt;tcp_wstream, char&gt;);</div>
 <div class="line"> </div>
+<div class="line"> </div>
 <div class="line"><span class="keyword">class </span>tcp_socket</div>
 <div class="line">{</div>
 <div class="line"><span class="keyword">private</span>:</div>
 <div class="line">    std::shared_ptr&lt;detail::tcp_socket_descriptor&gt; descriptor;</div>
-<div class="line">    std::unique_ptr&lt;tcp_rstream&gt; read_stream;</div>
-<div class="line">    std::unique_ptr&lt;tcp_wstream&gt; write_stream;</div>
+<div class="line">    tcp_rstream read_stream;</div>
+<div class="line">    tcp_wstream write_stream;</div>
+<div class="line">    <span class="keywordtype">bool</span> read_shutdown{<span class="keyword">false</span>};</div>
+<div class="line">    <span class="keywordtype">bool</span> write_shutdown{<span class="keyword">false</span>};</div>
 <div class="line"> </div>
 <div class="line"><span class="keyword">public</span>:</div>
-<div class="line">    tcp_socket(std::shared_ptr&lt;detail::tcp_socket_descriptor&gt; desc) : descriptor(std::move(desc)) {}</div>
-<div class="line">    ~tcp_socket()</div>
+<div class="line">    tcp_socket(std::shared_ptr&lt;detail::tcp_socket_descriptor&gt; desc) : descriptor(desc), read_stream(descriptor), write_stream(descriptor)</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keywordflow">if</span> (read_stream)</div>
-<div class="line">        {</div>
-<div class="line">            read_stream-&gt;close();</div>
-<div class="line">        }</div>
-<div class="line">        <span class="keywordflow">if</span> (write_stream)</div>
-<div class="line">        {</div>
-<div class="line">            write_stream-&gt;close();</div>
-<div class="line">        }</div>
-<div class="line"> </div>
-<div class="line">        <span class="keywordflow">if</span> (descriptor)</div>
-<div class="line">        {</div>
-<div class="line">            <a class="code hl_function" href="namespacewebcraft_1_1async.html#a367712ca561ac34d7d28f495a6462c09">sync_wait</a>(descriptor-&gt;close());</div>
-<div class="line">        }</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;void&gt; connect(<span class="keyword">const</span> connection_info &amp;info)</div>
+<div class="line">    ~tcp_socket()</div>
 <div class="line">    {</div>
+<div class="line">        <a class="code hl_function" href="namespacewebcraft_1_1async.html#aa32214c386ded164491af1d325b36e11">fire_and_forget</a>(close());</div>
+<div class="line">    }</div>
+<div class="line"> </div>
+<div class="line">    tcp_socket(tcp_socket &amp;&amp;other) noexcept</div>
+<div class="line">        : descriptor(std::exchange(other.descriptor, <span class="keyword">nullptr</span>)),</div>
+<div class="line">            read_stream(std::move(other.read_stream)),</div>
+<div class="line">            write_stream(std::move(other.write_stream))</div>
+<div class="line">    {</div>
+<div class="line">    }</div>
+<div class="line"> </div>
+<div class="line">    tcp_socket &amp;operator=(tcp_socket &amp;&amp;other) <span class="keyword">noexcept</span></div>
+<div class="line">    {</div>
+<div class="line">        <span class="keywordflow">if</span> (<span class="keyword">this</span> != &amp;other)</div>
+<div class="line">        {</div>
+<div class="line">            descriptor = std::exchange(other.descriptor, <span class="keyword">nullptr</span>);</div>
+<div class="line">            read_stream = std::move(other.read_stream);</div>
+<div class="line">            write_stream = std::move(other.write_stream);</div>
+<div class="line">        }</div>
+<div class="line">        <span class="keywordflow">return</span> *<span class="keyword">this</span>;</div>
+<div class="line">    }</div>
+<div class="line"> </div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> connect(<span class="keyword">const</span> connection_info &amp;info)</div>
+<div class="line">    {</div>
+<div class="line">        <span class="keywordflow">if</span> (!descriptor)</div>
+<div class="line">            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;Descriptor is null&quot;</span>);</div>
+<div class="line"> </div>
 <div class="line">        <span class="keyword">co_await</span> descriptor-&gt;connect(info);</div>
-<div class="line">        read_stream = std::make_unique&lt;tcp_rstream&gt;(descriptor);</div>
-<div class="line">        write_stream = std::make_unique&lt;tcp_wstream&gt;(descriptor);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
 <div class="line">    tcp_rstream &amp;get_readable_stream()</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keywordflow">if</span> (!read_stream)</div>
-<div class="line">        {</div>
-<div class="line">            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;Read stream is not initialized.&quot;</span>);</div>
-<div class="line">        }</div>
-<div class="line">        <span class="keywordflow">return</span> *read_stream;</div>
+<div class="line">        <span class="keywordflow">if</span> (!descriptor)</div>
+<div class="line">            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;Descriptor is null&quot;</span>);</div>
+<div class="line">        <span class="keywordflow">return</span> read_stream;</div>
 <div class="line">    }</div>
 <div class="line"> </div>
 <div class="line">    tcp_wstream &amp;get_writable_stream()</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keywordflow">if</span> (!write_stream)</div>
-<div class="line">        {</div>
-<div class="line">            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;Write stream is not initialized.&quot;</span>);</div>
-<div class="line">        }</div>
-<div class="line">        <span class="keywordflow">return</span> *write_stream;</div>
+<div class="line">        <span class="keywordflow">if</span> (!descriptor)</div>
+<div class="line">            <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;Descriptor is null&quot;</span>);</div>
+<div class="line">        <span class="keywordflow">return</span> write_stream;</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;void&gt; shutdown_channel(socket_stream_mode mode)</div>
+<div class="line">    <span class="keywordtype">void</span> shutdown_channel(socket_stream_mode mode)</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keywordflow">if</span> (mode == socket_stream_mode::READ &amp;&amp; read_stream)</div>
+<div class="line">        <span class="keywordflow">if</span> (mode == socket_stream_mode::READ &amp;&amp; !read_shutdown)</div>
 <div class="line">        {</div>
-<div class="line">            <span class="keyword">co_await</span> read_stream-&gt;close();</div>
+<div class="line">            descriptor-&gt;shutdown(socket_stream_mode::READ);</div>
+<div class="line">            this-&gt;read_shutdown = <span class="keyword">true</span>;</div>
 <div class="line">        }</div>
-<div class="line">        <span class="keywordflow">else</span> <span class="keywordflow">if</span> (mode == socket_stream_mode::WRITE &amp;&amp; write_stream)</div>
+<div class="line">        <span class="keywordflow">else</span> <span class="keywordflow">if</span> (mode == socket_stream_mode::WRITE &amp;&amp; !write_shutdown)</div>
 <div class="line">        {</div>
-<div class="line">            <span class="keyword">co_await</span> write_stream-&gt;close();</div>
+<div class="line">            descriptor-&gt;shutdown(socket_stream_mode::WRITE);</div>
+<div class="line">            this-&gt;write_shutdown = <span class="keyword">true</span>;</div>
 <div class="line">        }</div>
+<div class="line">    }</div>
+<div class="line"> </div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> close()</div>
+<div class="line">    {</div>
+<div class="line">        <span class="keywordflow">if</span> (descriptor)</div>
+<div class="line">        {</div>
+<div class="line">            shutdown_channel(socket_stream_mode::READ);</div>
+<div class="line">            shutdown_channel(socket_stream_mode::WRITE);</div>
+<div class="line">            <span class="keyword">co_await</span> descriptor-&gt;close();</div>
+<div class="line">            descriptor.reset();</div>
+<div class="line">        }</div>
+<div class="line">    }</div>
+<div class="line"> </div>
+<div class="line">    <span class="keyword">inline</span> std::string get_remote_host()</div>
+<div class="line">    {</div>
+<div class="line">        <span class="keywordflow">return</span> descriptor-&gt;get_remote_host();</div>
+<div class="line">    }</div>
+<div class="line"> </div>
+<div class="line">    <span class="keyword">inline</span> uint16_t get_remote_port()</div>
+<div class="line">    {</div>
+<div class="line">        <span class="keywordflow">return</span> descriptor-&gt;get_remote_port();</div>
 <div class="line">    }</div>
 <div class="line">};</div>
 <div class="line"> </div>
@@ -939,34 +934,34 @@ Planned implementation:</h1>
 <div class="line">    {</div>
 <div class="line">        <span class="keywordflow">if</span> (descriptor)</div>
 <div class="line">        {</div>
-<div class="line">            <a class="code hl_function" href="namespacewebcraft_1_1async.html#a367712ca561ac34d7d28f495a6462c09">sync_wait</a>(descriptor-&gt;close());</div>
+<div class="line">            <a class="code hl_function" href="namespacewebcraft_1_1async.html#aa32214c386ded164491af1d325b36e11">fire_and_forget</a>(descriptor-&gt;close());</div>
 <div class="line">        }</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;void&gt; bind(<span class="keyword">const</span> connection_info &amp;info)</div>
+<div class="line">    <span class="keywordtype">void</span> bind(<span class="keyword">const</span> connection_info &amp;info)</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keywordflow">return</span> descriptor-&gt;bind(info);</div>
+<div class="line">        descriptor-&gt;bind(info);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;void&gt; listen(<span class="keywordtype">int</span> backlog)</div>
+<div class="line">    <span class="keywordtype">void</span> listen(<span class="keywordtype">int</span> backlog)</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keywordflow">return</span> descriptor-&gt;listen(backlog);</div>
+<div class="line">        descriptor-&gt;listen(backlog);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
-<div class="line">    task&lt;std::unique_ptr&lt;tcp_socket&gt;&gt; accept()</div>
+<div class="line">    <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;tcp_socket&gt;</a> accept()</div>
 <div class="line">    {</div>
-<div class="line">        <span class="keyword">auto</span> client_desc = <span class="keyword">co_await</span> descriptor-&gt;accept();</div>
-<div class="line">        <span class="keyword">co_return</span> std::make_unique&lt;tcp_socket&gt;(std::move(client_desc));</div>
+<div class="line">        <span class="keyword">co_return</span> <span class="keyword">co_await</span> descriptor-&gt;accept();</div>
 <div class="line">    }</div>
 <div class="line">};</div>
 <div class="line"> </div>
-<div class="line">task&lt;tcp_socket&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a482e358e1f53606e06109999484276b3">make_tcp_socket</a>()</div>
+<div class="line"> </div>
+<div class="line"><a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;tcp_socket&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a482e358e1f53606e06109999484276b3">make_tcp_socket</a>()</div>
 <div class="line">{</div>
 <div class="line">    <span class="keyword">auto</span> descriptor = <span class="keyword">co_await</span> detail::make_tcp_socket_descriptor();</div>
 <div class="line">    <span class="keyword">co_return</span> tcp_socket(std::move(descriptor));</div>
 <div class="line">}</div>
 <div class="line"> </div>
-<div class="line">task&lt;tcp_listener&gt; <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a861e0c806d177e378bae72a3cfb5f0e2">make_tcp_listener</a>()</div>
+<div class="line"><a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;tcp_listener&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a861e0c806d177e378bae72a3cfb5f0e2">make_tcp_listener</a>()</div>
 <div class="line">{</div>
 <div class="line">    <span class="keyword">auto</span> descriptor = <span class="keyword">co_await</span> detail::make_tcp_listener_descriptor();</div>
 <div class="line">    <span class="keyword">co_return</span> tcp_listener(std::move(descriptor));</div>
@@ -974,7 +969,17 @@ Planned implementation:</h1>
 <div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1socket_html_a482e358e1f53606e06109999484276b3"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a482e358e1f53606e06109999484276b3">webcraft::async::io::socket::make_tcp_socket</a></div><div class="ttdeci">tcp_socket make_tcp_socket()</div><div class="ttdef"><b>Definition</b> socket.hpp:288</div></div>
 <div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1socket_html_a861e0c806d177e378bae72a3cfb5f0e2"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a861e0c806d177e378bae72a3cfb5f0e2">webcraft::async::io::socket::make_tcp_listener</a></div><div class="ttdeci">tcp_listener make_tcp_listener()</div><div class="ttdef"><b>Definition</b> socket.hpp:293</div></div>
 <div class="ttc" id="anamespacewebcraft_1_1async_html_a32cc887e48f12d360656c6f023977a2d"><div class="ttname"><a href="namespacewebcraft_1_1async.html#a32cc887e48f12d360656c6f023977a2d">webcraft::async::shutdown</a></div><div class="ttdeci">task&lt; void &gt; shutdown()</div><div class="ttdef"><b>Definition</b> runtime.hpp:245</div></div>
-</div><!-- fragment --><p>The platform will implement <code>make_file_descriptor</code>, <code>make_tcp_socket_descriptor</code>, and <code>make_tcp_socket_descriptor</code> while also making their own implementations of the socket and file descriptors and returning a shared pointer via the functions mentioned. </p>
+<div class="ttc" id="anamespacewebcraft_1_1async_html_aa32214c386ded164491af1d325b36e11"><div class="ttname"><a href="namespacewebcraft_1_1async.html#aa32214c386ded164491af1d325b36e11">webcraft::async::fire_and_forget</a></div><div class="ttdeci">fire_and_forget_task fire_and_forget(task&lt; void &gt; t)</div><div class="ttdef"><b>Definition</b> fire_and_forget_task.hpp:33</div></div>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md39"></a>
+Implementation Details</h1>
+<p>The WebCraft framework implements platform-specific optimizations through:</p>
+<ul>
+<li><code>webcraft::async::io::fs::detail::make_file_descriptor()</code> - Creates platform-optimized file descriptors</li>
+<li><code>webcraft::async::io::socket::detail::make_tcp_socket_descriptor()</code> - Creates platform-optimized TCP socket descriptors <br  />
+</li>
+<li><code>webcraft::async::io::socket::detail::make_tcp_listener_descriptor()</code> - Creates platform-optimized TCP listener descriptors</li>
+</ul>
+<p>All functions return <code>std::shared_ptr</code> to the appropriate descriptor types, providing automatic resource management and platform abstraction. </p>
 </div></div><!-- contents -->
 </div><!-- PageDoc -->
 </div><!-- doc-content -->

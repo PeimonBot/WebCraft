@@ -4,7 +4,9 @@
 <area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="111,44,111,79,105,79,105,44"/>
 <area shape="rect" id="Node000003" href="$async_8hpp.html" title=" " alt="" coords="23,255,193,295"/>
 <area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="90,131,75,167,71,187,75,206,84,231,97,253,92,256,79,233,69,207,66,187,69,166,85,129"/>
-<area shape="rect" id="Node000004" href="$when__any_8hpp.html" title=" " alt="" coords="84,167,255,207"/>
-<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="132,128,158,165,154,168,127,132"/>
-<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="150,220,124,256,119,253,146,216"/>
+<area shape="rect" id="Node000005" href="$when__any_8hpp.html" title=" " alt="" coords="84,167,255,207"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="132,128,158,165,154,168,127,132"/>
+<area shape="rect" id="Node000004" href="$application_8hpp.html" title=" " alt="" coords="28,343,188,383"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="111,309,111,342,105,342,105,309"/>
+<area shape="poly" id="edge5_Node000005_Node000003" title=" " alt="" coords="150,220,124,256,119,253,146,216"/>
 </map>

@@ -1,6 +1,4 @@
 var searchData=
 [
-  ['i_20o_20implemented_20in_20webcraft_0',['Asynchronous I/O Implemented in WebCraft',['../md_include_2webcraft_2async_2io_2README.html',1,'']]],
-  ['implemented_20in_20webcraft_1',['Asynchronous I/O Implemented in WebCraft',['../md_include_2webcraft_2async_2io_2README.html',1,'']]],
-  ['in_20webcraft_2',['Asynchronous I/O Implemented in WebCraft',['../md_include_2webcraft_2async_2io_2README.html',1,'']]]
+  ['deal_20with_20it_0',['Web Specification and How we deal with it',['../md_include_2webcraft_2web_2README.html',1,'']]]
 ];
