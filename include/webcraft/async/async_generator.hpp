@@ -423,7 +423,7 @@ namespace webcraft::async
     auto _it = co_await gen.begin();     \
     while (_it != gen.end())             \
     {                                    \
-        auto &&value = std::move(*_it);  \
+        auto value = *_it;               \
         code;                            \
         co_await ++_it;                  \
     }

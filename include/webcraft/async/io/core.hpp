@@ -33,8 +33,8 @@ namespace webcraft::async::io
     };
 
     template <typename Derived, typename R>
-    concept async_writable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream, R &&value) {
-        { stream.send(std::forward<R>(value)) } -> std::same_as<task<bool>>;
+    concept async_writable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream, R value) {
+        { stream.send(value) } -> std::same_as<task<bool>>;
     };
 
     template <typename Derived, typename R>
@@ -182,18 +182,18 @@ namespace webcraft::async::io
 
                     T await_resume() noexcept
                     {
-                        auto value = std::move(sub.values.front());
+                        auto value = sub.values.front();
                         sub.values.pop();
-                        return std::move(value);
+                        return value;
                     }
                 };
 
                 co_return co_await awaitable{*this};
             }
 
-            task<bool> send(T &&val)
+            task<bool> send(T val)
             {
-                values.push(std::move(val));
+                values.push(val);
                 if (continuation)
                 {
                     continuation.resume();
@@ -211,7 +211,7 @@ namespace webcraft::async::io
 
         public:
             explicit mpsc_channel_rstream(std::shared_ptr<mpsc_channel_subscription<T>> sub) noexcept
-                : subscription(std::move(sub))
+                : subscription(sub)
             {
             }
 
@@ -229,13 +229,13 @@ namespace webcraft::async::io
 
         public:
             explicit mpsc_channel_wstream(std::shared_ptr<mpsc_channel_subscription<T>> sub) noexcept
-                : subscription(std::move(sub))
+                : subscription(sub)
             {
             }
 
-            task<bool> send(T &&val)
+            task<bool> send(T val)
             {
-                return subscription->send(std::move(val));
+                return subscription->send(val);
             }
         };
 

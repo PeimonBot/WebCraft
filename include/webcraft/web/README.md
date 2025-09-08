@@ -10,18 +10,24 @@ The backbone of web modules defined here are based off of the async runtime and 
 
 ## namespace webcraft::web::core
 
+### message
+
+```cpp
+using message = std::span<const char>;
+```
+
 ### web_read_stream
 
 ```cpp
 template<typename T>
-concept web_read_stream = async_readable_stream<T, char> && async_closable_stream<T>;
+concept web_read_stream = async_buffered_readable_stream<T, char> && async_closable_stream<T>;
 ```
 
 ### web_write_stream
 
 ```cpp
 template<typename T>
-concept web_write_stream = async_writable_stream<T, char> && async_closable_stream<T>;
+concept web_write_stream = async_buffered_writable_stream<T, char> && async_closable_stream<T>;
 ```
 
 ### http_method
