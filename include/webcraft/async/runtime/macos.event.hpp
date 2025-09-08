@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #ifdef __APPLE__
 
 #include <atomic>
@@ -50,7 +49,7 @@ namespace webcraft::async::detail::macos
         void try_start() override
         {
             // listen to the yield event
-            void *data = this;
+            void *data = (webcraft::async::detail::runtime_callback *)this;
 
             prep_event(&event, data);
         }
