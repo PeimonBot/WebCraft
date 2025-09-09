@@ -212,7 +212,7 @@ Through Option 3, we can have `fetch` or `axios` or `HTTPClient` like syntax for
 class web_response_base
 {
 public:
-    std::string get_response_header(std::string name);
+    std::optional<std::string> get_response_header(std::string name);
     std::vector<std::string> get_response_headers(std::string name);
     std::unordered_map<std::string, std::vector<std::string>> get_response_headers();
 
@@ -231,8 +231,8 @@ public:
 class web_client_connection : public web_response_base
 {
 public:
-    web_read_stream& get_read_stream();
-    web_write_stream& get_write_stream();
+    web_read_stream auto& get_read_stream();
+    web_write_stream auto& get_write_stream();
     task<void> close();
 };
 ```
@@ -270,7 +270,244 @@ Allows us to get the payload. You can create a function or a class which obeys t
 
 ## namespace webcraft::web::server
 
-Web Clients are fun and necessary but clients are supposed to connect to something and thats what this framework helping you craft, web servers.
+Web Clients are fun and necessary but clients are supposed to connect to something and thats what this framework helping you craft, web servers. So lets get into the real deal.
+
+### web_server
+
+The web server implementation is defined as follows:
+```cpp
+class web_server
+{
+public:
+    // server properties
+    bool add_supported_protocol(connection_protocol protocol);
+    void set_ssl_context(ssl_context ctx);
+    void set_property(std::string key, std::string value);
+    // server runtime management functions
+    task<void> start();
+    fire_and_forget_task shutdown();
+    task<void> run_until_stopped(std::stop_token token);
+
+    // lifetime hooks
+    void on_started(server_state_cb auto&& cb);
+    void on_shutdown(server_state_cb auto&& cb);
+
+    // routing
+    web_route& route(std::vector<std::string> routes);
+};
+```
+
+It supports setting initialization proeprties (constants defined in the namespace like "http.port" and "https.port" and "host"). It also allows asynchronously starting the program (start the server and have it run in the background). Once the server is started we can be notified by setting `on_started` callback. We can signal shutdown using the `shutdown` function and once our server is shutdown, we can get a notification on the `on_shutdown` callback. Another approach would be to have a stop source and have it run until the stop_token is fired (callbacks will still be fired, `shutdown` signal takes more priority than stop token passed in). To perform routing and serving, we can use the `route` function to provide us a representation of what happens in that route. 
+
+### server_state_cb & web_server_context_manager
+
+Our callbacks look like this. We are implementing bare minimum CDI since languages like JS & Python have features where in the middleware they can "attach" information to the request object. While you can bypass this by setting some special header internally and checking if thats good, this would be better to manage "server" scoped logic.
+
+```cpp
+template<typename T>
+concept server_state_cb = requires(T t1, T& t2, T&& t3, web_server_context_manager manager) {
+    { t1(manager) } -> std::same_as<task<void>>;
+    { t2(manager) } -> std::same_as<task<void>>;
+    { t3(manager) } -> std::same_as<task<void>>;
+};
+
+class web_server_context_manager
+{
+public:
+    template<typename T>
+    T get(std::string item);
+    
+    template<typename T>
+    void set(std::string item, T value);
+};
+```
+
+### web_route & error_handler_route & cors_config
+
+The web route represents the your actual route. Middleware can be handled directly using the `use` function. You can also perform raw request handling (non websocket ping-ponging or custom protocol ontop of HTTP like gRPC) in the `use` function (I'd recommend you to do so here).
+
+The route will be continoud to be "chained" until the user chooses to have it handle HTTP connections or WebSocket connections which it will then fallback on an error_handler_route. This error handler route can pass in an `error_handler_cb` in which if some exception happens along the chain, this route is the first responder (and our internal server stuff being the next).
+
+Lastly, all API should be able to be visible on the brwoser side so CORS config has been added.
+
+```cpp
+class web_route
+{
+public:
+    web_route& use(web_route_handler_cb handler); // for middleware or raw connections
+    web_route& cors(cors_config config); // CORS handler
+    error_handler_route handle_http_method(http_method method, http_route_handler_cb handler); // for basic http connections
+    error_handler_route handle_websocket(web_socket_handler_cb handler); // for websocket connections
+};
+
+class error_handler_route
+{
+public:
+    void on_error(error_handler auto&& handler);
+}
+
+struct cors_config
+{
+    std::vector<http_method> allowed_methods;
+    std::vector<std::string> allowed_origins;
+    std::vector<std::string> allowed_headers;
+    bool allow_credentials;
+};
+```
+
+### web_route_handler & http_route_handler & web_socket_handler & error_handler_cb
+
+Our callbacks. I find its kind of self explainatory. `web_route_handler`, `web_socket_handler`, `error_handler_cb` both accept a connection scoped context, a request which provides a readable stream, and a response which provides a writable stream. `web_route_handler` also provides a `next_function` if one wants to move to the next chain of events. `http_route_handler` is different, it accepts a request which provides a payload and returns a response object. `error_handler_cb` provides an exception pointer object.
+
+```cpp
+using next_function = std::function<task<void>()>;
+
+template<typename T>
+concept web_route_handler_cb = requires(T t1, T& t2, T&& t3, web_server_context_view view, web_request req, web_response resp, next_function func)
+{
+    { t1(view, req, resp, func) } -> std::same_as<task<void>>;
+    { t2(view, req, resp, func) } -> std::same_as<task<void>>;
+    { t3(view, req, resp, func) } -> std::same_as<task<void>>;
+};
+
+template<typename T>
+concept http_route_handler_cb = requires(T t1, T& t2, T&& t3, web_server_context_view view, http_request req)
+{
+    { t1(view, req, resp) } -> std::same_as<task<http_response>>;
+    { t2(view, req, resp) } -> std::same_as<task<http_response>>;
+    { t3(view, req, resp) } -> std::same_as<task<http_response>>;
+};
+
+template<typename T>
+concept web_socket_handler_cb = requires(T t1, T& t2, T&& t3, web_server_context_view view, web_socket_request req, web_socket_response resp)
+{
+    { t1(view, req, resp) } -> std::same_as<task<void>>;
+    { t2(view, req, resp) } -> std::same_as<task<void>>;
+    { t3(view, req, resp) } -> std::same_as<task<void>>;
+};
+
+template<typename T>
+concept error_handler_cb = requires(T t1, T& t2, T&& t3, std::exception_ptr ptr, web_server_context_view view, web_request req, web_response resp)
+{
+    { t1(ptr, view, req, resp) } -> std::same_as<task<void>>;
+    { t2(ptr, view, req, resp) } -> std::same_as<task<void>>;
+    { t3(ptr, view, req, resp) } -> std::same_as<task<void>>;
+};
+```
+
+### web_server_context_view
+
+This is how connection scoped CDI looks like.
+
+```cpp
+class web_server_context_view
+{
+public:
+    template<typename T>
+    T get_global(std::string item);
+    template<typename T>
+    void set_global(std::string item, T value);
+    template<typename T>
+    T get_local(std::string item);
+    template<typename T>
+    void set_local(std::string item, T value);
+};
+```
+
+### Web Requests
+
+This is the definition for the base of all web requests.
+
+```cpp
+class web_request_base
+{
+public:
+    std::unordered_map<std::string, std::string> get_path_params();
+    std::optional<std::string> get_path_param(std::string param);
+
+    std::unordered_map<std::string, std::string> get_query_params();
+    std::optional<std::string> get_query_param(std::string param);
+
+    std::string get_path();
+    std::string get_http_method();
+
+    std::unordered_map<std::string, std::vector<std::string>> get_headers();
+    std::vector<std::string> get_headers(std::string name);
+    std::optional<std::string> get_headers(std::string name);
+};
+```
+
+These are the individual request types.
+
+```cpp
+class web_request : public web_request_base
+{
+public:
+    web_read_stream auto& get_read_stream();
+
+};
+```
+
+```cpp
+class web_socket_request : public web_request_base
+{
+public:
+    web_read_stream auto& get_read_stream();
+};
+```
+
+```cpp
+class http_request : public web_request_base
+{
+public:
+    template <typename T>
+    task<T> get_payload(payload_handler<T> auto&& handler);
+};
+```
+
+### Web Responses
+
+This is the definition for the base of all web responses.
+
+```cpp
+class web_response_base
+{
+public:
+    task<void> set_status_code(http_code code);
+    task<void> set_header(std::string name, std::string value);
+};
+```
+
+These are the individual response types.
+
+```cpp
+class web_response : public web_response_base
+{
+public:
+    web_write_stream auto& get_write_stream();
+};
+```
+
+```cpp
+class web_socket_response : public web_response_base
+{
+public:
+    web_write_stream auto& get_write_stream();
+};
+```
+
+```cpp
+class http_response
+{
+private:
+    friend class web_server;
+
+    http_response& set_response_code(http_code code);
+    http_response& set_header(std::string name, std::string header);
+    http_response& set_headers(std::unordered_map<std::string, std::vector<std::string>> headers);
+    http_response& set_payload(payload_dispatcher auto&& dispatcher);
+};
+```
 
 ## namespace webcraft::web::secure
 
