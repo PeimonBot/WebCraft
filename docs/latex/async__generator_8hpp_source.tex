@@ -421,7 +421,7 @@
 \DoxyCodeLine{00423\ \textcolor{preprocessor}{\ \ \ \ auto\ \_it\ =\ co\_await\ gen.begin();\ \ \ \ \ \(\backslash\)}}
 \DoxyCodeLine{00424\ \textcolor{preprocessor}{\ \ \ \ while\ (\_it\ !=\ gen.end())\ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}}
 \DoxyCodeLine{00425\ \textcolor{preprocessor}{\ \ \ \ \{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}}
-\DoxyCodeLine{00426\ \textcolor{preprocessor}{\ \ \ \ \ \ \ \ auto\ \&\&value\ =\ std::move(*\_it);\ \ \(\backslash\)}}
+\DoxyCodeLine{00426\ \textcolor{preprocessor}{\ \ \ \ \ \ \ \ auto\ value\ =\ *\_it;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}}
 \DoxyCodeLine{00427\ \textcolor{preprocessor}{\ \ \ \ \ \ \ \ code;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}}
 \DoxyCodeLine{00428\ \textcolor{preprocessor}{\ \ \ \ \ \ \ \ co\_await\ ++\_it;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}}
 \DoxyCodeLine{00429\ \textcolor{preprocessor}{\ \ \ \ \}}}

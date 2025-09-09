@@ -245,7 +245,7 @@ Macros</h2></td></tr>
 <b>Value:</b><div class="fragment"><div class="line">    <span class="keyword">auto</span> _it = <span class="keyword">co_await</span> gen.begin();     \</div>
 <div class="line">    while (_it != gen.end())             \</div>
 <div class="line">    {                                    \</div>
-<div class="line">        <span class="keyword">auto</span> &amp;&amp;value = std::move(*_it);  \</div>
+<div class="line">        <span class="keyword">auto</span> value = *_it;               \</div>
 <div class="line">        code;                            \</div>
 <div class="line">        <span class="keyword">co_await</span> ++_it;                  \</div>
 <div class="line">    }</div>

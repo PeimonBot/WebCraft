@@ -147,7 +147,7 @@ Async stream helpers</h2>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> R&gt;</div>
 <div class="line">async_readable_stream&lt;R&gt; <span class="keyword">auto</span> to_readable_stream(<a class="code hl_class" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator&lt;R&gt;</a> &amp;&amp;gen);</div>
 <div class="ttc" id="aclasscppcoro_1_1async__generator_html"><div class="ttname"><a href="classcppcoro_1_1async__generator.html">cppcoro::async_generator</a></div><div class="ttdef"><b>Definition</b> async_generator.hpp:340</div></div>
-<div class="ttc" id="aclasswebcraft_1_1async_1_1task_html"><div class="ttname"><a href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a></div><div class="ttdef"><b>Definition</b> task.hpp:103</div></div>
+<div class="ttc" id="aclasswebcraft_1_1async_1_1task_html"><div class="ttname"><a href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a></div><div class="ttdef"><b>Definition</b> task.hpp:102</div></div>
 </div><!-- fragment --><p>The batched <code>recv()</code> and <code>send()</code> functions call the buffered stream variants if a buffered stream is passed, otherwise they call the non-buffered variants repeatedly until the span is filled or until no more data can be read/written.</p>
 <p>The conversion to and from async generators are provided for readable streams since it enables powerful functional-style stream processing:</p>
 <div class="fragment"><div class="line"><span class="keyword">auto</span> fn = [](<span class="keywordtype">size_t</span> limit) -&gt; async_generator&lt;int&gt; {</div>
@@ -201,7 +201,7 @@ Async Readable Stream Adaptors</h1>
 <div class="line">}</div>
 <div class="ttc" id="aconceptwebcraft_1_1async_1_1io_1_1async__readable__stream_html"><div class="ttname"><a href="conceptwebcraft_1_1async_1_1io_1_1async__readable__stream.html">webcraft::async::io::async_readable_stream</a></div><div class="ttdef"><b>Definition</b> core.hpp:26</div></div>
 <div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html">webcraft::async::io::adaptors</a></div><div class="ttdef"><b>Definition</b> adaptors.hpp:19</div></div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_ac259db7916278ffc530b8c127be7a191"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ac259db7916278ffc530b8c127be7a191">webcraft::async::io::adaptors::collect</a></div><div class="ttdeci">auto collect(Collector &amp;&amp;collector_func)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:117</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_ac259db7916278ffc530b8c127be7a191"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#ac259db7916278ffc530b8c127be7a191">webcraft::async::io::adaptors::collect</a></div><div class="ttdeci">auto collect(Collector &amp;&amp;collector_func)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:116</div></div>
 </div><!-- fragment --><p>This greatly reduces the amount of code and logic required. There are many other uses for async streams, especially when dealing with pub/sub systems.</p>
 <h2><a class="anchor" id="autotoc_md7"></a>
 Stream Adaptors Implementation</h2>
@@ -416,7 +416,7 @@ Sum adaptor</h3>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
 <div class="line">    <span class="keyword">requires</span> closure_under_addition&lt;T&gt;</div>
 <div class="line"><span class="keyword">auto</span> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a01eae8f829e97817419aed01f5ad37dc">sum</a>() -&gt; std::is_derived_from&lt;async_readable_stream_adaptor&gt;;</div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_a01eae8f829e97817419aed01f5ad37dc"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a01eae8f829e97817419aed01f5ad37dc">webcraft::async::io::adaptors::sum</a></div><div class="ttdeci">auto sum()</div><div class="ttdef"><b>Definition</b> adaptors.hpp:380</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_a01eae8f829e97817419aed01f5ad37dc"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a01eae8f829e97817419aed01f5ad37dc">webcraft::async::io::adaptors::sum</a></div><div class="ttdeci">auto sum()</div><div class="ttdef"><b>Definition</b> adaptors.hpp:379</div></div>
 </div><!-- fragment --><p>Using this adaptor, you'd be able to find the sum of the values sent through the stream. An example is shown below:</p>
 <div class="fragment"><div class="line">mock_readable_stream&lt;int&gt; stream({1,2,3,4,5});</div>
 <div class="line"><span class="keywordtype">int</span> sum = <span class="keyword">co_await</span> (stream | sum());</div>
@@ -452,7 +452,7 @@ Any matches adaptor</h3>
 <div class="line"> </div>
 <div class="line"><span class="keywordtype">bool</span> check2 = <span class="keyword">co_await</span> (stream_2 | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#af103d36599b9cd7baf15f2c7e75e70b9">any_matches</a>([](<span class="keywordtype">int</span> value) { <span class="keywordflow">return</span> value % 2 == 0; }));</div>
 <div class="line">assert(!check2);</div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_af103d36599b9cd7baf15f2c7e75e70b9"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#af103d36599b9cd7baf15f2c7e75e70b9">webcraft::async::io::adaptors::any_matches</a></div><div class="ttdeci">auto any_matches(std::function&lt; bool(const T &amp;)&gt; &amp;&amp;predicate)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:418</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_af103d36599b9cd7baf15f2c7e75e70b9"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#af103d36599b9cd7baf15f2c7e75e70b9">webcraft::async::io::adaptors::any_matches</a></div><div class="ttdeci">auto any_matches(std::function&lt; bool(const T &amp;)&gt; &amp;&amp;predicate)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:417</div></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md28"></a>
 All matches adaptor</h3>
 <p>Definition is shown below:</p>
@@ -466,7 +466,7 @@ All matches adaptor</h3>
 <div class="line"> </div>
 <div class="line"><span class="keywordtype">bool</span> check2 = <span class="keyword">co_await</span> (stream_2 | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a1566ca935350435b72631ee11d574ee7">all_matches</a>([](<span class="keywordtype">int</span> value) { <span class="keywordflow">return</span> value % 2 == 0; }));</div>
 <div class="line">assert(!check2);</div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_a1566ca935350435b72631ee11d574ee7"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a1566ca935350435b72631ee11d574ee7">webcraft::async::io::adaptors::all_matches</a></div><div class="ttdeci">auto all_matches(std::function&lt; bool(const T &amp;)&gt; &amp;&amp;predicate)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:433</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_a1566ca935350435b72631ee11d574ee7"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a1566ca935350435b72631ee11d574ee7">webcraft::async::io::adaptors::all_matches</a></div><div class="ttdeci">auto all_matches(std::function&lt; bool(const T &amp;)&gt; &amp;&amp;predicate)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:432</div></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md29"></a>
 None matches adaptor</h3>
 <p>Definition is shown below:</p>
@@ -480,7 +480,7 @@ None matches adaptor</h3>
 <div class="line"> </div>
 <div class="line"><span class="keywordtype">bool</span> check2 = <span class="keyword">co_await</span> (stream_2 | <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#af0226fefe32175663e7ab469a785566c">none_matches</a>([](<span class="keywordtype">int</span> value) { <span class="keywordflow">return</span> value % 2 == 0; }));</div>
 <div class="line">assert(check2);</div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_af0226fefe32175663e7ab469a785566c"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#af0226fefe32175663e7ab469a785566c">webcraft::async::io::adaptors::none_matches</a></div><div class="ttdeci">auto none_matches(std::function&lt; bool(const T &amp;)&gt; &amp;&amp;predicate)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:448</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1adaptors_html_af0226fefe32175663e7ab469a785566c"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1adaptors.html#af0226fefe32175663e7ab469a785566c">webcraft::async::io::adaptors::none_matches</a></div><div class="ttdeci">auto none_matches(std::function&lt; bool(const T &amp;)&gt; &amp;&amp;predicate)</div><div class="ttdef"><b>Definition</b> adaptors.hpp:447</div></div>
 </div><!-- fragment --><h2><a class="anchor" id="autotoc_md30"></a>
 Some of the adaptors are planned to be implemented in this framework:</h2>
 <h3><a class="anchor" id="autotoc_md31"></a>
