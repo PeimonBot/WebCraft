@@ -8,8 +8,8 @@
 
 \begin{DoxyCode}{0}
 \DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ R>}
-\DoxyCodeLine{\textcolor{keyword}{concept\ }\mbox{\hyperlink{conceptwebcraft_1_1async_1_1io_1_1async__writable__stream}{webcraft::async::io::async\_writable\_stream}}\ =\ \ std::is\_move\_constructible\_v<Derived>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream,\ R\ \&\&value)\ \{}
-\DoxyCodeLine{\ \ \ \ \ \ \ \ \{\ stream.send(std::forward<R>(value))\ \}\ -\/>\ std::same\_as<task<bool>>;}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }\mbox{\hyperlink{conceptwebcraft_1_1async_1_1io_1_1async__writable__stream}{webcraft::async::io::async\_writable\_stream}}\ =\ \ std::is\_move\_constructible\_v<Derived>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream,\ R\ value)\ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{\ stream.send(value)\ \}\ -\/>\ std::same\_as<task<bool>>;}
 \DoxyCodeLine{\ \ \ \ \}}
 
 \end{DoxyCode}

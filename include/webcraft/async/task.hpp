@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include <concepts>
 #include <exception>
 #include <coroutine>

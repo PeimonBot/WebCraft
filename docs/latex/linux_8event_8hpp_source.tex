@@ -7,88 +7,92 @@
 \DoxyCodeLine{00004\ \textcolor{comment}{//\ Copyright\ (c)\ Aditya\ Rao}}
 \DoxyCodeLine{00005\ \textcolor{comment}{//\ Licenced\ under\ MIT\ license.\ See\ LICENSE.txt\ for\ details.}}
 \DoxyCodeLine{00007\ }
-\DoxyCodeLine{00008\ }
-\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#ifdef\ \_\_linux\_\_}}
-\DoxyCodeLine{00010\ }
-\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ <\mbox{\hyperlink{runtime_8hpp}{webcraft/async/runtime.hpp}}>}}
-\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ <liburing.h>}}
-\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ <exception>}}
-\DoxyCodeLine{00014\ }
-\DoxyCodeLine{00015\ \textcolor{keyword}{namespace\ }webcraft::async::detail::linux}
-\DoxyCodeLine{00016\ \{}
-\DoxyCodeLine{00017\ }
-\DoxyCodeLine{00018\ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_runtime\_event\ :\ \textcolor{keyword}{public}\ webcraft::async::detail::runtime\_event}
-\DoxyCodeLine{00019\ \ \ \ \ \{}
-\DoxyCodeLine{00020\ \ \ \ \ \ \ \ \ std::mutex\ \&io\_uring\_mutex;}
-\DoxyCodeLine{00021\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\ *global\_ring;}
-\DoxyCodeLine{00022\ }
-\DoxyCodeLine{00023\ \ \ \ \ \ \ \ \ io\_uring\_runtime\_event(std::stop\_token\ token)}
-\DoxyCodeLine{00024\ \ \ \ \ \ \ \ \ \ \ \ \ :\ \mbox{\hyperlink{namespacewebcraft}{webcraft}}::async::detail::runtime\_event(token),\ io\_uring\_mutex(\mbox{\hyperlink{namespacewebcraft}{webcraft}}::async::detail::get\_runtime\_mutex())}
-\DoxyCodeLine{00025\ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00026\ \ \ \ \ \ \ \ \ \ \ \ \ global\_ring\ =\ \textcolor{keyword}{reinterpret\_cast<}io\_uring\ *\textcolor{keyword}{>}(webcraft::async::detail::get\_native\_handle());}
-\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00028\ }
-\DoxyCodeLine{00029\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_native\_cancel()\textcolor{keyword}{\ override}}
-\DoxyCodeLine{00030\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
-\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \ \ \ \ std::lock\_guard<std::mutex>\ lock(io\_uring\_mutex);}
-\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_sqe\ *sqe\ =\ io\_uring\_get\_sqe(global\_ring);}
-\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!sqe)}
-\DoxyCodeLine{00034\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ get\ SQE\ from\ io\_uring"{}});}
-\DoxyCodeLine{00036\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00037\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_prep\_cancel64(sqe,\ \textcolor{keyword}{reinterpret\_cast<}uint64\_t\textcolor{keyword}{>}(\textcolor{keyword}{this}),\ IORING\_ASYNC\_CANCEL\_USERDATA);}
-\DoxyCodeLine{00038\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ ret\ =\ io\_uring\_submit(global\_ring);}
-\DoxyCodeLine{00039\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (ret\ <\ 0)}
-\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ submit\ SQE\ to\ io\_uring:\ "{}}\ +\ std::to\_string(-\/ret));}
-\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00044\ }
-\DoxyCodeLine{00045\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_start()\textcolor{keyword}{\ override}}
-\DoxyCodeLine{00046\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
-\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \ \ \ \ std::lock\_guard<std::mutex>\ lock(io\_uring\_mutex);}
-\DoxyCodeLine{00048\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_sqe\ *sqe\ =\ io\_uring\_get\_sqe(global\_ring);}
-\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!sqe)}
-\DoxyCodeLine{00050\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00051\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ get\ SQE\ from\ io\_uring"{}});}
-\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00053\ }
-\DoxyCodeLine{00054\ \ \ \ \ \ \ \ \ \ \ \ \ perform\_io\_uring\_operation(sqe);}
-\DoxyCodeLine{00055\ }
-\DoxyCodeLine{00056\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_sqe\_set\_data64(sqe,\ \textcolor{keyword}{reinterpret\_cast<}uint64\_t\textcolor{keyword}{>}(\textcolor{keyword}{this}));}
-\DoxyCodeLine{00057\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ ret\ =\ io\_uring\_submit(global\_ring);}
-\DoxyCodeLine{00058\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (ret\ <\ 0)}
-\DoxyCodeLine{00059\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00060\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ submit\ SQE\ to\ io\_uring:\ "{}}\ +\ std::to\_string(-\/ret));}
-\DoxyCodeLine{00061\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00062\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00063\ }
-\DoxyCodeLine{00064\ \ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \textcolor{keywordtype}{void}\ perform\_io\_uring\_operation(\textcolor{keyword}{struct}\ io\_uring\_sqe\ *sqe)\ =\ 0;}
-\DoxyCodeLine{00065\ \ \ \ \ \};}
-\DoxyCodeLine{00066\ }
-\DoxyCodeLine{00067\ \ \ \ \ \textcolor{keyword}{using\ }io\_uring\_operation\ =\ std::function<void(\textcolor{keyword}{struct}\ io\_uring\_sqe\ *)>;}
-\DoxyCodeLine{00068\ }
-\DoxyCodeLine{00069\ \ \ \ \ \textcolor{keyword}{inline}\ \textcolor{keyword}{auto}\ create\_io\_uring\_event(io\_uring\_operation\ op,\ std::stop\_token\ token\ =\ \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\_stop\_token}}())}
-\DoxyCodeLine{00070\ \ \ \ \ \{}
-\DoxyCodeLine{00071\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_runtime\_event\_impl\ :\ \textcolor{keyword}{public}\ io\_uring\_runtime\_event}
-\DoxyCodeLine{00072\ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00073\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_runtime\_event\_impl(io\_uring\_operation\ op,\ std::stop\_token\ token)}
-\DoxyCodeLine{00074\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ :\ io\_uring\_runtime\_event(token),\ operation(std::move(op))}
-\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00076\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00077\ }
-\DoxyCodeLine{00078\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ perform\_io\_uring\_operation(\textcolor{keyword}{struct}\ io\_uring\_sqe\ *sqe)\textcolor{keyword}{\ override}}
-\DoxyCodeLine{00079\ \textcolor{keyword}{\ \ \ \ \ \ \ \ \ \ \ \ }\{}
-\DoxyCodeLine{00080\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ operation(sqe);}
-\DoxyCodeLine{00081\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00082\ }
-\DoxyCodeLine{00083\ \ \ \ \ \ \ \ \ \textcolor{keyword}{private}:}
-\DoxyCodeLine{00084\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_operation\ operation;}
-\DoxyCodeLine{00085\ \ \ \ \ \ \ \ \ \};}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#ifdef\ \_\_linux\_\_}}
+\DoxyCodeLine{00009\ }
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ <\mbox{\hyperlink{runtime_8hpp}{webcraft/async/runtime.hpp}}>}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ <liburing.h>}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ <exception>}}
+\DoxyCodeLine{00013\ }
+\DoxyCodeLine{00014\ \textcolor{keyword}{namespace\ }webcraft::async::detail::linux}
+\DoxyCodeLine{00015\ \{}
+\DoxyCodeLine{00016\ }
+\DoxyCodeLine{00017\ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_runtime\_event\ :\ \textcolor{keyword}{public}\ webcraft::async::detail::runtime\_event}
+\DoxyCodeLine{00018\ \ \ \ \ \{}
+\DoxyCodeLine{00019\ \ \ \ \ \ \ \ \ std::mutex\ \&io\_uring\_mutex;}
+\DoxyCodeLine{00020\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\ *global\_ring;}
+\DoxyCodeLine{00021\ }
+\DoxyCodeLine{00022\ \ \ \ \ \ \ \ \ io\_uring\_runtime\_event(std::stop\_token\ token)}
+\DoxyCodeLine{00023\ \ \ \ \ \ \ \ \ \ \ \ \ :\ \mbox{\hyperlink{namespacewebcraft}{webcraft}}::async::detail::runtime\_event(token),\ io\_uring\_mutex(\mbox{\hyperlink{namespacewebcraft}{webcraft}}::async::detail::get\_runtime\_mutex())}
+\DoxyCodeLine{00024\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00025\ \ \ \ \ \ \ \ \ \ \ \ \ global\_ring\ =\ \textcolor{keyword}{reinterpret\_cast<}io\_uring\ *\textcolor{keyword}{>}(webcraft::async::detail::get\_native\_handle());}
+\DoxyCodeLine{00026\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00027\ }
+\DoxyCodeLine{00028\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_native\_cancel()\textcolor{keyword}{\ override}}
+\DoxyCodeLine{00029\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
+\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \ \ \ \ std::lock\_guard<std::mutex>\ lock(io\_uring\_mutex);}
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_sqe\ *sqe\ =\ io\_uring\_get\_sqe(global\_ring);}
+\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!sqe)}
+\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00034\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ get\ SQE\ from\ io\_uring"{}});}
+\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00036\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_prep\_cancel64(sqe,\ get\_user\_data(),\ IORING\_ASYNC\_CANCEL\_USERDATA);}
+\DoxyCodeLine{00037\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ ret\ =\ io\_uring\_submit(global\_ring);}
+\DoxyCodeLine{00038\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (ret\ <\ 0)}
+\DoxyCodeLine{00039\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ submit\ SQE\ to\ io\_uring:\ "{}}\ +\ std::to\_string(-\/ret));}
+\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00043\ }
+\DoxyCodeLine{00044\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_start()\textcolor{keyword}{\ override}}
+\DoxyCodeLine{00045\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
+\DoxyCodeLine{00046\ \ \ \ \ \ \ \ \ \ \ \ \ std::lock\_guard<std::mutex>\ lock(io\_uring\_mutex);}
+\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_sqe\ *sqe\ =\ io\_uring\_get\_sqe(global\_ring);}
+\DoxyCodeLine{00048\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!sqe)}
+\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00050\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ get\ SQE\ from\ io\_uring"{}});}
+\DoxyCodeLine{00051\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00052\ }
+\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \ \ \ \ perform\_io\_uring\_operation(sqe);}
+\DoxyCodeLine{00054\ }
+\DoxyCodeLine{00055\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_sqe\_set\_data64(sqe,\ get\_user\_data());}
+\DoxyCodeLine{00056\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ ret\ =\ io\_uring\_submit(global\_ring);}
+\DoxyCodeLine{00057\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (ret\ <\ 0)}
+\DoxyCodeLine{00058\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00059\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ submit\ SQE\ to\ io\_uring:\ "{}}\ +\ std::to\_string(-\/ret));}
+\DoxyCodeLine{00060\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00061\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00062\ }
+\DoxyCodeLine{00063\ \ \ \ \ \ \ \ \ uint64\_t\ get\_user\_data()\textcolor{keyword}{\ const}}
+\DoxyCodeLine{00064\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
+\DoxyCodeLine{00065\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ \textcolor{keyword}{reinterpret\_cast<}uint64\_t\textcolor{keyword}{>}((webcraft::async::detail::runtime\_callback\ *)\textcolor{keyword}{this});}
+\DoxyCodeLine{00066\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00067\ }
+\DoxyCodeLine{00068\ \ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \textcolor{keywordtype}{void}\ perform\_io\_uring\_operation(\textcolor{keyword}{struct}\ io\_uring\_sqe\ *sqe)\ =\ 0;}
+\DoxyCodeLine{00069\ \ \ \ \ \};}
+\DoxyCodeLine{00070\ }
+\DoxyCodeLine{00071\ \ \ \ \ \textcolor{keyword}{using\ }io\_uring\_operation\ =\ std::function<void(\textcolor{keyword}{struct}\ io\_uring\_sqe\ *)>;}
+\DoxyCodeLine{00072\ }
+\DoxyCodeLine{00073\ \ \ \ \ \textcolor{keyword}{inline}\ \textcolor{keyword}{auto}\ create\_io\_uring\_event(io\_uring\_operation\ op,\ std::stop\_token\ token\ =\ \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{get\_stop\_token}}())}
+\DoxyCodeLine{00074\ \ \ \ \ \{}
+\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }io\_uring\_runtime\_event\_impl\ :\ \textcolor{keyword}{public}\ io\_uring\_runtime\_event}
+\DoxyCodeLine{00076\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00077\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_runtime\_event\_impl(io\_uring\_operation\ op,\ std::stop\_token\ token)}
+\DoxyCodeLine{00078\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ :\ io\_uring\_runtime\_event(token),\ operation(std::move(op))}
+\DoxyCodeLine{00079\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00080\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00081\ }
+\DoxyCodeLine{00082\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ perform\_io\_uring\_operation(\textcolor{keyword}{struct}\ io\_uring\_sqe\ *sqe)\textcolor{keyword}{\ override}}
+\DoxyCodeLine{00083\ \textcolor{keyword}{\ \ \ \ \ \ \ \ \ \ \ \ }\{}
+\DoxyCodeLine{00084\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ operation(sqe);}
+\DoxyCodeLine{00085\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
 \DoxyCodeLine{00086\ }
-\DoxyCodeLine{00087\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ std::make\_unique<io\_uring\_runtime\_event\_impl>(std::move(op),\ token);}
-\DoxyCodeLine{00088\ \ \ \ \ \}}
-\DoxyCodeLine{00089\ \}}
-\DoxyCodeLine{00090\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{00087\ \ \ \ \ \ \ \ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00088\ \ \ \ \ \ \ \ \ \ \ \ \ io\_uring\_operation\ operation;}
+\DoxyCodeLine{00089\ \ \ \ \ \ \ \ \ \};}
+\DoxyCodeLine{00090\ }
+\DoxyCodeLine{00091\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ std::make\_unique<io\_uring\_runtime\_event\_impl>(std::move(op),\ token);}
+\DoxyCodeLine{00092\ \ \ \ \ \}}
+\DoxyCodeLine{00093\ \}}
+\DoxyCodeLine{00094\ \textcolor{preprocessor}{\#endif}}
 
 \end{DoxyCode}

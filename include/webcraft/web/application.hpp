@@ -1,0 +1,17 @@
+#pragma once
+
+///////////////////////////////////////////////////////////////////////////////
+// Copyright (c) Aditya Rao
+// Licenced under MIT license. See LICENSE.txt for details.
+///////////////////////////////////////////////////////////////////////////////
+
+#include <unordered_map>
+#include <webcraft/async/async.hpp>
+
+// https://www.rfc-editor.org/rfc/rfc9110.html
+
+namespace webcraft::web
+{
+
+
+}

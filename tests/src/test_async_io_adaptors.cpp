@@ -52,9 +52,9 @@ private:
     std::queue<T> received_values;
 
 public:
-    task<bool> send(T &&value)
+    task<bool> send(T value)
     {
-        received_values.push(std::move(value));
+        received_values.push(value);
         co_return true;
     }
 

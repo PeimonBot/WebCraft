@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #ifdef __linux__
 
 #include <webcraft/async/runtime.hpp>
@@ -34,7 +33,7 @@ namespace webcraft::async::detail::linux
             {
                 throw std::runtime_error("Failed to get SQE from io_uring");
             }
-            io_uring_prep_cancel64(sqe, reinterpret_cast<uint64_t>(this), IORING_ASYNC_CANCEL_USERDATA);
+            io_uring_prep_cancel64(sqe, get_user_data(), IORING_ASYNC_CANCEL_USERDATA);
             int ret = io_uring_submit(global_ring);
             if (ret < 0)
             {
@@ -53,12 +52,17 @@ namespace webcraft::async::detail::linux
 
             perform_io_uring_operation(sqe);
 
-            io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(this));
+            io_uring_sqe_set_data64(sqe, get_user_data());
             int ret = io_uring_submit(global_ring);
             if (ret < 0)
             {
                 throw std::runtime_error("Failed to submit SQE to io_uring: " + std::to_string(-ret));
             }
+        }
+
+        uint64_t get_user_data() const
+        {
+            return reinterpret_cast<uint64_t>((webcraft::async::detail::runtime_callback *)this);
         }
 
         virtual void perform_io_uring_operation(struct io_uring_sqe *sqe) = 0;

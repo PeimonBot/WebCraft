@@ -17,10 +17,10 @@ namespace webcraft::async::detail::windows
 {
     struct overlapped_event : public OVERLAPPED
     {
-        webcraft::async::detail::runtime_event *event;
+        webcraft::async::detail::runtime_callback *event;
         bool completed_sync{false};
 
-        overlapped_event(webcraft::async::detail::runtime_event *ev) : event(ev)
+        overlapped_event(webcraft::async::detail::runtime_callback *ev) : event(ev)
         {
             ZeroMemory(this, sizeof(OVERLAPPED));
         }

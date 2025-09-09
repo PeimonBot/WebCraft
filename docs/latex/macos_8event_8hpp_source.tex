@@ -7,80 +7,79 @@
 \DoxyCodeLine{00004\ \textcolor{comment}{//\ Copyright\ (c)\ Aditya\ Rao}}
 \DoxyCodeLine{00005\ \textcolor{comment}{//\ Licenced\ under\ MIT\ license.\ See\ LICENSE.txt\ for\ details.}}
 \DoxyCodeLine{00007\ }
-\DoxyCodeLine{00008\ }
-\DoxyCodeLine{00009\ \textcolor{preprocessor}{\#ifdef\ \_\_APPLE\_\_}}
-\DoxyCodeLine{00010\ }
-\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ <atomic>}}
-\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ <\mbox{\hyperlink{runtime_8hpp}{webcraft/async/runtime.hpp}}>}}
-\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ <sys/event.h>}}
-\DoxyCodeLine{00014\ \textcolor{preprocessor}{\#include\ <unistd.h>}}
-\DoxyCodeLine{00015\ }
-\DoxyCodeLine{00016\ \textcolor{keyword}{namespace\ }webcraft::async::detail::macos}
-\DoxyCodeLine{00017\ \{}
-\DoxyCodeLine{00018\ }
-\DoxyCodeLine{00019\ \ \ \ \ \textcolor{keyword}{struct\ }kqueue\_runtime\_event\ :\ \textcolor{keyword}{public}\ webcraft::async::detail::runtime\_event}
-\DoxyCodeLine{00020\ \ \ \ \ \{}
-\DoxyCodeLine{00021\ \ \ \ \ \textcolor{keyword}{private}:}
-\DoxyCodeLine{00022\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{bool}\ cancelled\{\textcolor{keyword}{false}\};}
-\DoxyCodeLine{00023\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }kevent\ event;}
-\DoxyCodeLine{00024\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ queue;}
-\DoxyCodeLine{00025\ }
-\DoxyCodeLine{00026\ \ \ \ \ \textcolor{keyword}{public}:}
-\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ kqueue\_runtime\_event(std::stop\_token\ token)\ :\ runtime\_event(token)}
-\DoxyCodeLine{00028\ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00029\ \ \ \ \ \ \ \ \ \ \ \ \ queue\ =\ (int)webcraft::async::detail::get\_native\_handle();}
-\DoxyCodeLine{00030\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00031\ }
-\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \string~kqueue\_runtime\_event()}
-\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00034\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!cancelled)}
-\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ try\_native\_cancel();}
-\DoxyCodeLine{00036\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00037\ }
-\DoxyCodeLine{00038\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_native\_cancel()\textcolor{keyword}{\ override}}
-\DoxyCodeLine{00039\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
-\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ remove\ yield\ event\ listener}}
-\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \ \ \ \ EV\_SET(\&event,\ event.ident,\ event.filter,\ EV\_DELETE,\ 0,\ 0,\ \textcolor{keyword}{nullptr});}
-\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ result\ =\ kevent(queue,\ \&event,\ 1,\ \textcolor{keyword}{nullptr},\ 0,\ \textcolor{keyword}{nullptr});}
-\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (result\ <\ 0)}
-\DoxyCodeLine{00044\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00045\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ remove\ event\ from\ kqueue:\ "{}}\ +\ std::to\_string(result));}
-\DoxyCodeLine{00046\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \ \ \ \ cancelled\ =\ \textcolor{keyword}{true};}
-\DoxyCodeLine{00048\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00049\ }
-\DoxyCodeLine{00050\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_start()\textcolor{keyword}{\ override}}
-\DoxyCodeLine{00051\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
-\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ listen\ to\ the\ yield\ event}}
-\DoxyCodeLine{00053\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ *data\ =\ \textcolor{keyword}{this};}
-\DoxyCodeLine{00054\ }
-\DoxyCodeLine{00055\ \ \ \ \ \ \ \ \ \ \ \ \ prep\_event(\&event,\ data);}
-\DoxyCodeLine{00056\ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00057\ }
-\DoxyCodeLine{00058\ \ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \textcolor{keywordtype}{void}\ prep\_event(\textcolor{keyword}{struct}\ kevent\ *event,\ \textcolor{keywordtype}{void}\ *data)\ =\ 0;}
-\DoxyCodeLine{00059\ \ \ \ \ \};}
-\DoxyCodeLine{00060\ }
-\DoxyCodeLine{00061\ \ \ \ \ \textcolor{keyword}{using\ }kqueue\_operation\ =\ std::function<void(\textcolor{keyword}{struct}\ kevent\ *,\ \textcolor{keywordtype}{void}\ *)>;}
-\DoxyCodeLine{00062\ }
-\DoxyCodeLine{00063\ \ \ \ \ \textcolor{keyword}{inline}\ \textcolor{keyword}{auto}\ create\_kqueue\_event(kqueue\_operation\ op,\ std::stop\_token\ token\ =\ \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{webcraft::async::get\_stop\_token}}())}
-\DoxyCodeLine{00064\ \ \ \ \ \{}
-\DoxyCodeLine{00065\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }kqueue\_runtime\_event\_impl\ :\ \textcolor{keyword}{public}\ kqueue\_runtime\_event}
-\DoxyCodeLine{00066\ \ \ \ \ \ \ \ \ \{}
-\DoxyCodeLine{00067\ \ \ \ \ \ \ \ \ \ \ \ \ kqueue\_runtime\_event\_impl(kqueue\_operation\ op,\ std::stop\_token\ token)\ :\ op(op),\ kqueue\_runtime\_event(token)\ \{\}}
-\DoxyCodeLine{00068\ }
-\DoxyCodeLine{00069\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ prep\_event(\textcolor{keyword}{struct}\ kevent\ *event,\ \textcolor{keywordtype}{void}\ *data)\textcolor{keyword}{\ override}}
-\DoxyCodeLine{00070\ \textcolor{keyword}{\ \ \ \ \ \ \ \ \ \ \ \ }\{}
-\DoxyCodeLine{00071\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ op(event,\ data);}
-\DoxyCodeLine{00072\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
-\DoxyCodeLine{00073\ }
-\DoxyCodeLine{00074\ \ \ \ \ \ \ \ \ \textcolor{keyword}{private}:}
-\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \ \ \ \ kqueue\_operation\ op;}
-\DoxyCodeLine{00076\ \ \ \ \ \ \ \ \ \};}
-\DoxyCodeLine{00077\ }
-\DoxyCodeLine{00078\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ std::make\_unique<kqueue\_runtime\_event\_impl>(op,\ token);}
-\DoxyCodeLine{00079\ \ \ \ \ \}}
-\DoxyCodeLine{00080\ \}}
-\DoxyCodeLine{00081\ }
-\DoxyCodeLine{00082\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{00008\ \textcolor{preprocessor}{\#ifdef\ \_\_APPLE\_\_}}
+\DoxyCodeLine{00009\ }
+\DoxyCodeLine{00010\ \textcolor{preprocessor}{\#include\ <atomic>}}
+\DoxyCodeLine{00011\ \textcolor{preprocessor}{\#include\ <\mbox{\hyperlink{runtime_8hpp}{webcraft/async/runtime.hpp}}>}}
+\DoxyCodeLine{00012\ \textcolor{preprocessor}{\#include\ <sys/event.h>}}
+\DoxyCodeLine{00013\ \textcolor{preprocessor}{\#include\ <unistd.h>}}
+\DoxyCodeLine{00014\ }
+\DoxyCodeLine{00015\ \textcolor{keyword}{namespace\ }webcraft::async::detail::macos}
+\DoxyCodeLine{00016\ \{}
+\DoxyCodeLine{00017\ }
+\DoxyCodeLine{00018\ \ \ \ \ \textcolor{keyword}{struct\ }kqueue\_runtime\_event\ :\ \textcolor{keyword}{public}\ webcraft::async::detail::runtime\_event}
+\DoxyCodeLine{00019\ \ \ \ \ \{}
+\DoxyCodeLine{00020\ \ \ \ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00021\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{bool}\ cancelled\{\textcolor{keyword}{false}\};}
+\DoxyCodeLine{00022\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }kevent\ event;}
+\DoxyCodeLine{00023\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ queue;}
+\DoxyCodeLine{00024\ }
+\DoxyCodeLine{00025\ \ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{00026\ \ \ \ \ \ \ \ \ kqueue\_runtime\_event(std::stop\_token\ token)\ :\ runtime\_event(token)}
+\DoxyCodeLine{00027\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00028\ \ \ \ \ \ \ \ \ \ \ \ \ queue\ =\ (int)webcraft::async::detail::get\_native\_handle();}
+\DoxyCodeLine{00029\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00030\ }
+\DoxyCodeLine{00031\ \ \ \ \ \ \ \ \ \string~kqueue\_runtime\_event()}
+\DoxyCodeLine{00032\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00033\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!cancelled)}
+\DoxyCodeLine{00034\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ try\_native\_cancel();}
+\DoxyCodeLine{00035\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00036\ }
+\DoxyCodeLine{00037\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_native\_cancel()\textcolor{keyword}{\ override}}
+\DoxyCodeLine{00038\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
+\DoxyCodeLine{00039\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ remove\ yield\ event\ listener}}
+\DoxyCodeLine{00040\ \ \ \ \ \ \ \ \ \ \ \ \ EV\_SET(\&event,\ event.ident,\ event.filter,\ EV\_DELETE,\ 0,\ 0,\ \textcolor{keyword}{nullptr});}
+\DoxyCodeLine{00041\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{int}\ result\ =\ kevent(queue,\ \&event,\ 1,\ \textcolor{keyword}{nullptr},\ 0,\ \textcolor{keyword}{nullptr});}
+\DoxyCodeLine{00042\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (result\ <\ 0)}
+\DoxyCodeLine{00043\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00044\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Failed\ to\ remove\ event\ from\ kqueue:\ "{}}\ +\ std::to\_string(result));}
+\DoxyCodeLine{00045\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00046\ \ \ \ \ \ \ \ \ \ \ \ \ cancelled\ =\ \textcolor{keyword}{true};}
+\DoxyCodeLine{00047\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00048\ }
+\DoxyCodeLine{00049\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ try\_start()\textcolor{keyword}{\ override}}
+\DoxyCodeLine{00050\ \textcolor{keyword}{\ \ \ \ \ \ \ \ }\{}
+\DoxyCodeLine{00051\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ listen\ to\ the\ yield\ event}}
+\DoxyCodeLine{00052\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ *data\ =\ (webcraft::async::detail::runtime\_callback\ *)\textcolor{keyword}{this};}
+\DoxyCodeLine{00053\ }
+\DoxyCodeLine{00054\ \ \ \ \ \ \ \ \ \ \ \ \ prep\_event(\&event,\ data);}
+\DoxyCodeLine{00055\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00056\ }
+\DoxyCodeLine{00057\ \ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \textcolor{keywordtype}{void}\ prep\_event(\textcolor{keyword}{struct}\ kevent\ *event,\ \textcolor{keywordtype}{void}\ *data)\ =\ 0;}
+\DoxyCodeLine{00058\ \ \ \ \ \};}
+\DoxyCodeLine{00059\ }
+\DoxyCodeLine{00060\ \ \ \ \ \textcolor{keyword}{using\ }kqueue\_operation\ =\ std::function<void(\textcolor{keyword}{struct}\ kevent\ *,\ \textcolor{keywordtype}{void}\ *)>;}
+\DoxyCodeLine{00061\ }
+\DoxyCodeLine{00062\ \ \ \ \ \textcolor{keyword}{inline}\ \textcolor{keyword}{auto}\ create\_kqueue\_event(kqueue\_operation\ op,\ std::stop\_token\ token\ =\ \mbox{\hyperlink{namespacewebcraft_1_1async_ab1927641273e522291a9aabe3d44688f}{webcraft::async::get\_stop\_token}}())}
+\DoxyCodeLine{00063\ \ \ \ \ \{}
+\DoxyCodeLine{00064\ \ \ \ \ \ \ \ \ \textcolor{keyword}{struct\ }kqueue\_runtime\_event\_impl\ :\ \textcolor{keyword}{public}\ kqueue\_runtime\_event}
+\DoxyCodeLine{00065\ \ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{00066\ \ \ \ \ \ \ \ \ \ \ \ \ kqueue\_runtime\_event\_impl(kqueue\_operation\ op,\ std::stop\_token\ token)\ :\ op(op),\ kqueue\_runtime\_event(token)\ \{\}}
+\DoxyCodeLine{00067\ }
+\DoxyCodeLine{00068\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ prep\_event(\textcolor{keyword}{struct}\ kevent\ *event,\ \textcolor{keywordtype}{void}\ *data)\textcolor{keyword}{\ override}}
+\DoxyCodeLine{00069\ \textcolor{keyword}{\ \ \ \ \ \ \ \ \ \ \ \ }\{}
+\DoxyCodeLine{00070\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ op(event,\ data);}
+\DoxyCodeLine{00071\ \ \ \ \ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{00072\ }
+\DoxyCodeLine{00073\ \ \ \ \ \ \ \ \ \textcolor{keyword}{private}:}
+\DoxyCodeLine{00074\ \ \ \ \ \ \ \ \ \ \ \ \ kqueue\_operation\ op;}
+\DoxyCodeLine{00075\ \ \ \ \ \ \ \ \ \};}
+\DoxyCodeLine{00076\ }
+\DoxyCodeLine{00077\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ std::make\_unique<kqueue\_runtime\_event\_impl>(op,\ token);}
+\DoxyCodeLine{00078\ \ \ \ \ \}}
+\DoxyCodeLine{00079\ \}}
+\DoxyCodeLine{00080\ }
+\DoxyCodeLine{00081\ \textcolor{preprocessor}{\#endif}}
 
 \end{DoxyCode}

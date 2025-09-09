@@ -59,7 +59,7 @@ namespace \mbox{\hyperlink{namespacewebcraft_1_1async}{webcraft\+::async}}
 \DoxyCodeLine{\ \ \ \ \textcolor{keyword}{auto}\ \_it\ =\ \textcolor{keyword}{co\_await}\ gen.begin();\ \ \ \ \ \(\backslash\)}
 \DoxyCodeLine{\ \ \ \ while\ (\_it\ !=\ gen.end())\ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}
 \DoxyCodeLine{\ \ \ \ \{\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}
-\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ \&\&value\ =\ std::move(*\_it);\ \ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{auto}\ value\ =\ *\_it;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}
 \DoxyCodeLine{\ \ \ \ \ \ \ \ code;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}
 \DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ ++\_it;\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \(\backslash\)}
 \DoxyCodeLine{\ \ \ \ \}}

@@ -84,9 +84,8 @@ namespace webcraft::async::io::adaptors
         return transform<T>([&str](async_generator<T> gen) -> async_generator<T>
                             { for_each_async(value, gen,
                                              {
-                                                 T backup = value;
-                                                 co_await str.send(std::move(value)); // Send a copy of value
-                                                 co_yield std::move(backup);
+                                                 co_await str.send(value); // Send a copy of value
+                                                 co_yield value;
                                              }); });
     }
 

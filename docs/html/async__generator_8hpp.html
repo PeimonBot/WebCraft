@@ -167,22 +167,25 @@ This graph shows which files directly or indirectly include this file:</div>
 <div class="dyncontent">
 <div class="center"><img src="async__generator_8hpp__dep__incl.png" border="0" usemap="#ainclude_2webcraft_2async_2async__generator_8hppdep" alt=""/></div>
 <map name="ainclude_2webcraft_2async_2async__generator_8hppdep" id="ainclude_2webcraft_2async_2async__generator_8hppdep">
-<area shape="rect" title=" " alt="" coords="103,5,273,45"/>
-<area shape="rect" href="async_8hpp.html" title=" " alt="" coords="5,93,176,133"/>
-<area shape="poly" title=" " alt="" coords="158,56,114,95,110,91,155,52"/>
-<area shape="rect" href="core_8hpp.html" title=" " alt="" coords="200,93,371,133"/>
-<area shape="poly" title=" " alt="" coords="221,52,266,91,262,95,218,56"/>
-<area shape="rect" href="adaptors_8hpp.html" title=" " alt="" coords="16,181,187,221"/>
-<area shape="poly" title=" " alt="" coords="234,142,143,184,140,179,231,137"/>
-<area shape="rect" href="io_8hpp.html" title=" " alt="" coords="200,269,371,309"/>
-<area shape="poly" title=" " alt="" coords="267,146,252,182,249,201,252,221,262,246,274,268,270,271,257,248,247,222,243,201,247,181,262,144"/>
-<area shape="rect" href="fs_8hpp.html" title=" " alt="" coords="261,181,432,221"/>
-<area shape="poly" title=" " alt="" coords="309,143,335,180,331,183,305,146"/>
-<area shape="rect" href="socket_8hpp.html" title=" " alt="" coords="456,181,627,221"/>
-<area shape="poly" title=" " alt="" coords="355,135,486,179,484,184,354,140"/>
-<area shape="poly" title=" " alt="" coords="155,225,246,267,244,272,153,230"/>
-<area shape="poly" title=" " alt="" coords="327,234,301,271,297,268,323,231"/>
-<area shape="poly" title=" " alt="" coords="473,228,342,272,341,267,471,223"/>
+<area shape="rect" title=" " alt="" coords="21,5,192,45"/>
+<area shape="rect" href="async_8hpp.html" title=" " alt="" coords="21,357,192,397"/>
+<area shape="poly" title=" " alt="" coords="83,57,44,113,25,147,12,182,8,207,11,232,18,257,30,281,59,323,88,355,84,359,55,327,25,284,13,259,5,234,3,207,7,181,21,144,39,110,79,54"/>
+<area shape="rect" href="core_8hpp.html" title=" " alt="" coords="144,93,315,133"/>
+<area shape="poly" title=" " alt="" coords="146,51,204,91,201,95,143,55"/>
+<area shape="rect" href="application_8hpp.html" title=" " alt="" coords="27,445,187,485"/>
+<area shape="poly" title=" " alt="" coords="109,411,109,445,104,445,104,411"/>
+<area shape="rect" href="adaptors_8hpp.html" title=" " alt="" coords="21,181,192,221"/>
+<area shape="poly" title=" " alt="" coords="192,143,135,183,132,179,189,139"/>
+<area shape="rect" href="io_8hpp.html" title=" " alt="" coords="144,269,315,309"/>
+<area shape="poly" title=" " alt="" coords="232,147,232,269,227,269,227,147"/>
+<area shape="rect" href="fs_8hpp.html" title=" " alt="" coords="267,181,437,221"/>
+<area shape="poly" title=" " alt="" coords="269,139,326,179,323,183,266,143"/>
+<area shape="rect" href="socket_8hpp.html" title=" " alt="" coords="461,181,632,221"/>
+<area shape="poly" title=" " alt="" coords="313,134,478,179,476,184,312,140"/>
+<area shape="poly" title=" " alt="" coords="146,227,204,267,201,271,143,231"/>
+<area shape="poly" title=" " alt="" coords="192,319,135,359,132,355,189,315"/>
+<area shape="poly" title=" " alt="" coords="315,231,258,271,255,267,312,227"/>
+<area shape="poly" title=" " alt="" coords="464,228,299,272,298,267,463,222"/>
 </map>
 </div>
 </div>
@@ -242,7 +245,7 @@ Macros</h2></td></tr>
 <b>Value:</b><div class="fragment"><div class="line">    <span class="keyword">auto</span> _it = <span class="keyword">co_await</span> gen.begin();     \</div>
 <div class="line">    while (_it != gen.end())             \</div>
 <div class="line">    {                                    \</div>
-<div class="line">        <span class="keyword">auto</span> &amp;&amp;value = std::move(*_it);  \</div>
+<div class="line">        <span class="keyword">auto</span> value = *_it;               \</div>
 <div class="line">        code;                            \</div>
 <div class="line">        <span class="keyword">co_await</span> ++_it;                  \</div>
 <div class="line">    }</div>

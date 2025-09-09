@@ -538,7 +538,7 @@ $(document).ready(function(){initNavTree('async__generator_8hpp_source.html','')
 <div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span><span class="preprocessor">    auto _it = co_await gen.begin();     \</span></div>
 <div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span><span class="preprocessor">    while (_it != gen.end())             \</span></div>
 <div class="line"><a id="l00425" name="l00425"></a><span class="lineno">  425</span><span class="preprocessor">    {                                    \</span></div>
-<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span><span class="preprocessor">        auto &amp;&amp;value = std::move(*_it);  \</span></div>
+<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span><span class="preprocessor">        auto value = *_it;               \</span></div>
 <div class="line"><a id="l00427" name="l00427"></a><span class="lineno">  427</span><span class="preprocessor">        code;                            \</span></div>
 <div class="line"><a id="l00428" name="l00428"></a><span class="lineno">  428</span><span class="preprocessor">        co_await ++_it;                  \</span></div>
 <div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span><span class="preprocessor">    }</span></div>
