@@ -122,10 +122,10 @@ Async readable streams</h2>
 Async writable streams</h2>
 <p>The definition is shown below:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> R&gt;</div>
-<div class="line"><span class="keyword">concept </span>async_writable_stream = std::is_move_constructible_v&lt;Derived&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream, R &amp;&amp;value) {</div>
-<div class="line">    { stream.send(std::forward&lt;R&gt;(value)) } -&gt; std::same_as&lt;webcraft::async::task&lt;bool&gt;&gt;;</div>
+<div class="line"><span class="keyword">concept </span>async_writable_stream = std::is_move_constructible_v&lt;Derived&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream, R value) {</div>
+<div class="line">    { stream.send(value) } -&gt; std::same_as&lt;webcraft::async::task&lt;bool&gt;&gt;;</div>
 <div class="line">};</div>
-</div><!-- fragment --><p>Any type which models <code>async_writable_stream&lt;Derived, R&gt;</code> must have a function <code>send(R&amp;&amp;)</code> which takes an rvalue reference for R (to be moved into the stream) and returns a <code><a class="el" href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a>&lt;bool&gt;</code> indicating whether the value was successfully written.</p>
+</div><!-- fragment --><p>Any type which models <code>async_writable_stream&lt;Derived, R&gt;</code> must have a function <code>send(R)</code> which takes an rvalue reference for R (to be moved into the stream) and returns a <code><a class="el" href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a>&lt;bool&gt;</code> indicating whether the value was successfully written.</p>
 <p>There is also a buffered variant which allows you to write multiple objects at once (better for batching):</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Derived, <span class="keyword">typename</span> R&gt;</div>
 <div class="line"><span class="keyword">concept </span>async_buffered_writable_stream = async_writable_stream&lt;Derived, R&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream, std::span&lt;R&gt; buffer) {</div>

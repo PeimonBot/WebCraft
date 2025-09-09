@@ -331,18 +331,16 @@ Lastly, all API should be able to be visible on the brwoser side so CORS config 
 
 \end{DoxyCode}
 \hypertarget{md_include_2webcraft_2web_2README_autotoc_md88}{}\doxysubsection{\texorpdfstring{web\+\_\+route\+\_\+handler \& http\+\_\+route\+\_\+handler \& web\+\_\+socket\+\_\+handler \& error\+\_\+handler\+\_\+cb}{web\_route\_handler \& http\_route\_handler \& web\_socket\_handler \& error\_handler\_cb}}\label{md_include_2webcraft_2web_2README_autotoc_md88}
-Our callbacks. I find its kind of self explainatory. {\ttfamily web\+\_\+route\+\_\+handler}, {\ttfamily web\+\_\+socket\+\_\+handler}, {\ttfamily error\+\_\+handler\+\_\+cb} both accept a connection scoped context, a request which provides a readable stream, and a response which provides a writable stream. {\ttfamily web\+\_\+route\+\_\+handler} also provides a {\ttfamily next\+\_\+function} if one wants to move to the next chain of events. {\ttfamily http\+\_\+route\+\_\+handler} is different, it accepts a request which provides a payload and returns a response object. {\ttfamily error\+\_\+handler\+\_\+cb} provides an exception pointer object.
+Our callbacks. I find its kind of self explainatory. {\ttfamily web\+\_\+route\+\_\+handler}, {\ttfamily web\+\_\+socket\+\_\+handler}, {\ttfamily error\+\_\+handler\+\_\+cb} both accept a connection scoped context, a request which provides a readable stream, and a response which provides a writable stream. {\ttfamily web\+\_\+route\+\_\+handler} returns a boolean where true indicates the connection is successfully handled and we can stop and false indicates that the connection needs to be handled by the downstream handlers. {\ttfamily http\+\_\+route\+\_\+handler} is different, it accepts a request which provides a payload and returns a response object. {\ttfamily error\+\_\+handler\+\_\+cb} provides an exception pointer object.
 
 
 \begin{DoxyCode}{0}
-\DoxyCodeLine{\textcolor{keyword}{using\ }next\_function\ =\ std::function<task<void>()>;}
-\DoxyCodeLine{}
 \DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T>}
-\DoxyCodeLine{\textcolor{keyword}{concept\ }web\_route\_handler\_cb\ =\ \textcolor{keyword}{requires}(T\ t1,\ T\&\ t2,\ T\&\&\ t3,\ web\_server\_context\_view\ view,\ web\_request\ req,\ web\_response\ resp,\ next\_function\ func)}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }web\_route\_handler\_cb\ =\ \textcolor{keyword}{requires}(T\ t1,\ T\&\ t2,\ T\&\&\ t3,\ web\_server\_context\_view\ view,\ web\_request\ req,\ web\_response\ resp)}
 \DoxyCodeLine{\{}
-\DoxyCodeLine{\ \ \ \ \{\ t1(view,\ req,\ resp,\ func)\ \}\ -\/>\ std::same\_as<task<void>>;}
-\DoxyCodeLine{\ \ \ \ \{\ t2(view,\ req,\ resp,\ func)\ \}\ -\/>\ std::same\_as<task<void>>;}
-\DoxyCodeLine{\ \ \ \ \{\ t3(view,\ req,\ resp,\ func)\ \}\ -\/>\ std::same\_as<task<void>>;}
+\DoxyCodeLine{\ \ \ \ \{\ t1(view,\ req,\ resp,\ func)\ \}\ -\/>\ std::same\_as<task<bool>>;}
+\DoxyCodeLine{\ \ \ \ \{\ t2(view,\ req,\ resp,\ func)\ \}\ -\/>\ std::same\_as<task<bool>>;}
+\DoxyCodeLine{\ \ \ \ \{\ t3(view,\ req,\ resp,\ func)\ \}\ -\/>\ std::same\_as<task<bool>>;}
 \DoxyCodeLine{\};}
 \DoxyCodeLine{}
 \DoxyCodeLine{\textcolor{keyword}{template}<\textcolor{keyword}{typename}\ T>}

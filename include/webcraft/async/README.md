@@ -40,6 +40,8 @@ concept awaitable_t = has_member_operator_co_await_v<T> ||
 /// \brief Type alias to get the resume type of an awaitable
 template <awaitable_t T>
 using awaitable_resume_t = decltype(detail::get_awaiter(std::declval<T>()).await_resume());
+
+
 ```
 
 ## Task<T>

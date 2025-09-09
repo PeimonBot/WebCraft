@@ -46,14 +46,14 @@ The definition is shown below\+:
 
 \begin{DoxyCode}{0}
 \DoxyCodeLine{\textcolor{keyword}{template}\ <\textcolor{keyword}{typename}\ Derived,\ \textcolor{keyword}{typename}\ R>}
-\DoxyCodeLine{\textcolor{keyword}{concept\ }async\_writable\_stream\ =\ std::is\_move\_constructible\_v<Derived>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream,\ R\ \&\&value)\ \{}
-\DoxyCodeLine{\ \ \ \ \{\ stream.send(std::forward<R>(value))\ \}\ -\/>\ std::same\_as<webcraft::async::task<bool>>;}
+\DoxyCodeLine{\textcolor{keyword}{concept\ }async\_writable\_stream\ =\ std::is\_move\_constructible\_v<Derived>\ \&\&\ \textcolor{keyword}{requires}(Derived\ \&stream,\ R\ value)\ \{}
+\DoxyCodeLine{\ \ \ \ \{\ stream.send(value)\ \}\ -\/>\ std::same\_as<webcraft::async::task<bool>>;}
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
 
 
-Any type which models {\ttfamily async\+\_\+writable\+\_\+stream\texorpdfstring{$<$}{<}Derived, R\texorpdfstring{$>$}{>}} must have a function {\ttfamily send(R\&\&)} which takes an rvalue reference for R (to be moved into the stream) and returns a {\ttfamily \doxylink{classwebcraft_1_1async_1_1task}{webcraft\+::async\+::task}\texorpdfstring{$<$}{<}bool\texorpdfstring{$>$}{>}} indicating whether the value was successfully written.
+Any type which models {\ttfamily async\+\_\+writable\+\_\+stream\texorpdfstring{$<$}{<}Derived, R\texorpdfstring{$>$}{>}} must have a function {\ttfamily send(\+R)} which takes an rvalue reference for R (to be moved into the stream) and returns a {\ttfamily \doxylink{classwebcraft_1_1async_1_1task}{webcraft\+::async\+::task}\texorpdfstring{$<$}{<}bool\texorpdfstring{$>$}{>}} indicating whether the value was successfully written.
 
 There is also a buffered variant which allows you to write multiple objects at once (better for batching)\+:
 

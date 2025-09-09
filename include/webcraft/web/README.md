@@ -357,17 +357,15 @@ struct cors_config
 
 ### web_route_handler & http_route_handler & web_socket_handler & error_handler_cb
 
-Our callbacks. I find its kind of self explainatory. `web_route_handler`, `web_socket_handler`, `error_handler_cb` both accept a connection scoped context, a request which provides a readable stream, and a response which provides a writable stream. `web_route_handler` also provides a `next_function` if one wants to move to the next chain of events. `http_route_handler` is different, it accepts a request which provides a payload and returns a response object. `error_handler_cb` provides an exception pointer object.
+Our callbacks. I find its kind of self explainatory. `web_route_handler`, `web_socket_handler`, `error_handler_cb` both accept a connection scoped context, a request which provides a readable stream, and a response which provides a writable stream. `web_route_handler` returns a boolean where true indicates the connection is successfully handled and we can stop and false indicates that the connection needs to be handled by the downstream handlers. `http_route_handler` is different, it accepts a request which provides a payload and returns a response object. `error_handler_cb` provides an exception pointer object.
 
 ```cpp
-using next_function = std::function<task<void>()>;
-
 template<typename T>
-concept web_route_handler_cb = requires(T t1, T& t2, T&& t3, web_server_context_view view, web_request req, web_response resp, next_function func)
+concept web_route_handler_cb = requires(T t1, T& t2, T&& t3, web_server_context_view view, web_request req, web_response resp)
 {
-    { t1(view, req, resp, func) } -> std::same_as<task<void>>;
-    { t2(view, req, resp, func) } -> std::same_as<task<void>>;
-    { t3(view, req, resp, func) } -> std::same_as<task<void>>;
+    { t1(view, req, resp, func) } -> std::same_as<task<bool>>;
+    { t2(view, req, resp, func) } -> std::same_as<task<bool>>;
+    { t3(view, req, resp, func) } -> std::same_as<task<bool>>;
 };
 
 template<typename T>

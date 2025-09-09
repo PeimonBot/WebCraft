@@ -45,12 +45,12 @@ The definition is shown below:
 
 ```cpp
 template <typename Derived, typename R>
-concept async_writable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream, R &&value) {
-    { stream.send(std::forward<R>(value)) } -> std::same_as<webcraft::async::task<bool>>;
+concept async_writable_stream = std::is_move_constructible_v<Derived> && requires(Derived &stream, R value) {
+    { stream.send(value) } -> std::same_as<webcraft::async::task<bool>>;
 };
 ```
 
-Any type which models `async_writable_stream<Derived, R>` must have a function `send(R&&)` which takes an rvalue reference for R (to be moved into the stream) and returns a `webcraft::async::task<bool>` indicating whether the value was successfully written.
+Any type which models `async_writable_stream<Derived, R>` must have a function `send(R)` which takes an rvalue reference for R (to be moved into the stream) and returns a `webcraft::async::task<bool>` indicating whether the value was successfully written.
 
 There is also a buffered variant which allows you to write multiple objects at once (better for batching):
 

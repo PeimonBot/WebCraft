@@ -365,15 +365,13 @@ web_route &amp; error_handler_route &amp; cors_config</h2>
 <div class="line">};</div>
 </div><!-- fragment --><h2><a class="anchor" id="autotoc_md88"></a>
 web_route_handler &amp; http_route_handler &amp; web_socket_handler &amp; error_handler_cb</h2>
-<p>Our callbacks. I find its kind of self explainatory. <code>web_route_handler</code>, <code>web_socket_handler</code>, <code>error_handler_cb</code> both accept a connection scoped context, a request which provides a readable stream, and a response which provides a writable stream. <code>web_route_handler</code> also provides a <code>next_function</code> if one wants to move to the next chain of events. <code>http_route_handler</code> is different, it accepts a request which provides a payload and returns a response object. <code>error_handler_cb</code> provides an exception pointer object.</p>
-<div class="fragment"><div class="line"><span class="keyword">using </span>next_function = std::function&lt;task&lt;void&gt;()&gt;;</div>
-<div class="line"> </div>
-<div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</div>
-<div class="line"><span class="keyword">concept </span>web_route_handler_cb = <span class="keyword">requires</span>(T t1, T&amp; t2, T&amp;&amp; t3, web_server_context_view view, web_request req, web_response resp, next_function func)</div>
+<p>Our callbacks. I find its kind of self explainatory. <code>web_route_handler</code>, <code>web_socket_handler</code>, <code>error_handler_cb</code> both accept a connection scoped context, a request which provides a readable stream, and a response which provides a writable stream. <code>web_route_handler</code> returns a boolean where true indicates the connection is successfully handled and we can stop and false indicates that the connection needs to be handled by the downstream handlers. <code>http_route_handler</code> is different, it accepts a request which provides a payload and returns a response object. <code>error_handler_cb</code> provides an exception pointer object.</p>
+<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</div>
+<div class="line"><span class="keyword">concept </span>web_route_handler_cb = <span class="keyword">requires</span>(T t1, T&amp; t2, T&amp;&amp; t3, web_server_context_view view, web_request req, web_response resp)</div>
 <div class="line">{</div>
-<div class="line">    { t1(view, req, resp, func) } -&gt; std::same_as&lt;task&lt;void&gt;&gt;;</div>
-<div class="line">    { t2(view, req, resp, func) } -&gt; std::same_as&lt;task&lt;void&gt;&gt;;</div>
-<div class="line">    { t3(view, req, resp, func) } -&gt; std::same_as&lt;task&lt;void&gt;&gt;;</div>
+<div class="line">    { t1(view, req, resp, func) } -&gt; std::same_as&lt;task&lt;bool&gt;&gt;;</div>
+<div class="line">    { t2(view, req, resp, func) } -&gt; std::same_as&lt;task&lt;bool&gt;&gt;;</div>
+<div class="line">    { t3(view, req, resp, func) } -&gt; std::same_as&lt;task&lt;bool&gt;&gt;;</div>
 <div class="line">};</div>
 <div class="line"> </div>
 <div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</div>
