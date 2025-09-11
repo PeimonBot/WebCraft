@@ -31,6 +31,7 @@ Features 1 & 2 are supported in version 0.5. The features 3 & 4 will be availabl
 10. If everything checks out with your code on all platforms on the CI runner, then I'll merge the PR, and you'll have contributed to WebCraft. Otherwise, I'll mention specific comments and will require you to revise your work before requesting my review again and running another build.
 
 To see what issues exist, check out the issues tab or checkout this link to see what I'm working on: [https://github.com/users/adityarao2005/projects/4](https://github.com/users/adityarao2005/projects/4).
+If you plan on working on an issue, add a comment saying that you're working on it.
 
 ## Using it in your project
 
