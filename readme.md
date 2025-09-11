@@ -14,4 +14,22 @@ The following compilers (and anything newer) are supported: GCC 13, MSVC 2022, C
 4. Raw request/response handling with streams vs composable stream adaptor based handling (both are supported by nature)
 5. TLS support for server and client side
 
-The features 1 & 2 are supported in v0.5. The features 3 & 4 will be available in v1. TLS may arrive in v2.
+Features 1 & 2 are supported in version 0.5. The features 3 & 4 will be available in v1. TLS may arrive in v2.
+
+
+## Contributing to it
+
+1. Make a fork of the repository
+2. Make sure your environment is set up (I use VS Code + Microsoft's C++ Extension Pack & CMake extensions). Ensure that a C++ compiler exists on your computer and is added to the PATH as well as cmake.
+3. Check out to a new branch and give it a good name
+4. Ensure `vcpkg` is setup. If `vcpkg` is empty then run this: `git submodule update --init --recursive`. Then enter `vcpkg` and run `bootstrap-vcpkg.bat` on Windows or `boostrap-vcpkg.sh` on Linux or MacOS.
+5. Configure your project (If VS Code is setup with CMake then it should be automatically done for you. Otherwise, run `cmake --preset linux-build` if on Linux, `cmake --preset windows-build` if on Windows, `cmake --preset macos-build` on MacOS.
+6. Build the library `cmake --build build`
+7. Run the tests `ctest --test-dir build --output-on-failure --verbose`
+8. Develop! Your environment is set up. Add your changes, perform steps 6 & 7 to make sure that your changes don't break anything.
+9. Once everything is properly checked. Push your changes to your fork and make a PR. Optionally: Get Copilot to review your changes before you get @adityarao2005 (me) to review it.
+10. If everything checks out with your code on all platforms on the CI runner, then I'll merge the PR, and you'll have contributed to WebCraft. Otherwise, I'll mention specific comments and will require you to revise your work before requesting my review again and running another build.
+
+## Using it in your project
+
+TBD. Currently, WebCraft does not have a port for vcpkg. If one of the contributors can add this library to vcpkg, that would be great (Here's how to do it. I think it should be intuitive enough: [https://learn.microsoft.com/en-gb/vcpkg/get_started/get-started-packaging?pivots=shell-bash](https://learn.microsoft.com/en-gb/vcpkg/get_started/get-started-packaging?pivots=shell-bash))!
