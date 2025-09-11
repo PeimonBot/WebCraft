@@ -30,6 +30,8 @@ Features 1 & 2 are supported in version 0.5. The features 3 & 4 will be availabl
 9. Once everything is properly checked. Push your changes to your fork and make a PR. Optionally: Get Copilot to review your changes before you get @adityarao2005 (me) to review it.
 10. If everything checks out with your code on all platforms on the CI runner, then I'll merge the PR, and you'll have contributed to WebCraft. Otherwise, I'll mention specific comments and will require you to revise your work before requesting my review again and running another build.
 
+To see what issues exist, check out the issues tab or checkout this link to see what I'm working on: [https://github.com/users/adityarao2005/projects/4](https://github.com/users/adityarao2005/projects/4).
+
 ## Using it in your project
 
 TBD. Currently, WebCraft does not have a port for vcpkg. If one of the contributors can add this library to vcpkg, that would be great (Here's how to do it. I think it should be intuitive enough: [https://learn.microsoft.com/en-gb/vcpkg/get_started/get-started-packaging?pivots=shell-bash](https://learn.microsoft.com/en-gb/vcpkg/get_started/get-started-packaging?pivots=shell-bash))!
