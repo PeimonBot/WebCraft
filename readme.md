@@ -24,7 +24,7 @@ Features 1 & 2 are supported in version 0.5. The features 3 & 4 will be availabl
 3. Check out to a new branch and give it a good name
 4. Ensure `vcpkg` is setup. If `vcpkg` is empty then run this: `git submodule update --init --recursive`. Then enter `vcpkg` and run `bootstrap-vcpkg.bat` on Windows or `boostrap-vcpkg.sh` on Linux or MacOS.
 5. Configure your project (If VS Code is setup with CMake then it should be automatically done for you. Otherwise, run `cmake --preset linux-build` if on Linux, `cmake --preset windows-build` if on Windows, `cmake --preset macos-build` on MacOS.
-6. Build the library `cmake --build build`
+6. Build the library: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug` && `cmake --build build --config Debug`
 7. Run the tests `ctest --test-dir build --output-on-failure --verbose`. To test a specific test, run ` ctest --test-dir build --output-on-failure --verbose -R "<<test regex>>"`
 8. Develop! Your environment is set up. Add your changes, perform steps 6 & 7 to make sure that your changes don't break anything.
 9. Once everything is properly checked. Push your changes to your fork and make a PR. Optionally: Get Copilot to review your changes before you get @adityarao2005 (me) to review it.
