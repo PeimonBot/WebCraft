@@ -1,5 +1,6 @@
 var NAVTREEINDEX3 =
 {
+"structwebcraft_1_1async_1_1async__event.html#a9c276db76c04e8a305b835cd42fbd40c":[5,0,1,0,1,3],
 "structwebcraft_1_1async_1_1async__event.html#adf1866b546a0dea665b1263e92c887ed":[5,0,1,0,1,2],
 "structwebcraft_1_1async_1_1async__event.html#adf1866b546a0dea665b1263e92c887ed":[3,0,1,0,1,2],
 "structwebcraft_1_1async_1_1async__event.html#ae7e0179966b8be6c58897b2e9713750d":[5,0,1,0,1,1],

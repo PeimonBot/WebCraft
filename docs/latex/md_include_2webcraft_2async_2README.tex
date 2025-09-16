@@ -1,8 +1,8 @@
 \chapter{Async Runtime Package\+: webcraft\+::async}
 \hypertarget{md_include_2webcraft_2async_2README}{}\label{md_include_2webcraft_2async_2README}\index{Async Runtime Package: webcraft::async@{Async Runtime Package: webcraft::async}}
-\label{md_include_2webcraft_2async_2README_autotoc_md40}%
-\Hypertarget{md_include_2webcraft_2async_2README_autotoc_md40}%
- \hypertarget{md_include_2webcraft_2async_2README_autotoc_md41}{}\doxysection{\texorpdfstring{Awaitable Concepts}{Awaitable Concepts}}\label{md_include_2webcraft_2async_2README_autotoc_md41}
+\label{md_include_2webcraft_2async_2README_autotoc_md41}%
+\Hypertarget{md_include_2webcraft_2async_2README_autotoc_md41}%
+ \hypertarget{md_include_2webcraft_2async_2README_autotoc_md42}{}\doxysection{\texorpdfstring{Awaitable Concepts}{Awaitable Concepts}}\label{md_include_2webcraft_2async_2README_autotoc_md42}
 The \doxylink{namespacewebcraft_1_1async}{webcraft\+::async} namespace provides comprehensive concepts for working with awaitables\+:
 
 
@@ -39,7 +39,7 @@ The \doxylink{namespacewebcraft_1_1async}{webcraft\+::async} namespace provides 
 \DoxyCodeLine{\textcolor{keyword}{using\ }\mbox{\hyperlink{namespacewebcraft_1_1async_a756c2303d30320ba433f8aa21010bd01}{awaitable\_resume\_t}}\ =\ \textcolor{keyword}{decltype}(detail::get\_awaiter(std::declval<T>()).await\_resume());}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md42}{}\doxysection{\texorpdfstring{Task$<$\+T$>$}{Task<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md42}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md43}{}\doxysection{\texorpdfstring{Task$<$\+T$>$}{Task<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md43}
 The fundamental coroutine type in {\ttfamily \doxylink{namespacewebcraft_1_1async}{webcraft\+::async}}. A {\ttfamily task\texorpdfstring{$<$}{<}T\texorpdfstring{$>$}{>}} represents an asynchronous operation that produces a result of type {\ttfamily T}. Implementation inspired by \href{https://github.com/microsoft/cpp-async}{\texttt{ microsoft/cpp-\/async}} and \href{https://github.com/lewissbaker/cppcoro/}{\texttt{ lewissbaker/cppcoro}}. The task type implementation is an eager task (it starts as soon as its constructed, similar to JS Promises)\+:
 
 
@@ -66,7 +66,7 @@ The fundamental coroutine type in {\ttfamily \doxylink{namespacewebcraft_1_1asyn
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md43}{}\doxysubsection{\texorpdfstring{Promise Type Specification}{Promise Type Specification}}\label{md_include_2webcraft_2async_2README_autotoc_md43}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md44}{}\doxysubsection{\texorpdfstring{Promise Type Specification}{Promise Type Specification}}\label{md_include_2webcraft_2async_2README_autotoc_md44}
 The {\ttfamily task\+\_\+promise\texorpdfstring{$<$}{<}T\texorpdfstring{$>$}{>}} type defines the coroutine promise interface that controls the behavior of task coroutines\+:
 
 
@@ -118,8 +118,8 @@ The {\ttfamily task\+\_\+promise\texorpdfstring{$<$}{<}T\texorpdfstring{$>$}{>}}
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md44}{}\doxysection{\texorpdfstring{Synchronization Primitives}{Synchronization Primitives}}\label{md_include_2webcraft_2async_2README_autotoc_md44}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md45}{}\doxysubsection{\texorpdfstring{event\+\_\+signal}{event\_signal}}\label{md_include_2webcraft_2async_2README_autotoc_md45}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md45}{}\doxysection{\texorpdfstring{Synchronization Primitives}{Synchronization Primitives}}\label{md_include_2webcraft_2async_2README_autotoc_md45}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md46}{}\doxysubsection{\texorpdfstring{event\+\_\+signal}{event\_signal}}\label{md_include_2webcraft_2async_2README_autotoc_md46}
 A blocking synchronization primitive that can be set and waited upon. You can have multiple waiters waiting on this event to resume execution\+:
 
 
@@ -141,7 +141,7 @@ A blocking synchronization primitive that can be set and waited upon. You can ha
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md46}{}\doxysubsection{\texorpdfstring{async\+\_\+event}{async\_event}}\label{md_include_2webcraft_2async_2README_autotoc_md46}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md47}{}\doxysubsection{\texorpdfstring{async\+\_\+event}{async\_event}}\label{md_include_2webcraft_2async_2README_autotoc_md47}
 An asynchronous event that can be awaited in coroutines. You can have multiple awaiters waiting on this event to resume execution asynchronously\+:
 
 
@@ -158,8 +158,8 @@ An asynchronous event that can be awaited in coroutines. You can have multiple a
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md47}{}\doxysection{\texorpdfstring{Task Completion and Control}{Task Completion and Control}}\label{md_include_2webcraft_2async_2README_autotoc_md47}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md48}{}\doxysubsection{\texorpdfstring{task\+\_\+completion\+\_\+source$<$\+T$>$}{task\_completion\_source<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md48}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md48}{}\doxysection{\texorpdfstring{Task Completion and Control}{Task Completion and Control}}\label{md_include_2webcraft_2async_2README_autotoc_md48}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md49}{}\doxysubsection{\texorpdfstring{task\+\_\+completion\+\_\+source$<$\+T$>$}{task\_completion\_source<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md49}
 Allows manual completion of a task from external code (e.\+g thread pool work, callback, etc). Implementation inspired by \href{https://github.com/microsoft/cpp-async}{\texttt{ microsoft/cpp-\/async}}\+:
 
 
@@ -179,7 +179,7 @@ Allows manual completion of a task from external code (e.\+g thread pool work, c
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md49}{}\doxysubsection{\texorpdfstring{fire\+\_\+and\+\_\+forget\+\_\+task}{fire\_and\_forget\_task}}\label{md_include_2webcraft_2async_2README_autotoc_md49}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md50}{}\doxysubsection{\texorpdfstring{fire\+\_\+and\+\_\+forget\+\_\+task}{fire\_and\_forget\_task}}\label{md_include_2webcraft_2async_2README_autotoc_md50}
 A task type that runs without needing to be awaited. It will destroy itself once the coroutine has finished (reached final suspend or coroutine frame is destroyed via {\ttfamily h.\+destroy()})\+:
 
 
@@ -201,8 +201,8 @@ A task type that runs without needing to be awaited. It will destroy itself once
 \DoxyCodeLine{fire\_and\_forget\_task\ fire\_and\_forget(task<\textcolor{keywordtype}{void}>\ t);}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md50}{}\doxysection{\texorpdfstring{Combinators and Utilities}{Combinators and Utilities}}\label{md_include_2webcraft_2async_2README_autotoc_md50}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md51}{}\doxysubsection{\texorpdfstring{when\+\_\+all}{when\_all}}\label{md_include_2webcraft_2async_2README_autotoc_md51}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md51}{}\doxysection{\texorpdfstring{Combinators and Utilities}{Combinators and Utilities}}\label{md_include_2webcraft_2async_2README_autotoc_md51}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md52}{}\doxysubsection{\texorpdfstring{when\+\_\+all}{when\_all}}\label{md_include_2webcraft_2async_2README_autotoc_md52}
 Execute multiple tasks concurrently and wait for all to complete asynchronously\+:
 
 
@@ -223,7 +223,7 @@ Execute multiple tasks concurrently and wait for all to complete asynchronously\
 \DoxyCodeLine{task<std::tuple<normalized\_result\_t<Tasks>...>>\ when\_all(Tasks\ \&\&...tasks);}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md52}{}\doxysubsection{\texorpdfstring{when\+\_\+any}{when\_any}}\label{md_include_2webcraft_2async_2README_autotoc_md52}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md53}{}\doxysubsection{\texorpdfstring{when\+\_\+any}{when\_any}}\label{md_include_2webcraft_2async_2README_autotoc_md53}
 Execute multiple tasks concurrently and return the first one to complete asynchronously\+:
 
 
@@ -245,7 +245,7 @@ Execute multiple tasks concurrently and return the first one to complete asynchr
 \DoxyCodeLine{task<std::variant<normalized\_result\_t<Tasks>...>>\ \mbox{\hyperlink{namespacewebcraft_1_1async_a2c5d38e8801b57b1ab7200366a8e22dc}{when\_any}}(Tasks\ \&\&...tasks);}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md53}{}\doxysubsection{\texorpdfstring{sync\+\_\+wait}{sync\_wait}}\label{md_include_2webcraft_2async_2README_autotoc_md53}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md54}{}\doxysubsection{\texorpdfstring{sync\+\_\+wait}{sync\_wait}}\label{md_include_2webcraft_2async_2README_autotoc_md54}
 Block the current thread and wait for an awaitable to complete. Implementation inspired by C++ 26 {\ttfamily sync\+\_\+wait} feature\+:
 
 
@@ -254,8 +254,8 @@ Block the current thread and wait for an awaitable to complete. Implementation i
 \DoxyCodeLine{awaitable\_resume\_t<T>\ \mbox{\hyperlink{namespacewebcraft_1_1async_a367712ca561ac34d7d28f495a6462c09}{sync\_wait}}(T\ \&\&awaitable);}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md54}{}\doxysection{\texorpdfstring{Generators}{Generators}}\label{md_include_2webcraft_2async_2README_autotoc_md54}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md55}{}\doxysubsection{\texorpdfstring{generator$<$\+T$>$}{generator<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md55}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md55}{}\doxysection{\texorpdfstring{Generators}{Generators}}\label{md_include_2webcraft_2async_2README_autotoc_md55}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md56}{}\doxysubsection{\texorpdfstring{generator$<$\+T$>$}{generator<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md56}
 A synchronous generator for producing sequences of values. Implementation borrowed from \href{https://github.com/lewissbaker/cppcoro/}{\texttt{ lewissbaker/cppcoro}}\+:
 
 
@@ -273,7 +273,7 @@ A synchronous generator for producing sequences of values. Implementation borrow
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md56}{}\doxysubsection{\texorpdfstring{async\+\_\+generator$<$\+T$>$}{async\_generator<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md56}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md57}{}\doxysubsection{\texorpdfstring{async\+\_\+generator$<$\+T$>$}{async\_generator<T>}}\label{md_include_2webcraft_2async_2README_autotoc_md57}
 An asynchronous generator for producing sequences of values with async operations. Implementation borrowed from \href{https://github.com/lewissbaker/cppcoro/}{\texttt{ lewissbaker/cppcoro}}\+:
 
 
@@ -291,7 +291,7 @@ An asynchronous generator for producing sequences of values with async operation
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md57}{}\doxysection{\texorpdfstring{Thread Pool}{Thread Pool}}\label{md_include_2webcraft_2async_2README_autotoc_md57}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md58}{}\doxysection{\texorpdfstring{Thread Pool}{Thread Pool}}\label{md_include_2webcraft_2async_2README_autotoc_md58}
 A cached thread pool implementation for CPU-\/bound tasks\+:
 
 
@@ -318,7 +318,7 @@ A cached thread pool implementation for CPU-\/bound tasks\+:
 \DoxyCodeLine{\};}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2README_autotoc_md58}{}\doxysection{\texorpdfstring{Macros and Type Aliases}{Macros and Type Aliases}}\label{md_include_2webcraft_2async_2README_autotoc_md58}
+\hypertarget{md_include_2webcraft_2async_2README_autotoc_md59}{}\doxysection{\texorpdfstring{Macros and Type Aliases}{Macros and Type Aliases}}\label{md_include_2webcraft_2async_2README_autotoc_md59}
 The namespace also provides convenient macros and type aliases\+:
 
 \`{}\`{}\`{}cpp // Macro for creating async lambdas \#define co\+\_\+async \mbox{[}\&\mbox{]}() -\/\texorpdfstring{$>$}{>} \doxylink{classwebcraft_1_1async_1_1task_3_01void_01_4}{webcraft\+::async\+::task$<$void$>$}

@@ -93,8 +93,8 @@ $(document).ready(function(){initNavTree('md_include_2webcraft_2async_2README.ht
   <div class="headertitle"><div class="title">Async Runtime Package: webcraft::async</div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><p><a class="anchor" id="autotoc_md40"></a> </p>
-<h1><a class="anchor" id="autotoc_md41"></a>
+<div class="textblock"><p><a class="anchor" id="autotoc_md41"></a> </p>
+<h1><a class="anchor" id="autotoc_md42"></a>
 Awaitable Concepts</h1>
 <p>The <a class="el" href="namespacewebcraft_1_1async.html">webcraft::async</a> namespace provides comprehensive concepts for working with awaitables:</p>
 <div class="fragment"><div class="line"> </div>
@@ -128,7 +128,7 @@ Awaitable Concepts</h1>
 <div class="line"><span class="keyword">template</span> &lt;awaitable_t T&gt;</div>
 <div class="line"><span class="keyword">using </span><a class="code hl_typedef" href="namespacewebcraft_1_1async.html#a756c2303d30320ba433f8aa21010bd01">awaitable_resume_t</a> = <span class="keyword">decltype</span>(detail::get_awaiter(std::declval&lt;T&gt;()).await_resume());</div>
 <div class="ttc" id="anamespacewebcraft_1_1async_html_a756c2303d30320ba433f8aa21010bd01"><div class="ttname"><a href="namespacewebcraft_1_1async.html#a756c2303d30320ba433f8aa21010bd01">webcraft::async::awaitable_resume_t</a></div><div class="ttdeci">decltype(detail::get_awaiter(std::declval&lt; T &gt;()).await_resume()) awaitable_resume_t</div><div class="ttdef"><b>Definition</b> awaitable.hpp:86</div></div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md42"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md43"></a>
 Task&lt;T&gt;</h1>
 <p>The fundamental coroutine type in <code><a class="el" href="namespacewebcraft_1_1async.html">webcraft::async</a></code>. A <code>task&lt;T&gt;</code> represents an asynchronous operation that produces a result of type <code>T</code>. Implementation inspired by <a href="https://github.com/microsoft/cpp-async">microsoft/cpp-async</a> and <a href="https://github.com/lewissbaker/cppcoro/">lewissbaker/cppcoro</a>. The task type implementation is an eager task (it starts as soon as its constructed, similar to JS Promises):</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T = <span class="keywordtype">void</span>&gt;</div>
@@ -151,7 +151,7 @@ Task&lt;T&gt;</h1>
 <div class="line">    <span class="keywordtype">void</span> await_suspend(std::coroutine_handle&lt;&gt; h) noexcept;</div>
 <div class="line">    T await_resume(); <span class="comment">// Returns void for task&lt;void&gt;</span></div>
 <div class="line">};</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md43"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md44"></a>
 Promise Type Specification</h2>
 <p>The <code>task_promise&lt;T&gt;</code> type defines the coroutine promise interface that controls the behavior of task coroutines:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
@@ -199,9 +199,9 @@ Promise Type Specification</h2>
 <div class="line">    <span class="keywordtype">void</span> return_void() noexcept;  <span class="comment">// void tasks use return_void()</span></div>
 <div class="line">    <span class="keywordtype">void</span> unhandled_exception() noexcept;</div>
 <div class="line">};</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md44"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md45"></a>
 Synchronization Primitives</h1>
-<h2><a class="anchor" id="autotoc_md45"></a>
+<h2><a class="anchor" id="autotoc_md46"></a>
 event_signal</h2>
 <p>A blocking synchronization primitive that can be set and waited upon. You can have multiple waiters waiting on this event to resume execution:</p>
 <div class="fragment"><div class="line"><span class="keyword">class </span>event_signal</div>
@@ -219,7 +219,7 @@ event_signal</h2>
 <div class="line">    <span class="keywordtype">bool</span> operator()() const;</div>
 <div class="line">    explicit operator <span class="keywordtype">bool</span>() const;</div>
 <div class="line">};</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md46"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md47"></a>
 async_event</h2>
 <p>An asynchronous event that can be awaited in coroutines. You can have multiple awaiters waiting on this event to resume execution asynchronously:</p>
 <div class="fragment"><div class="line"><span class="keyword">struct </span>async_event</div>
@@ -232,9 +232,9 @@ async_event</h2>
 <div class="line">    <span class="keywordtype">bool</span> is_set() <span class="keyword">const</span>;</div>
 <div class="line">    <span class="keywordtype">void</span> reset();</div>
 <div class="line">};</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md47"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md48"></a>
 Task Completion and Control</h1>
-<h2><a class="anchor" id="autotoc_md48"></a>
+<h2><a class="anchor" id="autotoc_md49"></a>
 task_completion_source&lt;T&gt;</h2>
 <p>Allows manual completion of a task from external code (e.g thread pool work, callback, etc). Implementation inspired by <a href="https://github.com/microsoft/cpp-async">microsoft/cpp-async</a>:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
@@ -251,7 +251,7 @@ task_completion_source&lt;T&gt;</h2>
 <div class="line">    <a class="code hl_namespace" href="namespacewebcraft.html">webcraft</a>::async::task&lt;T&gt; task();</div>
 <div class="line">};</div>
 <div class="ttc" id="anamespacewebcraft_html"><div class="ttname"><a href="namespacewebcraft.html">webcraft</a></div><div class="ttdef"><b>Definition</b> async_event.hpp:13</div></div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md49"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md50"></a>
 fire_and_forget_task</h2>
 <p>A task type that runs without needing to be awaited. It will destroy itself once the coroutine has finished (reached final suspend or coroutine frame is destroyed via <code>h.destroy()</code>):</p>
 <div class="fragment"><div class="line"><span class="keyword">class </span>fire_and_forget_task</div>
@@ -269,9 +269,9 @@ fire_and_forget_task</h2>
 <div class="line">};</div>
 <div class="line"> </div>
 <div class="line">fire_and_forget_task fire_and_forget(task&lt;<span class="keywordtype">void</span>&gt; t);</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md50"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md51"></a>
 Combinators and Utilities</h1>
-<h2><a class="anchor" id="autotoc_md51"></a>
+<h2><a class="anchor" id="autotoc_md52"></a>
 when_all</h2>
 <p>Execute multiple tasks concurrently and wait for all to complete asynchronously:</p>
 <div class="fragment"><div class="line"><span class="comment">// For tasks that return values</span></div>
@@ -288,7 +288,7 @@ when_all</h2>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Tasks&gt;</div>
 <div class="line">    <span class="keyword">requires</span>(awaitable_t&lt;Tasks&gt; &amp;&amp; ...)</div>
 <div class="line">task&lt;std::tuple&lt;normalized_result_t&lt;Tasks&gt;...&gt;&gt; when_all(Tasks &amp;&amp;...tasks);</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md52"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md53"></a>
 when_any</h2>
 <p>Execute multiple tasks concurrently and return the first one to complete asynchronously:</p>
 <div class="fragment"><div class="line"><span class="comment">// Type alias for normalized results (void becomes std::monostate)</span></div>
@@ -306,14 +306,14 @@ when_any</h2>
 <div class="line"><span class="comment">// For tuple of different task types</span></div>
 <div class="line"><span class="keyword">template</span> &lt;awaitable_t... Tasks&gt;</div>
 <div class="line">task&lt;std::variant&lt;normalized_result_t&lt;Tasks&gt;...&gt;&gt; when_any(Tasks &amp;&amp;...tasks);</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md53"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md54"></a>
 sync_wait</h2>
 <p>Block the current thread and wait for an awaitable to complete. Implementation inspired by C++ 26 <code>sync_wait</code> feature:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;awaitable_t T&gt;</div>
 <div class="line">awaitable_resume_t&lt;T&gt; sync_wait(T &amp;&amp;awaitable);</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md54"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md55"></a>
 Generators</h1>
-<h2><a class="anchor" id="autotoc_md55"></a>
+<h2><a class="anchor" id="autotoc_md56"></a>
 generator&lt;T&gt;</h2>
 <p>A synchronous generator for producing sequences of values. Implementation borrowed from <a href="https://github.com/lewissbaker/cppcoro/">lewissbaker/cppcoro</a>:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
@@ -327,7 +327,7 @@ generator&lt;T&gt;</h2>
 <div class="line">    </div>
 <div class="line">    <span class="comment">// Range interface</span></div>
 <div class="line">};</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md56"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md57"></a>
 async_generator&lt;T&gt;</h2>
 <p>An asynchronous generator for producing sequences of values with async operations. Implementation borrowed from <a href="https://github.com/lewissbaker/cppcoro/">lewissbaker/cppcoro</a>:</p>
 <div class="fragment"><div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</div>
@@ -341,7 +341,7 @@ async_generator&lt;T&gt;</h2>
 <div class="line">    </div>
 <div class="line">    <span class="comment">// Async range interface</span></div>
 <div class="line">};</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md57"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md58"></a>
 Thread Pool</h1>
 <p>A cached thread pool implementation for CPU-bound tasks:</p>
 <div class="fragment"><div class="line"><span class="keyword">class </span>thread_pool</div>
@@ -364,7 +364,7 @@ Thread Pool</h1>
 <div class="line">    <span class="keywordtype">size_t</span> get_workers_size() <span class="keyword">const</span>;</div>
 <div class="line">    <span class="keywordtype">size_t</span> get_available_workers() <span class="keyword">const</span>;</div>
 <div class="line">};</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md58"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md59"></a>
 Macros and Type Aliases</h1>
 <p>The namespace also provides convenient macros and type aliases:</p>
 <p>```cpp // Macro for creating async lambdas #define co_async [&amp;]() -&gt; <a class="el" href="classwebcraft_1_1async_1_1task_3_01void_01_4.html">webcraft::async::task&lt;void&gt;</a></p>

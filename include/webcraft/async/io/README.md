@@ -707,6 +707,16 @@ Examples:
 - https://gist.github.com/josephg/6c078a241b0e9e538ac04ef28be6e787
 - KQUEUE Example: https://dev.to/frevib/a-tcp-server-with-kqueue-527
 
+### UDP Datagram Sockets
+
+Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. They are also unreliable but fast.
+
+| Library  | Platforms Supported | Special Create? | Async Bind? | Async Receive From? | Async Send to? | Async Close? | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| io_uring | Linux | [`io_uring_prep_socket`](https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html) | [`io_uring_prep_bind`](https://man7.org/linux/man-pages/man3/io_uring_prep_bind.3.html)| [`io_uring_prep_recvmsg`](https://man7.org/linux/man-pages/man3/io_uring_prep_recvmsg.3.html) | [`io_uring_prep_sendmsg`](https://man7.org/linux/man-pages/man3/io_uring_prep_sendmsg.3.html) | [`io_uring_prep_close`](https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html) | **NOTE: All the functions are async just linux only.** |
+| IOCP | Windows | [`socket`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-socket) + [`CreateIOCompletionPort`](https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport) | [`bind`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-bind) | [`WSARecvFrom`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsarecvfrom) | [`WSASendTo`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendto) | [`closesocket`](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-closesocket) | |
+| kqueue | BSD based systems | `socket` | `bind` | `listen` | `accept` | `close` | **NOTE: It seems like it's all just synchronous API calls but kqueue lets us know when to call what under the hood. Kqueue will be our notification agent and we'll use channels and other forms of asynchronous delivery to let us know when to resume. Refer to the kqueue example below.** |
+
 ## Planned implementation:
 
 Async Read & Async Write will be based on what's in the **Async Read** and **Async Write** columns. Closing will still happen with RAII (which would be a synchronous close on everything but linux) but on linux we'll send a fire-and-forget request with `io_uring_prep_close`. For async creation it can either be with synchronous or asynchronous, the bottleneck wouldn't be too big of an issue. 
@@ -891,8 +901,21 @@ namespace detail
         virtual task<std::unique_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
     };
 
+    class udp_socket_descriptor : public udp_socket_descriptor
+    {
+    public:
+        udp_socket_descriptor() = default;
+        virtual ~udp_socket_descriptor() = default;
+
+        virtual task<void> close() = 0; // Close the socket
+        virtual void bind(const connection_info& info) = 0; // binds a DGRAM socket to a host and port
+        virtual task<size_t> recvfrom(std::span<char> buffer, connection_info& from_address); // receives a packet from some address (which is populated)
+        virtual task<size_t> sendto(std::span<const char> buffer, const connection_info& to_address); // sends a packet to some address (which is provided)
+    };
+
     std::shared_ptr<tcp_socket_descriptor> make_tcp_socket_descriptor();
     std::shared_ptr<tcp_listener_descriptor> make_tcp_listener_descriptor();
+    std::shared_ptr<udp_socket_descriptor> make_udp_socket_descriptor();
 
 }
 
@@ -1086,6 +1109,42 @@ public:
     {
         co_return co_await descriptor->accept();
     }
+};
+
+class udp_socket
+{
+private:
+    std::shared_ptr<detail::udp_socket_descriptor> descriptor;
+
+public:
+    udp_socket(std::shared_ptr<detail::udp_socket_descriptor> desc): descriptor(std::move(desc)) {}
+    ~udp_socket()
+    {
+        if (descriptor)
+        {
+            fire_and_forget(descriptor->close());
+        }
+    }
+
+    void bind(const connection_info &info)
+    {
+        descriptor->bind(info);
+    }
+
+    task<size_t> recvfrom(std::span<char> buffer, connection_info& from_address)
+    {
+        if (!descriptor)
+            throw std::runtime_error("Descriptor is null");
+        return descriptor->recvfrom(buffer, from_address);
+    }
+    
+    task<size_t> sendto(std::span<const char> buffer, const connection_info& to_address)
+    {
+        if (!descriptor)
+            throw std::runtime_error("Descriptor is null");
+        return descriptor->sendto(buffer, to_address);
+    }
+
 };
 
 
