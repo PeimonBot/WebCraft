@@ -1003,7 +1003,7 @@ This is the following specification for using the {\bfseries{Async TCP Socket an
 \DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<std::unique\_ptr<tcp\_socket\_descriptor>}}>\ accept()\ =\ 0;\ \textcolor{comment}{//\ Accept\ a\ new\ connection}}
 \DoxyCodeLine{\ \ \ \ \};}
 \DoxyCodeLine{}
-\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }udp\_socket\_descriptor\ :\ \textcolor{keyword}{public}\ udp\_socket\_descriptor}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }udp\_socket\_descriptor}
 \DoxyCodeLine{\ \ \ \ \{}
 \DoxyCodeLine{\ \ \ \ \textcolor{keyword}{public}:}
 \DoxyCodeLine{\ \ \ \ \ \ \ \ udp\_socket\_descriptor()\ =\ \textcolor{keywordflow}{default};}
@@ -1011,8 +1011,8 @@ This is the following specification for using the {\bfseries{Async TCP Socket an
 \DoxyCodeLine{}
 \DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<void>}}\ close()\ =\ 0;\ \textcolor{comment}{//\ Close\ the\ socket}}
 \DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \textcolor{keywordtype}{void}\ bind(\textcolor{keyword}{const}\ connection\_info\&\ info)\ =\ 0;\ \textcolor{comment}{//\ binds\ a\ DGRAM\ socket\ to\ a\ host\ and\ port}}
-\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ recvfrom(std::span<char>\ buffer,\ connection\_info\&\ from\_address);\ \textcolor{comment}{//\ receives\ a\ packet\ from\ some\ address\ (which\ is\ populated)}}
-\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ sendto(std::span<const\ char>\ buffer,\ \textcolor{keyword}{const}\ connection\_info\&\ to\_address);\ \textcolor{comment}{//\ sends\ a\ packet\ to\ some\ address\ (which\ is\ provided)}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ recvfrom(std::span<char>\ buffer,\ connection\_info\&\ from\_address)\ =\ 0;\ \textcolor{comment}{//\ receives\ a\ packet\ from\ some\ address\ (which\ is\ populated)}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ sendto(std::span<const\ char>\ buffer,\ \textcolor{keyword}{const}\ connection\_info\&\ to\_address)\ =\ 0;\ \textcolor{comment}{//\ sends\ a\ packet\ to\ some\ address\ (which\ is\ provided)}}
 \DoxyCodeLine{\ \ \ \ \};}
 \DoxyCodeLine{}
 \DoxyCodeLine{\ \ \ \ std::shared\_ptr<tcp\_socket\_descriptor>\ make\_tcp\_socket\_descriptor();}

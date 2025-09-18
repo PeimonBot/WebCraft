@@ -901,7 +901,7 @@ namespace detail
         virtual task<std::unique_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
     };
 
-    class udp_socket_descriptor : public udp_socket_descriptor
+    class udp_socket_descriptor
     {
     public:
         udp_socket_descriptor() = default;
@@ -909,8 +909,8 @@ namespace detail
 
         virtual task<void> close() = 0; // Close the socket
         virtual void bind(const connection_info& info) = 0; // binds a DGRAM socket to a host and port
-        virtual task<size_t> recvfrom(std::span<char> buffer, connection_info& from_address); // receives a packet from some address (which is populated)
-        virtual task<size_t> sendto(std::span<const char> buffer, const connection_info& to_address); // sends a packet to some address (which is provided)
+        virtual task<size_t> recvfrom(std::span<char> buffer, connection_info& from_address) = 0; // receives a packet from some address (which is populated)
+        virtual task<size_t> sendto(std::span<const char> buffer, const connection_info& to_address) = 0; // sends a packet to some address (which is provided)
     };
 
     std::shared_ptr<tcp_socket_descriptor> make_tcp_socket_descriptor();

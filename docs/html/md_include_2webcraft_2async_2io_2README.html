@@ -770,7 +770,7 @@ Planned implementation:</h1>
 <div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;std::unique_ptr&lt;tcp_socket_descriptor&gt;</a>&gt; accept() = 0; <span class="comment">// Accept a new connection</span></div>
 <div class="line">    };</div>
 <div class="line"> </div>
-<div class="line">    <span class="keyword">class </span>udp_socket_descriptor : <span class="keyword">public</span> udp_socket_descriptor</div>
+<div class="line">    <span class="keyword">class </span>udp_socket_descriptor</div>
 <div class="line">    {</div>
 <div class="line">    <span class="keyword">public</span>:</div>
 <div class="line">        udp_socket_descriptor() = <span class="keywordflow">default</span>;</div>
@@ -778,8 +778,8 @@ Planned implementation:</h1>
 <div class="line"> </div>
 <div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;void&gt;</a> close() = 0; <span class="comment">// Close the socket</span></div>
 <div class="line">        <span class="keyword">virtual</span> <span class="keywordtype">void</span> bind(<span class="keyword">const</span> connection_info&amp; info) = 0; <span class="comment">// binds a DGRAM socket to a host and port</span></div>
-<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> recvfrom(std::span&lt;char&gt; buffer, connection_info&amp; from_address); <span class="comment">// receives a packet from some address (which is populated)</span></div>
-<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> sendto(std::span&lt;const char&gt; buffer, <span class="keyword">const</span> connection_info&amp; to_address); <span class="comment">// sends a packet to some address (which is provided)</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> recvfrom(std::span&lt;char&gt; buffer, connection_info&amp; from_address) = 0; <span class="comment">// receives a packet from some address (which is populated)</span></div>
+<div class="line">        <span class="keyword">virtual</span> <a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;size_t&gt;</a> sendto(std::span&lt;const char&gt; buffer, <span class="keyword">const</span> connection_info&amp; to_address) = 0; <span class="comment">// sends a packet to some address (which is provided)</span></div>
 <div class="line">    };</div>
 <div class="line"> </div>
 <div class="line">    std::shared_ptr&lt;tcp_socket_descriptor&gt; make_tcp_socket_descriptor();</div>
