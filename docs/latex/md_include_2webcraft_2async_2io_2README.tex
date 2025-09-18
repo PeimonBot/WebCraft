@@ -801,7 +801,24 @@ Examples\+:
 \item \href{https://learn.microsoft.com/en-gb/windows/win32/api/mswsock/nf-mswsock-acceptex\#example-code}{\texttt{ https\+://learn.\+microsoft.\+com/en-\/gb/windows/win32/api/mswsock/nf-\/mswsock-\/acceptex\#example-\/code}}
 \item \href{https://gist.github.com/josephg/6c078a241b0e9e538ac04ef28be6e787}{\texttt{ https\+://gist.\+github.\+com/josephg/6c078a241b0e9e538ac04ef28be6e787}}
 \item KQUEUE Example\+: \href{https://dev.to/frevib/a-tcp-server-with-kqueue-527}{\texttt{ https\+://dev.\+to/frevib/a-\/tcp-\/server-\/with-\/kqueue-\/527}}
-\end{DoxyItemize}\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md38}{}\doxysection{\texorpdfstring{Planned implementation\+:}{Planned implementation:}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md38}
+\end{DoxyItemize}\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md38}{}\doxysubsection{\texorpdfstring{UDP Datagram Sockets}{UDP Datagram Sockets}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md38}
+Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. They are also unreliable but fast.
+
+\tabulinesep=1mm
+\begin{longtabu}spread 0pt [c]{*{8}{|X[-1]}|}
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Bind?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Receive From?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Send to?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-8}
+\endfirsthead
+\hline
+\endfoot
+\hline
+\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Library   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Platforms Supported   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Special Create?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Bind?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Receive From?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Send to?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Async Close?   }&\PBS\centering \cellcolor{\tableheadbgcolor}\textbf{ Notes    }\\\cline{1-8}
+\endhead
+io\+\_\+uring   &Linux   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_socket.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+socket}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_bind.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+bind}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_recvmsg.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+recvmsg}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_sendmsg.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+sendmsg}}}   &\href{https://man7.org/linux/man-pages/man3/io_uring_prep_close.3.html}{\texttt{ {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+close}}}   &{\bfseries{NOTE\+: All the functions are async just linux only.}}    \\\cline{1-8}
+IOCP   &Windows   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-socket}{\texttt{ {\ttfamily socket}}} + \href{https://learn.microsoft.com/en-us/windows/win32/fileio/createiocompletionport}{\texttt{ {\ttfamily Create\+IOCompletion\+Port}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-bind}{\texttt{ {\ttfamily bind}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsarecvfrom}{\texttt{ {\ttfamily WSARecv\+From}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendto}{\texttt{ {\ttfamily WSASend\+To}}}   &\href{https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-closesocket}{\texttt{ {\ttfamily closesocket}}}   &\\\cline{1-8}
+kqueue   &BSD based systems   &{\ttfamily socket}   &{\ttfamily bind}   &{\ttfamily listen}   &{\ttfamily accept}   &{\ttfamily close}   &{\bfseries{NOTE\+: It seems like it\textquotesingle{}s all just synchronous API calls but kqueue lets us know when to call what under the hood. Kqueue will be our notification agent and we\textquotesingle{}ll use channels and other forms of asynchronous delivery to let us know when to resume. Refer to the kqueue example below.}}   \\\cline{1-8}
+\end{longtabu}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md39}{}\doxysection{\texorpdfstring{Planned implementation\+:}{Planned implementation:}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md39}
 Async Read \& Async Write will be based on what\textquotesingle{}s in the {\bfseries{Async Read}} and {\bfseries{Async Write}} columns. Closing will still happen with RAII (which would be a synchronous close on everything but linux) but on linux we\textquotesingle{}ll send a fire-\/and-\/forget request with {\ttfamily io\+\_\+uring\+\_\+prep\+\_\+close}. For async creation it can either be with synchronous or asynchronous, the bottleneck wouldn\textquotesingle{}t be too big of an issue.
 
 This is the following specification for using the {\bfseries{Async File I/O}} API\+: 
@@ -986,8 +1003,21 @@ This is the following specification for using the {\bfseries{Async TCP Socket an
 \DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<std::unique\_ptr<tcp\_socket\_descriptor>}}>\ accept()\ =\ 0;\ \textcolor{comment}{//\ Accept\ a\ new\ connection}}
 \DoxyCodeLine{\ \ \ \ \};}
 \DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{class\ }udp\_socket\_descriptor}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ udp\_socket\_descriptor()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \string~udp\_socket\_descriptor()\ =\ \textcolor{keywordflow}{default};}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<void>}}\ close()\ =\ 0;\ \textcolor{comment}{//\ Close\ the\ socket}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \textcolor{keywordtype}{void}\ bind(\textcolor{keyword}{const}\ connection\_info\&\ info)\ =\ 0;\ \textcolor{comment}{//\ binds\ a\ DGRAM\ socket\ to\ a\ host\ and\ port}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ recvfrom(std::span<char>\ buffer,\ connection\_info\&\ from\_address)\ =\ 0;\ \textcolor{comment}{//\ receives\ a\ packet\ from\ some\ address\ (which\ is\ populated)}}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keyword}{virtual}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ sendto(std::span<const\ char>\ buffer,\ \textcolor{keyword}{const}\ connection\_info\&\ to\_address)\ =\ 0;\ \textcolor{comment}{//\ sends\ a\ packet\ to\ some\ address\ (which\ is\ provided)}}
+\DoxyCodeLine{\ \ \ \ \};}
+\DoxyCodeLine{}
 \DoxyCodeLine{\ \ \ \ std::shared\_ptr<tcp\_socket\_descriptor>\ make\_tcp\_socket\_descriptor();}
 \DoxyCodeLine{\ \ \ \ std::shared\_ptr<tcp\_listener\_descriptor>\ make\_tcp\_listener\_descriptor();}
+\DoxyCodeLine{\ \ \ \ std::shared\_ptr<udp\_socket\_descriptor>\ make\_udp\_socket\_descriptor();}
 \DoxyCodeLine{}
 \DoxyCodeLine{\}}
 \DoxyCodeLine{}
@@ -1183,6 +1213,42 @@ This is the following specification for using the {\bfseries{Async TCP Socket an
 \DoxyCodeLine{\ \ \ \ \}}
 \DoxyCodeLine{\};}
 \DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{class\ }udp\_socket}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\textcolor{keyword}{private}:}
+\DoxyCodeLine{\ \ \ \ std::shared\_ptr<detail::udp\_socket\_descriptor>\ descriptor;}
+\DoxyCodeLine{}
+\DoxyCodeLine{\textcolor{keyword}{public}:}
+\DoxyCodeLine{\ \ \ \ udp\_socket(std::shared\_ptr<detail::udp\_socket\_descriptor>\ desc):\ descriptor(std::move(desc))\ \{\}}
+\DoxyCodeLine{\ \ \ \ \string~udp\_socket()}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (descriptor)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \mbox{\hyperlink{namespacewebcraft_1_1async_aa32214c386ded164491af1d325b36e11}{fire\_and\_forget}}(descriptor-\/>close());}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordtype}{void}\ bind(\textcolor{keyword}{const}\ connection\_info\ \&info)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ descriptor-\/>bind(info);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ recvfrom(std::span<char>\ buffer,\ connection\_info\&\ from\_address)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!descriptor)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ descriptor-\/>recvfrom(buffer,\ from\_address);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{\ \ \ \ }
+\DoxyCodeLine{\ \ \ \ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<size\_t>}}\ sendto(std::span<const\ char>\ buffer,\ \textcolor{keyword}{const}\ connection\_info\&\ to\_address)}
+\DoxyCodeLine{\ \ \ \ \{}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!descriptor)}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
+\DoxyCodeLine{\ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ descriptor-\/>sendto(buffer,\ to\_address);}
+\DoxyCodeLine{\ \ \ \ \}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\};}
+\DoxyCodeLine{}
 \DoxyCodeLine{}
 \DoxyCodeLine{\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<tcp\_socket>}}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a482e358e1f53606e06109999484276b3}{make\_tcp\_socket}}()}
 \DoxyCodeLine{\{}
@@ -1197,7 +1263,7 @@ This is the following specification for using the {\bfseries{Async TCP Socket an
 \DoxyCodeLine{\}}
 
 \end{DoxyCode}
-\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md39}{}\doxysection{\texorpdfstring{Implementation Details}{Implementation Details}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md39}
+\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md40}{}\doxysection{\texorpdfstring{Implementation Details}{Implementation Details}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md40}
 The Web\+Craft framework implements platform-\/specific optimizations through\+:
 
 

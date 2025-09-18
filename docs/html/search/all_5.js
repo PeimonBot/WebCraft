@@ -14,7 +14,7 @@ var searchData=
   ['find_5ffirst_11',['find_first',['../namespacewebcraft_1_1async_1_1io_1_1adaptors.html#afea35e0603fe1056bdc052faa20b8411',1,'webcraft::async::io::adaptors']]],
   ['find_5flast_12',['find_last',['../namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a21b0723e172b9758a9e78ae20dbe3bf1',1,'webcraft::async::io::adaptors']]],
   ['fire_5fand_5fforget_13',['fire_and_forget',['../namespacewebcraft_1_1async.html#aa32214c386ded164491af1d325b36e11',1,'webcraft::async']]],
-  ['fire_5fand_5fforget_5ftask_14',['fire_and_forget_task',['../classwebcraft_1_1async_1_1fire__and__forget__task.html',1,'webcraft::async::fire_and_forget_task'],['../md_include_2webcraft_2async_2README.html#autotoc_md49',1,'fire_and_forget_task']]],
+  ['fire_5fand_5fforget_5ftask_14',['fire_and_forget_task',['../classwebcraft_1_1async_1_1fire__and__forget__task.html',1,'webcraft::async::fire_and_forget_task'],['../md_include_2webcraft_2async_2README.html#autotoc_md50',1,'fire_and_forget_task']]],
   ['fire_5fand_5fforget_5ftask_2ehpp_15',['fire_and_forget_task.hpp',['../fire__and__forget__task_8hpp.html',1,'']]],
   ['first_20adaptor_16',['Find first adaptor',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md25',1,'']]],
   ['for_5feach_5fasync_17',['for_each_async',['../async__generator_8hpp.html#a4d7b3885bfafff1b24249b43416127d2',1,'async_generator.hpp']]],
