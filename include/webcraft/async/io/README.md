@@ -1159,6 +1159,12 @@ task<tcp_listener> make_tcp_listener()
     auto descriptor = co_await detail::make_tcp_listener_descriptor();
     co_return tcp_listener(std::move(descriptor));
 }
+
+task<udp_socket> make_udp_socket()
+{
+    auto descriptor = co_await detail::make_udp_socket_descriptor();
+    co_return udp_socket(std::move(descriptor));
+}
 ```
 
 ## Implementation Details
