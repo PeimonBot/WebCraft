@@ -18,6 +18,7 @@ const ip_version version = ip_version::IPv4;
 
 TEST_CASE(TestMockUdpWorks)
 {
+    runtime_context context;
     std::cout << "Starting UDP Echo Server on " << info.host << ":" << info.port << std::endl;
     webcraft::test::udp::echo_server server(info);
     std::cout << "Creating UDP Echo Client" << std::endl;
@@ -40,6 +41,7 @@ TEST_CASE(TestMockUdpWorks)
 
 TEST_CASE(TestMockTcpWorks)
 {
+    runtime_context context;
     std::cout << "Starting TCP Echo Server on " << info.host << ":" << info.port << std::endl;
     webcraft::test::tcp::echo_server server(info);
     std::cout << "Creating TCP Echo Client for server at " << info.host << ":" << info.port << std::endl;
