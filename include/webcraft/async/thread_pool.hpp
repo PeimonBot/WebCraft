@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include <thread>
 #include <chrono>
 #include <vector>
@@ -85,21 +84,29 @@ namespace webcraft::async
 
         ~thread_pool()
         {
-            shutdown = true;
+            try_shutdown();
+        }
 
-            // Request stop for all workers
+        void try_shutdown()
+        {
+            bool expected = false;
+            if (shutdown.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
             {
-                std::unique_lock<std::mutex> lock(mutex);
-                for (auto &it : workers)
+
+                // Request stop for all workers
                 {
-                    it.second->request_stop();
+                    std::unique_lock<std::mutex> lock(mutex);
+                    for (auto &it : workers)
+                    {
+                        it.second->request_stop();
+                    }
                 }
+
+                cv.notify_all();
+
+                // Wait for all workers to finish and clean up
+                workers.clear();
             }
-
-            cv.notify_all();
-
-            // Wait for all workers to finish and clean up
-            workers.clear();
         }
 
         template <typename F, typename... Args>

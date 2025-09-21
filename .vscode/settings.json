@@ -123,7 +123,8 @@
 		"resumable": "cpp",
 		"__tree": "cpp",
 		"barrier": "cpp",
-		"generator": "cpp"
+		"generator": "cpp",
+		"stacktrace": "cpp"
 	},
 	"C_Cpp.errorSquiggles": "disabled",
 	"C_Cpp.default.cppStandard": "gnu++23",
