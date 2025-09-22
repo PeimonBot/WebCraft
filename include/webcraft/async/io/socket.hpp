@@ -302,6 +302,15 @@ namespace webcraft::async::io::socket
         {
             co_return co_await descriptor->accept();
         }
+
+        task<void> close()
+        {
+            if (descriptor)
+            {
+                co_await descriptor->close();
+                descriptor.reset();
+            }
+        }
     };
 
     class udp_socket

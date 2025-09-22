@@ -3,422 +3,261 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #define TEST_SUITE_NAME AsyncSocketTestSuite
 
 #include "test_suite.hpp"
 #include <webcraft/async/async.hpp>
-#include <webcraft/async/io/io.hpp>
-#include <filesystem>
-#include <sstream>
-
-#ifdef _WIN32
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-
-#else
-#include <unistd.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-
-#define SOCKET int
-#define INVALID_SOCKET (-1)
-
-void closesocket(SOCKET fd)
-{
-    ::close(fd);
-}
-
-#endif
+#include "mock_io.hpp"
 
 using namespace webcraft::async;
-using namespace webcraft::async::io;
-using namespace webcraft::async::io::adaptors;
 using namespace webcraft::async::io::socket;
 
-const std::string host = "google.com";
-const uint16_t port = 80;
+const struct connection_info info = {"127.0.0.1", 12345};
+const ip_version version = ip_version::IPv4;
 
-struct connection_results
-{
-    std::string response;
-};
-
-connection_results get_google_results_sync();
-
-std::string get_body(const std::string &response)
-{
-    auto pos = response.find("\r\n\r\n");
-    return (pos != std::string::npos) ? response.substr(pos + 4) : response;
-}
-
-std::string get_status_line(const std::string &resp)
-{
-    auto pos = resp.find("\r\n");
-    return (pos != std::string::npos) ? resp.substr(0, pos) : resp;
-};
-
-TEST_CASE(TestInternetAvailable)
+TEST_CASE(TestMockUdpWorks)
 {
     runtime_context context;
-    connection_results results;
-    EXPECT_NO_THROW(results = get_google_results_sync()) << "Internet should be available";
+    std::cout << "Starting UDP Echo Server on " << info.host << ":" << info.port << std::endl;
+    webcraft::test::udp::echo_server server(info);
+    std::cout << "Creating UDP Echo Client" << std::endl;
+    webcraft::test::udp::echo_client client(version);
 
-    EXPECT_FALSE(results.response.empty()) << "Response should not be empty";
-}
+    const std::string message = "Hello, UDP Echo!";
 
-task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstream &wstream);
-
-#ifndef WEBCRAFT_MOCK_SOCKET_TESTS
-
-TEST_CASE(TestSocketConnection)
-{
-    // throw std::runtime_error("Not implemented yet");
-    runtime_context context;
-
-    connection_results sync_results = get_google_results_sync();
-
-    auto task_fn = [&]() -> task<void>
+    for (size_t i = 0; i < 5; ++i)
     {
-        auto socket = make_tcp_socket();
+        std::cout << "UDP Echo Attempt " << (i + 1) << std::endl;
+        bool success = client.echo(message, info);
+        EXPECT_TRUE(success) << "UDP Echo should succeeded on the " << (i + 1) << " attempt";
+    }
 
-        std::cout << "Connecting..." << std::endl;
-        co_await socket.connect({host, port});
-        std::cout << "Connected" << std::endl;
+    std::cout << "Closing UDP Echo Client and Server" << std::endl;
+    client.close();
+    std::cout << "Client closed" << std::endl;
+    server.close();
+}
 
-        EXPECT_EQ(host, socket.get_remote_host()) << "Remote host should match";
-        EXPECT_EQ(port, socket.get_remote_port()) << "Remote port should match";
+TEST_CASE(TestMockTcpWorks)
+{
+    runtime_context context;
+    std::cout << "Starting TCP Echo Server on " << info.host << ":" << info.port << std::endl;
+    webcraft::test::tcp::echo_server server(info);
+    std::cout << "Creating TCP Echo Client for server at " << info.host << ":" << info.port << std::endl;
+    webcraft::test::tcp::echo_client client(info);
 
-        std::cout << "Async Client: Connected to " << host << ":" << port << std::endl;
+    const std::string message = "Hello, TCP Echo!";
 
-        auto &socket_rstream = socket.get_readable_stream();
-        auto &socket_wstream = socket.get_writable_stream();
+    for (size_t i = 0; i < 5; ++i)
+    {
+        std::cout << "TCP Echo Attempt " << (i + 1) << std::endl;
+        bool success = client.echo(message);
+        EXPECT_TRUE(success) << "TCP Echo should succeeded on the " << (i + 1) << " attempt";
+    }
 
-        std::cout << "Beginning interaction with server" << std::endl;
-        connection_results async_results = co_await get_google_results_async(socket_rstream, socket_wstream);
+    std::cout << "Closing TCP Echo Client and Server" << std::endl;
+    client.close();
+    std::cout << "Client closed" << std::endl;
+    server.close();
+}
 
-        EXPECT_EQ(get_status_line(async_results.response), get_status_line(sync_results.response)) << "Status lines should be the same";
-        EXPECT_EQ(get_body(async_results.response), get_body(sync_results.response))
-            << "Bodies should be the same";
+class async_tcp_echo_client
+{
+private:
+    tcp_socket socket;
 
+public:
+    async_tcp_echo_client() : socket(make_tcp_socket()) {}
+
+    task<void> close()
+    {
         co_await socket.close();
+    }
+
+    task<void> connect(const connection_info &info)
+    {
+        co_await socket.connect(info);
+    }
+
+    task<bool> echo(const std::string &message)
+    {
+        auto &writer = socket.get_writable_stream();
+        auto &reader = socket.get_readable_stream();
+
+        size_t bytes_sent = co_await writer.send(std::span<const char>(message.data(), message.size()));
+        if (bytes_sent != message.size())
+        {
+            co_return false; // Error sending data
+        }
+
+        std::vector<char> buffer(message.size());
+        size_t bytes_received = co_await reader.recv(std::span<char>(buffer.data(), buffer.size()));
+        if (bytes_received != message.size())
+        {
+            co_return false; // Error receiving data
+        }
+
+        co_return std::string(buffer.data(), buffer.size()) == message; // Check if the received message matches the sent message
+    }
+};
+
+TEST_CASE(TestAsyncTcpSocket)
+{
+    runtime_context context;
+    std::cout << "Starting TCP Echo Server on " << info.host << ":" << info.port << std::endl;
+    webcraft::test::tcp::echo_server server(info);
+    std::cout << "Creating Async TCP Socket for server at " << info.host << ":" << info.port << std::endl;
+
+    auto task_fn = co_async
+    {
+        async_tcp_echo_client client;
+        co_await client.connect(info);
+        const std::string message = "Hello, Async TCP Echo!";
+
+        for (size_t i = 0; i < 5; ++i)
+        {
+            std::cout << "Async TCP Echo Attempt " << (i + 1) << std::endl;
+            bool success = co_await client.echo(message);
+            EXPECT_TRUE(success) << "Async TCP Echo should succeeded on the " << (i + 1) << " attempt";
+        }
+
+        std::cout << "Closing Async TCP Echo Client" << std::endl;
+        co_await client.close();
     };
 
     sync_wait(task_fn());
 
-    std::cout << "Async Client: All went well" << std::endl;
+    std::cout << "Closing TCP Echo Server" << std::endl;
+    server.close();
 }
 
-#endif
-task<void> handle_server_side_async(tcp_socket &client_peer);
-task<void> handle_client_side_async(tcp_socket &client);
-void handle_client_side_sync(const std::string &host, uint16_t port);
-
-#ifndef WEBCRAFT_MOCK_LISTENER_TESTS
-
-TEST_CASE(TestAsyncServerSyncClient)
+class async_tcp_echo_server
 {
-    // throw std::runtime_error("Not implemented yet");
+private:
+    tcp_listener listener;
+    std::stop_source source;
+    const connection_info &info;
+
+public:
+    async_tcp_echo_server(const connection_info &info) : listener(make_tcp_listener()), info(info) {}
+    ~async_tcp_echo_server()
+    {
+        sync_wait(shutdown());
+    }
+
+    task<void> shutdown()
+    {
+        if (!source.stop_requested())
+        {
+            source.request_stop();
+
+            tcp_socket dummy_socket = make_tcp_socket();
+            co_await dummy_socket.connect(info); // Connect to unblock accept
+            co_await dummy_socket.close();
+
+            co_await listener.close();
+        }
+        co_return;
+    }
+
+    task<void> run(const connection_info &info)
+    {
+        std::stop_token token = source.get_token();
+        listener.bind(info);
+        listener.listen(5);
+        while (!token.stop_requested())
+        {
+            tcp_socket client_socket = co_await listener.accept();
+            handle_client(std::move(client_socket));
+        }
+    }
+
+    fire_and_forget_task handle_client(tcp_socket client_socket)
+    {
+        std::stop_token token = source.get_token();
+        auto &reader = client_socket.get_readable_stream();
+        auto &writer = client_socket.get_writable_stream();
+        std::vector<char> buffer(1024);
+
+        while (!token.stop_requested())
+        {
+            size_t bytes_received = co_await reader.recv(std::span<char>(buffer.data(), buffer.size()));
+            if (bytes_received == 0)
+            {
+                break; // Connection closed by client
+            }
+
+            if (token.stop_requested())
+            {
+                break; // Connection closed by client
+            }
+
+            size_t bytes_sent = co_await writer.send(std::span<const char>(buffer.data(), bytes_received));
+            if (bytes_sent != bytes_received)
+            {
+                break; // Error sending data
+            }
+        }
+
+        co_await client_socket.close();
+    }
+};
+
+TEST_CASE(TestAsyncTcpServer)
+{
     runtime_context context;
+    std::cout << "Starting Async TCP Echo Server on " << info.host << ":" << info.port << std::endl;
+    async_tcp_echo_server server(info);
+    auto server_task = server.run(info);
 
-    event_signal signal;
-    const std::string localhost = "127.0.0.1";
-    const uint16_t port = 5001;
+    std::cout << "Creating TCP Echo Client for server at " << info.host << ":" << info.port << std::endl;
+    webcraft::test::tcp::echo_client client(info);
 
-    auto listener_fn = [&]() -> task<void>
+    const std::string message = "Hello, Async TCP Echo Server!";
+
+    for (size_t i = 0; i < 5; ++i)
     {
-        tcp_listener listener = make_tcp_listener();
-        std::cout << "Async Server: Server socket was made." << std::endl;
+        std::cout << "TCP Echo Attempt " << (i + 1) << std::endl;
+        bool success = client.echo(message);
+        EXPECT_TRUE(success) << "TCP Echo should succeeded on the " << (i + 1) << " attempt";
+    }
 
-        listener.bind({localhost, port});
-        std::cout << "Async Server: Server socket was bound to " << localhost << ":" << port << std::endl;
-
-        listener.listen(1);
-        std::cout << "Async Server: Server socket is now listening on " << localhost << ":" << port << std::endl;
-
-        // send the signal that server is ready for connections
-        signal.set();
-
-        tcp_socket client_peer = co_await listener.accept();
-        co_await handle_server_side_async(client_peer);
-        std::cout << "Async Server: All went well" << std::endl;
-    };
-
-    std::thread client_thread([&]()
-                              {
-        signal.wait();
-        std::cout << "Sync Client: Starting sync client" << std::endl;
-        try {
-            handle_client_side_sync(localhost, port);
-            std::cout << "Sync Client: All went well" << std::endl;
-        } catch (...) {
-            std::cerr << "Sync Client: Error occurred" << std::endl;
-        } });
-
-    sync_wait(listener_fn());
-    client_thread.join();
-    std::cout << "Mixed async/sync test completed successfully" << std::endl;
+    std::cout << "Closing TCP Echo Client" << std::endl;
+    client.close();
+    std::cout << "Shutting down Async TCP Echo Server" << std::endl;
+    sync_wait(server.shutdown());
+    sync_wait(server_task);
 }
 
-TEST_CASE(TestSocketPubSub)
+TEST_CASE(TestAsyncTcpServerWithAsyncClient)
 {
-    // throw std::runtime_error("Not implemented yet");
     runtime_context context;
+    std::cout << "Starting Async TCP Echo Server on " << info.host << ":" << info.port << std::endl;
+    async_tcp_echo_server server(info);
+    auto server_task = server.run(info);
 
-    async_event signal;
-    const std::string localhost = "127.0.0.1";
-    const uint16_t port = 5000;
+    std::cout << "Creating Async TCP Socket for server at " << info.host << ":" << info.port << std::endl;
 
-    auto listener_fn = [&]() -> task<void>
+    auto task_fn = co_async
     {
-        tcp_listener listener = make_tcp_listener();
-        std::cout << "Server: Server socket was made." << std::endl;
+        async_tcp_echo_client client;
+        co_await client.connect(info);
+        const std::string message = "Hello, Async TCP Echo Server!";
 
-        std::cout << "Server: Preparing to bind" << std::endl;
-        listener.bind({localhost, port});
-        std::cout << "Server: Server socket was bound to " << localhost << ":" << port << std::endl;
+        for (size_t i = 0; i < 5; ++i)
+        {
+            std::cout << "Async TCP Echo Attempt " << (i + 1) << std::endl;
+            bool success = co_await client.echo(message);
+            EXPECT_TRUE(success) << "Async TCP Echo should succeeded on the " << (i + 1) << " attempt";
+        }
 
-        listener.listen(1);
-        std::cout << "Server: Server socket is now listening on " << localhost << ":" << port << std::endl;
-
-        // send the signal that server is ready for connections
-        signal.set();
-
-        tcp_socket client_peer = co_await listener.accept();
-        co_await handle_server_side_async(client_peer);
-        std::cout << "Server: All went well" << std::endl;
+        std::cout << "Closing Async TCP Echo Client" << std::endl;
+        co_await client.close();
     };
 
-    auto socket_fn = [&]() -> task<void>
-    {
-        tcp_socket client = make_tcp_socket();
-        std::cout << "Client: Client socket was made." << std::endl;
+    sync_wait(task_fn());
 
-        // Wait until server is set up
-        co_await signal;
-
-        co_await client.connect({localhost, port});
-        std::cout << "Client: Connecting to " << localhost << ":" << port << std::endl;
-        EXPECT_EQ(localhost, client.get_remote_host()) << "Remote host should match";
-        EXPECT_EQ(port, client.get_remote_port()) << "Remote port should match";
-
-        co_await handle_client_side_async(client);
-        std::cout << "Client: All went well" << std::endl;
-    };
-
-    sync_wait(when_all(listener_fn(), socket_fn()));
-    std::cout << "Everything went well" << std::endl;
-}
-
-#endif
-const std::string content = "Hello World!";
-constexpr size_t content_size = 12;
-
-connection_results get_google_results_sync()
-{
-    connection_results results;
-
-    // --- Resolve hostname ---
-    addrinfo hints{}, *res;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;     // IPv4 or IPv6
-    hints.ai_socktype = SOCK_STREAM; // TCP
-
-    if (getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res) != 0)
-    {
-        std::cout << "Address failed: " << host.c_str() << ":" << port << std::endl;
-        std::cout << std::endl;
-        throw std::runtime_error("getaddrinfo failed");
-    }
-
-    // --- Create socket ---
-    SOCKET sockfd = ::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (sockfd == INVALID_SOCKET)
-    {
-        freeaddrinfo(res);
-        throw std::runtime_error("socket failed");
-    }
-
-    // --- Connect ---
-    if (connect(sockfd, res->ai_addr, (int)res->ai_addrlen) < 0)
-    {
-        closesocket(sockfd);
-        freeaddrinfo(res);
-        throw std::runtime_error("connect failed");
-    }
-
-    freeaddrinfo(res);
-
-    // --- Send HTTP GET request ---
-    std::string request =
-        "GET / HTTP/1.1\r\n"
-        "Host: google.com\r\n"
-        "Connection: close\r\n"
-        "\r\n";
-
-    if (send(sockfd, request.c_str(), (int)request.size(), 0) < 0)
-    {
-        closesocket(sockfd);
-        throw std::runtime_error("send failed");
-    }
-
-    // --- Read response ---
-    char buffer[4096];
-    int bytes_received;
-    while ((bytes_received = recv(sockfd, buffer, sizeof(buffer), 0)) > 0)
-    {
-        results.response.append(buffer, bytes_received);
-    }
-
-    if (bytes_received < 0)
-    {
-        closesocket(sockfd);
-        throw std::runtime_error("recv failed");
-    }
-
-    closesocket(sockfd);
-
-    return results;
-}
-
-void handle_client_side_sync(const std::string &host, uint16_t port)
-{
-    // --- Create socket ---
-    SOCKET sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == INVALID_SOCKET)
-    {
-        throw std::runtime_error("socket failed");
-    }
-
-    std::cout << "Created socket" << std::endl;
-    // --- Connect ---
-    sockaddr_in server_addr{};
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr);
-    std::cout << "Connecting to " << host << ":" << port << std::endl;
-
-    if (::connect(sockfd, reinterpret_cast<sockaddr *>(&server_addr), sizeof(server_addr)) < 0)
-    {
-        std::cout << "Failed to connect" << std::endl;
-        closesocket(sockfd);
-        throw std::runtime_error("connect failed");
-    }
-
-    std::cout << "Connected to " << host << ":" << port << std::endl;
-
-    // --- Send data ---
-    std::array<char, 12> wbuffer;
-    std::copy(content.begin(), content.end(), wbuffer.begin());
-
-    int bytes_sent = send(sockfd, wbuffer.data(), (int)wbuffer.size(), 0);
-    if (bytes_sent < 0)
-    {
-        std::cout << "Send failed: " << bytes_sent << ", last error:" <<
-#ifdef _WIN32
-            WSAGetLastError()
-#else
-            errno
-#endif
-                  << std::endl;
-        closesocket(sockfd);
-        throw std::runtime_error("send failed");
-    }
-    std::cout << "Sync Client: Sent data to server" << std::endl;
-
-    // --- Receive data ---
-    std::array<char, 12> rbuffer;
-    int bytes_received = recv(sockfd, rbuffer.data(), (int)rbuffer.size(), 0);
-    if (bytes_received < 0)
-    {
-        std::cout << "Recv failed: " << bytes_received << ", last error:" <<
-#ifdef _WIN32
-            WSAGetLastError()
-#else
-            errno
-#endif
-                  << std::endl;
-        closesocket(sockfd);
-        throw std::runtime_error("recv failed");
-    }
-    std::cout << "Sync Client: Received " << bytes_received << " bytes from server" << std::endl;
-
-    EXPECT_EQ(bytes_received, content.size()) << "Bytes received should be " << content.size();
-    EXPECT_EQ(wbuffer, rbuffer) << "Sent and received data should match";
-
-    closesocket(sockfd);
-}
-
-task<connection_results> get_google_results_async(tcp_rstream &rstream, tcp_wstream &wstream)
-{
-    connection_results results;
-
-    // --- Send HTTP GET request ---
-    std::string request =
-        "GET / HTTP/1.1\r\n"
-        "Host: google.com\r\n"
-        "Connection: close\r\n"
-        "\r\n";
-
-    co_await wstream.send(std::span<const char>(request.begin(), request.end()));
-    co_await wstream.close();
-
-    std::cout << "Async Client: Sent HTTP GET request: " << request.size() << " bytes sent" << std::endl;
-
-    // --- Read response ---
-    std::vector<char> content;
-
-    std::cout << "Async Client: Waiting for response..." << std::endl;
-    std::array<char, 4096> buffer{};
-    while (auto bytes_received = co_await rstream.recv(std::span<char>(buffer.begin(), buffer.end())))
-    {
-        std::cout << "Bytes received: " << bytes_received << std::endl;
-        std::cout << "Buffer content: ";
-        std::cout.write(buffer.data(), bytes_received);
-        std::cout << std::endl;
-        content.insert(content.end(), buffer.begin(), buffer.begin() + bytes_received);
-    }
-
-    results.response = std::string(content.begin(), content.end());
-    co_await rstream.close();
-
-    co_return results;
-}
-
-task<void> handle_server_side_async(tcp_socket &client_peer)
-{
-    auto &client_peer_rstream = client_peer.get_readable_stream();
-    auto &client_peer_wstream = client_peer.get_writable_stream();
-
-    std::array<char, content_size> buffer;
-    std::cout << "Server: Waiting for client data..." << std::endl;
-    size_t bytes_received = co_await client_peer_rstream.recv(std::span<char>(buffer.begin(), buffer.end()));
-    EXPECT_EQ(bytes_received, content_size) << "Bytes received should be " << content_size;
-    std::cout << "Server: Received from client: " << bytes_received << std::endl;
-    bool sent = co_await client_peer_wstream.send(std::span<const char>(buffer.begin(), buffer.end()));
-    EXPECT_TRUE(sent) << "Data should be sent";
-    std::cout << "Server: Sent the bytes to client: " << sent << std::endl;
-}
-
-task<void> handle_client_side_async(tcp_socket &client)
-{
-    auto &client_rstream = client.get_readable_stream();
-    auto &client_wstream = client.get_writable_stream();
-
-    std::array<char, 12> rbuffer;
-    std::array<char, 12> wbuffer;
-    std::copy(content.begin(), content.end(), wbuffer.begin());
-
-    bool sent = co_await client_wstream.send(wbuffer);
-
-    EXPECT_TRUE(sent) << "Data should be sent";
-    std::cout << "Client: Sent the bytes to server: " << sent << std::endl;
-    size_t bytes_received = co_await client_rstream.recv(rbuffer);
-    EXPECT_EQ(bytes_received, content.size()) << "Bytes received should be " << content.size();
-    std::cout << "Client: Received from server: " << bytes_received << std::endl;
-    EXPECT_EQ(wbuffer, rbuffer);
+    std::cout << "Shutting down Async TCP Echo Server" << std::endl;
+    sync_wait(server.shutdown());
+    sync_wait(server_task);
 }
