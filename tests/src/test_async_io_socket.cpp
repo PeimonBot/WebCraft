@@ -391,7 +391,7 @@ TEST_CASE(TestAsyncUdpServer)
     auto server_task = co_async
     {
         task_completion_source<void> tcs;
-        std::thread([&tcs, server]() mutable
+        std::thread([&]
                     { 
             sync_wait(server.run());
             tcs.set_value(); })
