@@ -261,3 +261,162 @@ TEST_CASE(TestAsyncTcpServerWithAsyncClient)
     sync_wait(server.shutdown());
     sync_wait(server_task);
 }
+
+class async_udp_echo_client
+{
+private:
+    udp_socket socket;
+
+public:
+    async_udp_echo_client(std::optional<ip_version> ipv) : socket(make_udp_socket(ipv)) {}
+
+    task<void> close()
+    {
+        co_await socket.close();
+    }
+
+    task<bool> echo(const std::string &message, const connection_info &server_info)
+    {
+        size_t bytes_sent = co_await socket.sendto(std::span<const char>(message.data(), message.size()), server_info);
+
+        std::cout << "Sent " << bytes_sent << " bytes to " << server_info.host << ":" << server_info.port << std::endl;
+
+        if (bytes_sent != message.size())
+        {
+            co_return false; // Error sending data
+        }
+
+        std::vector<char> buffer(1024);
+        connection_info sender_info{};
+        size_t bytes_received = co_await socket.recvfrom(std::span<char>(buffer.data(), buffer.size()), sender_info);
+        std::cout << "Received " << bytes_received << " bytes from " << sender_info.host << ":" << sender_info.port << std::endl;
+        if (bytes_received != message.size())
+        {
+            co_return false; // Error receiving data
+        }
+
+        if (sender_info.host != server_info.host || sender_info.port != server_info.port)
+        {
+            co_return false; // Received from unexpected sender
+        }
+
+        co_return std::string(buffer.data(), bytes_received) == message; // Check if the received message matches the sent message
+    }
+};
+
+class async_udp_echo_server
+{
+private:
+    udp_socket socket;
+    std::stop_source source;
+
+public:
+    async_udp_echo_server(const connection_info &info) : socket(make_udp_socket())
+    {
+        socket.bind(info);
+    }
+
+    task<void> run()
+    {
+        while (!source.stop_requested())
+        {
+            std::vector<char> buffer(1024);
+            connection_info sender_info;
+            size_t bytes_received = co_await socket.recvfrom(std::span<char>(buffer.data(), buffer.size()), sender_info);
+
+            if (source.stop_requested())
+            {
+                break;
+            }
+
+            if (bytes_received > 0)
+            {
+                co_await socket.sendto(std::span<const char>(buffer.data(), bytes_received), sender_info);
+            }
+        }
+    }
+
+    task<void> shutdown()
+    {
+        source.request_stop();
+
+        udp_socket sock = make_udp_socket();
+        const char dummy = 0;
+        co_await sock.sendto(std::span<const char>(&dummy, 1), info);
+        co_await sock.close();
+
+        co_await socket.close();
+    }
+};
+
+TEST_CASE(TestAsyncUdpSocket)
+{
+    runtime_context context;
+    std::cout << "Starting UDP Echo Server on " << info.host << ":" << info.port << std::endl;
+    webcraft::test::udp::echo_server server(info);
+
+    std::cout << "Creating Async UDP Socket for server at " << info.host << ":" << info.port << std::endl;
+
+    auto task_fn = co_async
+    {
+        async_udp_echo_client client(version);
+        const std::string message = "Hello, Async UDP Echo!";
+
+        for (size_t i = 0; i < 5; ++i)
+        {
+            std::cout << "Async UDP Echo Attempt " << (i + 1) << std::endl;
+            bool success = co_await client.echo(message, info);
+            EXPECT_TRUE(success) << "Async UDP Echo should succeeded on the " << (i + 1) << " attempt";
+        }
+
+        std::cout << "Closing Async UDP Echo Client" << std::endl;
+        co_await client.close();
+    };
+
+    sync_wait(task_fn());
+
+    std::cout << "Shutting down UDP Echo Server" << std::endl;
+    server.close();
+}
+
+TEST_CASE(TestAsyncUdpServer)
+{
+    runtime_context context;
+    std::cout << "Starting Async UDP Echo Server on " << info.host << ":" << info.port << std::endl;
+    async_udp_echo_server server(info);
+
+    // TODO: Uncomment this once true async udp is implemented, replace the below implementation with the commented one
+    // auto server_task = server.run();
+
+    auto server_task = co_async
+    {
+        task_completion_source<void> tcs;
+        std::thread([&tcs, server]() mutable
+                    { 
+            sync_wait(server.run());
+            tcs.set_value(); })
+            .detach();
+        co_await tcs.task();
+    }
+    ();
+
+    std::cout << "Creating UDP Socket for server at " << info.host << ":" << info.port << std::endl;
+
+    webcraft::test::udp::echo_client client(version);
+
+    const std::string message = "Hello, Async UDP Echo Server!";
+
+    for (size_t i = 0; i < 5; ++i)
+    {
+        std::cout << "UDP Echo Attempt " << (i + 1) << std::endl;
+        bool success = client.echo(message, info);
+        EXPECT_TRUE(success) << "UDP Echo should succeeded on the " << (i + 1) << " attempt";
+    }
+
+    std::cout << "Closing UDP Echo Client" << std::endl;
+    client.close();
+
+    std::cout << "Shutting down Async UDP Echo Server" << std::endl;
+    sync_wait(server.shutdown());
+    sync_wait(server_task);
+}

@@ -322,9 +322,15 @@ namespace webcraft::async::io::socket
         udp_socket(std::shared_ptr<detail::udp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
         ~udp_socket()
         {
+            fire_and_forget(close());
+        }
+
+        task<void> close()
+        {
             if (descriptor)
             {
-                fire_and_forget(descriptor->close());
+                co_await descriptor->close();
+                descriptor.reset();
             }
         }
 

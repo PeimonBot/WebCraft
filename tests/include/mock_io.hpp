@@ -184,6 +184,8 @@ namespace webcraft::test
                 {
                     throw std::runtime_error("Failed to create socket");
                 }
+
+                std::cout << "UDP Echo Client created with socket: " << socket << std::endl;
             }
 
             ~echo_client()

@@ -1701,7 +1701,7 @@ private:
     }
 
 public:
-    mock_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version) : webcraft::async::io::socket::detail::udp_socket_descriptor(version)
+    mock_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version) : webcraft::async::io::socket::detail::udp_socket_descriptor(version), socket(-1)
     {
         create_socket_if_not_exists(version);
     }
@@ -1783,6 +1783,7 @@ public:
         }
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
+        std::cout << "Bound to socket " << socket << std::endl;
 
         if (!flag)
             throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
@@ -1810,7 +1811,7 @@ public:
     task<size_t> sendto(std::span<const char> buffer, const webcraft::async::io::socket::connection_info &info) override
     {
         SOCKET socket = this->socket;
-        size_t bytes_sent = -1;
+        int bytes_sent = -1;
         bool flag = host_port_to_addr(
             info,
             [&bytes_sent, buffer, socket](sockaddr *addr, socklen_t len)
