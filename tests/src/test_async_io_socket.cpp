@@ -339,13 +339,16 @@ public:
     task<void> shutdown()
     {
         source.request_stop();
+        std::cout << "Requesting stop" << std::endl;
 
-        udp_socket sock = make_udp_socket();
+        udp_socket sock = make_udp_socket(version);
         const char dummy = 0;
         co_await sock.sendto(std::span<const char>(&dummy, 1), info);
         co_await sock.close();
 
+        std::cout << "Closing socket" << std::endl;
         co_await socket.close();
+        std::cout << "Socket closed" << std::endl;
     }
 };
 
@@ -418,5 +421,7 @@ TEST_CASE(TestAsyncUdpServer)
 
     std::cout << "Shutting down Async UDP Echo Server" << std::endl;
     sync_wait(server.shutdown());
+    std::cout << "Finishing task" << std::endl;
     sync_wait(server_task);
+    std::cout << "Tearing down runtime" << std::endl;
 }
