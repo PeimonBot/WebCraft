@@ -265,22 +265,27 @@ namespace webcraft::test
                 char buffer[1024];
                 while (!token.stop_requested())
                 {
+                    std::cout << "### Server > Receiving data from client" << std::endl;
                     int bytes_received = recv(client_socket, buffer, sizeof(buffer), 0);
                     if (bytes_received == SOCKET_ERROR || bytes_received == 0)
                     {
                         break; // Error or connection closed by client
                     }
+                    std::cout << "### Server > Data received: " << bytes_received << " bytes" << std::endl;
 
                     if (token.stop_requested())
                     {
+                        std::cout << "Stop has been requested" << std::endl;
                         break; // Connection closed by client
                     }
 
+                    std::cout << "### Server > Sending the data" << std::endl;
                     int bytes_sent = send(client_socket, buffer, bytes_received, 0);
                     if (bytes_sent == SOCKET_ERROR)
                     {
                         break; // Error sending data
                     }
+                    std::cout << "### Server > Data sent: " << bytes_sent << std::endl;
                 }
 
                 closesocket(client_socket);

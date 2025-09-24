@@ -84,18 +84,22 @@ public:
         auto &writer = socket.get_writable_stream();
         auto &reader = socket.get_readable_stream();
 
+        std::cout << "Sending data" << std::endl;
         size_t bytes_sent = co_await writer.send(std::span<const char>(message.data(), message.size()));
         if (bytes_sent != message.size())
         {
             co_return false; // Error sending data
         }
+        std::cout << "Data send properly: " << bytes_sent << std::endl;
 
+        std::cout << "Receiving data" << std::endl;
         std::vector<char> buffer(message.size());
         size_t bytes_received = co_await reader.recv(std::span<char>(buffer.data(), buffer.size()));
         if (bytes_received != message.size())
         {
             co_return false; // Error receiving data
         }
+        std::cout << "Data received" << std::endl;
 
         co_return std::string(buffer.data(), buffer.size()) == message; // Check if the received message matches the sent message
     }

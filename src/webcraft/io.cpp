@@ -916,6 +916,27 @@ std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make
 
 #include <fcntl.h>
 
+class async_single_resumer_latch
+{
+    std::coroutine_handle<> handle{std::noop_coroutine()};
+
+public:
+    constexpr bool await_ready() { return false; }
+    void await_suspend(std::coroutine_handle<> h)
+    {
+        this->handle = h;
+    }
+    constexpr void await_resume() {}
+
+    void resume()
+    {
+        if (handle && !handle.done())
+        {
+            std::exchange(handle, std::noop_coroutine()).resume();
+        }
+    }
+};
+
 class kqueue_tcp_socket_descriptor : public tcp_socket_descriptor,
                                      public webcraft::async::detail::runtime_callback
 {
@@ -928,7 +949,8 @@ private:
 
     int kq;
 
-    async_event read_ev, write_ev;
+    async_single_resumer_latch read_event;
+    async_single_resumer_latch write_event;
     bool no_more_bytes{false};
 
 public:
@@ -972,9 +994,7 @@ public:
         if (!wait_async)
             co_return bytes_read;
 
-        co_await read_ev;
-
-        read_ev.reset();
+        co_await read_event;
 
         if ((bytes_read = recv(fd, buffer.data(), buffer.size(), 0)) < 0)
         {
@@ -993,9 +1013,7 @@ public:
         if (!wait_async)
             co_return bytes_written;
 
-        co_await write_ev;
-
-        write_ev.reset();
+        co_await write_event;
 
         if ((bytes_written = send(fd, buffer.data(), buffer.size(), 0)) < 0)
         {
@@ -1142,12 +1160,12 @@ public:
 
         if (filter == EVFILT_READ)
         {
-            read_ev.set();
+            read_event.resume();
         }
 
         if (filter == EVFILT_WRITE)
         {
-            write_ev.set();
+            write_event.resume();
         }
     }
 };
