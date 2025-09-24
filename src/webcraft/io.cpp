@@ -918,21 +918,31 @@ std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make
 
 class async_single_resumer_latch
 {
-    std::coroutine_handle<> handle{std::noop_coroutine()};
+    std::optional<std::coroutine_handle<>> handle;
+    std::string event_name;
 
 public:
-    constexpr bool await_ready() { return false; }
-    void await_suspend(std::coroutine_handle<> h)
-    {
-        this->handle = h;
-    }
-    constexpr void await_resume() {}
+    explicit async_single_resumer_latch(std::string event_name) : event_name(event_name), handle(std::nullopt) {}
 
-    void resume()
+    constexpr bool await_ready() { return false; }
+    std::coroutine_handle<> await_suspend(std::coroutine_handle<> h)
     {
-        if (handle && !handle.done())
+        // std::cout << "Setting the handle value to wait on." << std::endl;
+        this->handle = h;
+        return std::noop_coroutine();
+    }
+    constexpr void await_resume()
+    {
+        handle = std::nullopt;
+    }
+
+    void notify()
+    {
+        if (handle.has_value() && handle.value() && !handle.value().done())
         {
-            std::exchange(handle, std::noop_coroutine()).resume();
+            // std::cout << "Performing resume: " << event_name << std::endl;
+            handle.value().resume();
+            // std::cout << "Resume performed: " << event_name << std::endl;
         }
     }
 };
@@ -949,8 +959,10 @@ private:
 
     int kq;
 
-    async_single_resumer_latch read_event;
-    async_single_resumer_latch write_event;
+    std::vector<char> read_buffer;
+    std::vector<char> write_buffer;
+    async_single_resumer_latch read_event{"read_event"};
+    async_single_resumer_latch write_event{"write_event"};
     bool no_more_bytes{false};
 
 public:
@@ -988,39 +1000,36 @@ public:
         if (no_more_bytes)
             co_return 0;
 
-        int bytes_read = 0;
-        bool wait_async = ((bytes_read = recv(fd, buffer.data(), buffer.size(), 0)) < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
-
-        if (!wait_async)
-            co_return bytes_read;
-
-        co_await read_event;
-
-        if ((bytes_read = recv(fd, buffer.data(), buffer.size(), 0)) < 0)
+        while (read_buffer.size() < buffer.size())
         {
-            throw std::ios_base::failure("Failed to read with error: " + std::string(strerror(errno)));
+            std::cout << "Taking a nap til event wakes me" << std::endl;
+            co_await read_event;
+            std::cout << "Awoken" << std::endl;
+
+            if (no_more_bytes)
+                break;
         }
 
-        co_return bytes_read;
+        // copy what can fit into the buffer
+        auto min_read = std::min(buffer.size(), read_buffer.size());
+        std::copy(read_buffer.begin(), read_buffer.begin() + min_read, buffer.end());
+
+        // remove the read portions of the read buffer
+        read_buffer.erase(read_buffer.begin(), read_buffer.begin() + min_read);
+
+        co_return min_read;
     }
 
     task<size_t> write(std::span<const char> buffer) override
     {
+        write_buffer.insert(write_buffer.end(), buffer.begin(), buffer.end());
 
-        int bytes_written = 0;
-        bool wait_async = ((bytes_written = send(fd, buffer.data(), buffer.size(), 0)) < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
+        // drain the write buffer
+        while (write_buffer.size() > 0)
+            co_await write_event;
 
-        if (!wait_async)
-            co_return bytes_written;
-
-        co_await write_event;
-
-        if ((bytes_written = send(fd, buffer.data(), buffer.size(), 0)) < 0)
-        {
-            throw std::ios_base::failure("Failed to write with error: " + std::string(strerror(errno)));
-        }
-
-        co_return bytes_written;
+        // Look at the difference in size of the buffer
+        co_return buffer.size();
     }
 
     task<void> connect(const webcraft::async::io::socket::connection_info &info) override
@@ -1075,17 +1084,6 @@ public:
         if (!flag)
             throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
 
-        int flags = fcntl(fd, F_GETFL, 0);
-        if (flags == -1)
-        {
-            throw std::runtime_error("fnctl(F_GETFL) failed");
-        }
-
-        if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-        {
-            throw std::runtime_error("fnctl(F_SETFL) failed");
-        }
-
         register_with_queue();
         co_return;
     }
@@ -1116,6 +1114,18 @@ public:
 
     void register_with_queue()
     {
+        // make socket non-blocking
+        int flags = ::fcntl(fd, F_GETFL, 0);
+        if (flags == -1)
+        {
+            throw std::runtime_error("Error in getting socket flags");
+        }
+        int res = ::fcntl(fd, F_GETFL, flags | O_NONBLOCK);
+        if (res == -1)
+        {
+            throw std::runtime_error("Error in setting non-blocking flag");
+        }
+
         kq = (int)webcraft::async::detail::get_native_handle();
 
         struct kevent kev;
@@ -1155,17 +1165,41 @@ public:
 
         if (flags & EV_EOF)
         {
+            std::cout << "Notify that no more reads are going to be arriving" << std::endl;
             no_more_bytes = true;
+            read_event.notify();
         }
+
+        // std::cout << "Getting some signals: " << filter << " " << flags << std::endl;
 
         if (filter == EVFILT_READ)
         {
-            read_event.resume();
+            std::array<char, 1024> buffer{};
+            std::cout << "Performing read on read buffer" << std::endl;
+            while (true)
+            {
+                int bytes_read = ::recv(fd, buffer.data(), buffer.size(), 0);
+                if (bytes_read < 0)
+                {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK)
+                        break;
+                    else
+                        throw std::runtime_error("This should not have happened but read failed: " + std::to_string(errno));
+                }
+
+                read_buffer.insert(read_buffer.end(), buffer.begin(), buffer.end());
+            }
+            read_event.notify();
         }
 
         if (filter == EVFILT_WRITE)
         {
-            write_event.resume();
+            if (!write_buffer.empty())
+            {
+                int bytes_written = ::send(fd, write_buffer.data(), write_buffer.size(), 0);
+                write_buffer.erase(write_buffer.begin(), write_buffer.begin() + bytes_written);
+                write_event.notify();
+            }
         }
     }
 };
