@@ -10,7 +10,6 @@
 
 namespace webcraft::async
 {
-
     struct async_event
     {
     private:
@@ -21,14 +20,7 @@ namespace webcraft::async
         bool await_ready() { return is_set(); }
         constexpr void await_suspend(std::coroutine_handle<> h)
         {
-            if (!flag.load())
-            {
-                this->handles.push_back(h);
-            }
-            else
-            {
-                h.resume();
-            }
+            this->handles.push_back(h);
         }
         constexpr void await_resume() {}
 
@@ -36,23 +28,22 @@ namespace webcraft::async
         {
             bool expected = false;
             if (flag.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
-                return;
-
-            auto copy = handles;
-            this->handles.clear();
-            // resumes the coroutine
-            for (auto &h : copy)
             {
-                if (!h.done())
+                // resumes the coroutine
+                for (auto &h : this->handles)
                 {
-                    h.resume();
+                    if (!h.done())
+                    {
+                        h.resume();
+                    }
                 }
+                this->handles.clear();
             }
         }
 
         bool is_set() const
         {
-            return flag;
+            return flag.load(std::memory_order_acquire);
         }
 
         void reset()

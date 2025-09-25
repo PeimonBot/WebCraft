@@ -12,6 +12,8 @@
 #include <ws2tcpip.h>
 #include <mswsock.h>
 
+#define SHUT_RDWR SD_BOTH
+
 #else
 #include <unistd.h>
 #include <netdb.h>
@@ -271,7 +273,8 @@ namespace webcraft::test
                     {
                         break; // Error or connection closed by client
                     }
-                    std::cout << "### Server > Data received: " << bytes_received << " bytes" << std::endl;
+
+                    std::cout << "### Server > Data received: " << bytes_received << " bytes" << std::string(buffer, bytes_received) << std::endl;
 
                     if (token.stop_requested())
                     {
@@ -279,7 +282,7 @@ namespace webcraft::test
                         break; // Connection closed by client
                     }
 
-                    std::cout << "### Server > Sending the data" << std::endl;
+                    std::cout << "### Server > Sending the data :" << std::string(buffer, bytes_received) << std::endl;
                     int bytes_sent = send(client_socket, buffer, bytes_received, 0);
                     if (bytes_sent == SOCKET_ERROR)
                     {
@@ -344,9 +347,10 @@ namespace webcraft::test
                         continue;
                     }
 
+#ifndef _WIN32
                     int opt = 1;
                     setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
-
+#endif
                     if (bind(socket, ptr->ai_addr, (int)ptr->ai_addrlen) == SOCKET_ERROR)
                     {
                         closesocket(socket);

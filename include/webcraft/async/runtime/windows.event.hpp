@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #ifdef _WIN32
 #include <webcraft/async/runtime.hpp>
 #define WIN32_LEAN_AND_MEAN
@@ -18,7 +17,6 @@ namespace webcraft::async::detail::windows
     struct overlapped_event : public OVERLAPPED
     {
         webcraft::async::detail::runtime_callback *event;
-        bool completed_sync{false};
 
         overlapped_event(webcraft::async::detail::runtime_callback *ev) : event(ev)
         {
@@ -48,7 +46,6 @@ namespace webcraft::async::detail::windows
 
             if (result)
             {
-                overlapped.completed_sync = true;
                 // Operation completed synchronously
                 try_execute(numberOfBytesTransfered);
             }
@@ -162,7 +159,8 @@ namespace webcraft::async::detail::windows
                     }
                     return FALSE; // Operation is pending
                 }
-                return TRUE; // Operation completed synchronously
+                WSASetLastError(WSA_IO_PENDING);
+                return FALSE; // Operation completed synchronously but itll still send an overlapped event
             }
 
         private:

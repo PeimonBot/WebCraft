@@ -3,7 +3,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include <webcraft/async/runtime.hpp>
 #include <mutex>
 #include <thread>
@@ -187,7 +186,7 @@ void run_loop(std::stop_token token)
                 auto *event = reinterpret_cast<overlapped_event *>(overlapped);
 
                 auto runtime_event = event->event;
-                if (runtime_event && !event->completed_sync)
+                if (runtime_event)
                 {
                     // For file operations, ERROR_HANDLE_EOF (38) means we've reached end of file
                     // Pass 0 bytes transferred and let the application handle it
@@ -216,7 +215,7 @@ void run_loop(std::stop_token token)
 
         auto *event = reinterpret_cast<overlapped_event *>(overlapped);
         auto runtime_event = event->event;
-        if (runtime_event && !event->completed_sync)
+        if (runtime_event)
         {
             // Call the callback function
             runtime_event->try_execute(static_cast<int>(bytesTransferred));
