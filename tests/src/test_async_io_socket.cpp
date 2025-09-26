@@ -61,6 +61,75 @@ TEST_CASE(TestMockTcpWorks)
     server.close();
 }
 
+#ifdef __APPLE__
+#include <sys/event.h>
+#include <sys/socket.h>
+
+const std::string message = "Hello, from Async Socket";
+
+TEST_CASE(TestAsyncTcpSocket_1)
+{
+    std::cout << "Starting TCP Echo Server on " << info.host << ":" << info.port << std::endl;
+    webcraft::test::tcp::echo_server server(info);
+    std::cout << "Creating Async TCP Socket for server at " << info.host << ":" << info.port << std::endl;
+
+    int queue = kqueue();
+
+    int res = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ASSERT_GE(res, 0) << "Could not create socket: " << res << ", errno: " << std::string(strerror(errno));
+
+    int sock = res;
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(info.port);
+    addr.sin_addr.s_addr = inet_addr(info.host.c_str());
+
+    res = connect(sock, (sockaddr *)&addr, (socklen_t)sizeof(addr));
+    ASSERT_GE(res, 0) << ("Could not connect to address: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+
+    // register read listener for sockets
+    struct kevent ev;
+    EV_SET(&ev, sock, EVFILT_READ, EV_ADD, 0, 0, 0);
+    res = kevent(queue, &ev, 1, nullptr, 0, nullptr);
+
+    ASSERT_GE(res, 0) << ("Could not register read event for socket: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+
+    for (int i = 0; i < 5; i++)
+    {
+        res = send(sock, message.c_str(), message.size(), 0);
+        EXPECT_EQ(res, message.size()) << ("Message did not send properly: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+
+        std::array<char, 1024> buffer;
+        res = kevent(queue, nullptr, 0, &ev, 1, nullptr);
+        EXPECT_GT(res, 0) << ("Could not get the event from the kqueue: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+
+        EXPECT_NE(ev.filter & EVFILT_READ, 0) << ("Did not get the read event from the kqueue: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+        res = recv(sock, buffer.data(), buffer.size(), 0);
+
+        EXPECT_GT(res, 0) << ("Could not read properly from the socket: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+
+        EXPECT_EQ(res, message.size()) << "Message returned was not the correct size: " + std::to_string(res) + ", errno: " + std::string(strerror(errno));
+
+        EXPECT_EQ(std::string(buffer.data(), res), message) << ("Message returned was not the correct size: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+    }
+
+    EV_SET(&ev, sock, EVFILT_READ, EV_DELETE, 0, 0, 0);
+    res = kevent(queue, &ev, 1, nullptr, 0, nullptr);
+
+    ASSERT_GE(res, 0) << ("Could not deregister read event for socket: " + std::to_string(res) + ", errno: " + std::string(strerror(errno)));
+
+    shutdown(sock, SHUT_RDWR);
+    close(sock);
+    close(queue);
+
+    std::cout << "Closing TCP Echo Server" << std::endl;
+    server.close();
+}
+
+#endif
+
 class async_tcp_echo_client
 {
 private:
