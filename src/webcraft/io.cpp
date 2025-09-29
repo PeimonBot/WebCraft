@@ -925,11 +925,10 @@ public:
     explicit async_single_resumer_latch(std::string event_name) : event_name(event_name), handle(std::nullopt) {}
 
     constexpr bool await_ready() { return false; }
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<> h)
+    void await_suspend(std::coroutine_handle<> h)
     {
         // std::cout << "Setting the handle value to wait on." << std::endl;
         this->handle = h;
-        return std::noop_coroutine();
     }
     constexpr void await_resume()
     {
@@ -1000,22 +999,31 @@ public:
         if (no_more_bytes)
             co_return 0;
 
-        while (read_buffer.size() < buffer.size())
+        if (buffer.size() <= read_buffer.size())
         {
-            std::cout << "Taking a nap til event wakes me" << std::endl;
-            co_await read_event;
-            std::cout << "Awoken" << std::endl;
+            std::copy(read_buffer.begin(), read_buffer.begin() + buffer.size(), buffer.begin());
 
-            if (no_more_bytes)
-                break;
+            // remove the read portions of the read buffer
+            read_buffer.erase(read_buffer.begin(), read_buffer.begin() + buffer.size());
+            co_return buffer.size();
         }
 
-        // copy what can fit into the buffer
-        auto min_read = std::min(buffer.size(), read_buffer.size());
-        std::copy(read_buffer.begin(), read_buffer.begin() + min_read, buffer.end());
+        std::cout << "Taking a nap til event wakes me" << std::endl;
+        co_await read_event;
+        std::cout << "Awoken" << std::endl;
 
+        if (no_more_bytes)
+            co_return 0;
+
+        // copy what can fit into the buffer
+        std::cout << "Copy what can fit" << std::endl;
+        auto min_read = std::min(buffer.size(), read_buffer.size());
+        std::copy(read_buffer.begin(), read_buffer.begin() + min_read, buffer.begin());
+
+        std::cout << "Data copied" << std::endl;
         // remove the read portions of the read buffer
         read_buffer.erase(read_buffer.begin(), read_buffer.begin() + min_read);
+        std::cout << "Data offset" << std::endl;
 
         co_return min_read;
     }
@@ -1120,7 +1128,7 @@ public:
         {
             throw std::runtime_error("Error in getting socket flags");
         }
-        int res = ::fcntl(fd, F_GETFL, flags | O_NONBLOCK);
+        int res = ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
         if (res == -1)
         {
             throw std::runtime_error("Error in setting non-blocking flag");
@@ -1178,7 +1186,9 @@ public:
             std::cout << "Performing read on read buffer" << std::endl;
             while (true)
             {
+                std::cout << "Reading some bytes" << std::endl;
                 int bytes_read = ::recv(fd, buffer.data(), buffer.size(), 0);
+                std::cout << "Bytes read: " << bytes_read << std::endl;
                 if (bytes_read < 0)
                 {
                     if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -1187,7 +1197,13 @@ public:
                         throw std::runtime_error("This should not have happened but read failed: " + std::to_string(errno));
                 }
 
-                read_buffer.insert(read_buffer.end(), buffer.begin(), buffer.end());
+                std::cout << "Dumping bytes into buffer" << std::endl;
+                read_buffer.insert(read_buffer.end(), buffer.begin(), buffer.begin() + bytes_read);
+            }
+            std::cout << "Done reading all available bytes. Read buffer grew to " << read_buffer.size() << std::endl;
+            if (read_buffer[0] == '\0')
+            {
+                std::cout << "Something went wrong while reading" << std::endl;
             }
             read_event.notify();
         }
