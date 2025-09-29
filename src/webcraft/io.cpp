@@ -1888,6 +1888,9 @@ public:
 
     task<size_t> recvfrom(std::span<char> buffer, webcraft::async::io::socket::connection_info &info) override
     {
+        if (closed)
+            co_return 0;
+
         sockaddr_storage addr;
         socklen_t addr_len = sizeof(addr);
         auto size = ::recvfrom(socket, buffer.data(), (int)buffer.size(), 0, (sockaddr *)&addr, &addr_len);
@@ -1907,6 +1910,9 @@ public:
 
     task<size_t> sendto(std::span<const char> buffer, const webcraft::async::io::socket::connection_info &info) override
     {
+        if (closed)
+            co_return 0;
+
         SOCKET socket = this->socket;
         int bytes_sent = -1;
         bool flag = host_port_to_addr(

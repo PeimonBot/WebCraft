@@ -327,8 +327,19 @@ public:
         {
             std::vector<char> buffer(1024);
             connection_info sender_info;
-            size_t bytes_received = co_await socket.recvfrom(std::span<char>(buffer.data(), buffer.size()), sender_info);
 
+            size_t bytes_received = -1;
+            try
+            {
+                bytes_received = co_await socket.recvfrom(std::span<char>(buffer.data(), buffer.size()), sender_info);
+            }
+            catch (...)
+            {
+                // UDP is a little unreliable so shutdown hook might not be sent thus EBADFD will be sent and exception will be raised here
+                if (source.stop_requested())
+                    co_return;
+                std::rethrow_exception(std::current_exception());
+            }
             if (source.stop_requested())
             {
                 break;
@@ -347,7 +358,7 @@ public:
         std::cout << "Requesting stop" << std::endl;
 
         udp_socket sock = make_udp_socket(version);
-        const char dummy = 0;
+        const char dummy = '\0';
         co_await sock.sendto(std::span<const char>(&dummy, 1), info);
         co_await sock.close();
 
@@ -427,6 +438,7 @@ TEST_CASE(TestAsyncUdpServer)
     std::cout << "Shutting down Async UDP Echo Server" << std::endl;
     sync_wait(server.shutdown());
     std::cout << "Finishing task" << std::endl;
+
     sync_wait(server_task);
     std::cout << "Tearing down runtime" << std::endl;
 }
