@@ -42,5 +42,6 @@ var hierarchy =
     [ "webcraft::async::io::socket::tcp_socket", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket.html", null ],
     [ "webcraft::async::io::socket::tcp_wstream", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream.html", null ],
     [ "webcraft::async::thread_pool", "classwebcraft_1_1async_1_1thread__pool.html", null ],
-    [ "webcraft::async::thread_pool_worker", "classwebcraft_1_1async_1_1thread__pool__worker.html", null ]
+    [ "webcraft::async::thread_pool_worker", "classwebcraft_1_1async_1_1thread__pool__worker.html", null ],
+    [ "webcraft::async::io::socket::udp_socket", "classwebcraft_1_1async_1_1io_1_1socket_1_1udp__socket.html", null ]
 ];

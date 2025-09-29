@@ -15,5 +15,6 @@ var searchData=
   ['_7etcp_5fsocket_12',['~tcp_socket',['../classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket.html#a2f76a9538ce56241608d2ba1d3b0d72b',1,'webcraft::async::io::socket::tcp_socket']]],
   ['_7etcp_5fwstream_13',['~tcp_wstream',['../classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream.html#acccf745d66d205931ec1d71cc662592d',1,'webcraft::async::io::socket::tcp_wstream']]],
   ['_7ethread_5fpool_14',['~thread_pool',['../classwebcraft_1_1async_1_1thread__pool.html#ad15055849d1a8a0836b4fded9295abcc',1,'webcraft::async::thread_pool']]],
-  ['_7ethread_5fpool_5fworker_15',['~thread_pool_worker',['../classwebcraft_1_1async_1_1thread__pool__worker.html#aba91a894b8d88dfa23fb31ed6d015f5d',1,'webcraft::async::thread_pool_worker']]]
+  ['_7ethread_5fpool_5fworker_15',['~thread_pool_worker',['../classwebcraft_1_1async_1_1thread__pool__worker.html#aba91a894b8d88dfa23fb31ed6d015f5d',1,'webcraft::async::thread_pool_worker']]],
+  ['_7eudp_5fsocket_16',['~udp_socket',['../classwebcraft_1_1async_1_1io_1_1socket_1_1udp__socket.html#a0b23dcc783c95098c0834354dbff46b5',1,'webcraft::async::io::socket::udp_socket']]]
 ];

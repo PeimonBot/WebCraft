@@ -11,6 +11,8 @@
 \item 
 \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool_ad15055849d1a8a0836b4fded9295abcc}{\texorpdfstring{$\sim$}{\string~}thread\+\_\+pool}} ()
 \item 
+void \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool_aae466a2741b3efa9f5f17f7f19a1ba55}{try\+\_\+shutdown}} ()
+\item 
 {\footnotesize template$<$typename F , typename... Args$>$ }\\auto \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool_a1872beb7bf2cef37b4424654c1ac68fd}{submit}} (F \&\&f, Args \&\&...args) -\/$>$ std\+::future$<$ typename std\+::invoke\+\_\+result\+\_\+t$<$ F, Args... $>$ $>$
 \item 
 const size\+\_\+t \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool_a8f16d178a02a392feb5767055a714491}{get\+\_\+min\+\_\+threads}} () const
@@ -82,6 +84,12 @@ class \mbox{\hyperlink{classwebcraft_1_1async_1_1thread__pool_ad4d9f050b6c5fe9a9
 \doxysubsubsection{\texorpdfstring{submit()}{submit()}}
 {\footnotesize\ttfamily template$<$typename F , typename... Args$>$ \\
 auto webcraft\+::async\+::thread\+\_\+pool\+::submit (\begin{DoxyParamCaption}\item[{F \&\&}]{f,  }\item[{Args \&\&...}]{args }\end{DoxyParamCaption}) -\/$>$ std\+::future$<$typename std\+::invoke\+\_\+result\+\_\+t$<$F, Args...$>$$>$         \hspace{0.3cm}{\ttfamily [inline]}}
+
+\Hypertarget{classwebcraft_1_1async_1_1thread__pool_aae466a2741b3efa9f5f17f7f19a1ba55}\label{classwebcraft_1_1async_1_1thread__pool_aae466a2741b3efa9f5f17f7f19a1ba55} 
+\index{webcraft::async::thread\_pool@{webcraft::async::thread\_pool}!try\_shutdown@{try\_shutdown}}
+\index{try\_shutdown@{try\_shutdown}!webcraft::async::thread\_pool@{webcraft::async::thread\_pool}}
+\doxysubsubsection{\texorpdfstring{try\_shutdown()}{try\_shutdown()}}
+{\footnotesize\ttfamily void webcraft\+::async\+::thread\+\_\+pool\+::try\+\_\+shutdown (\begin{DoxyParamCaption}{ }\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}}
 
 
 

@@ -230,7 +230,6 @@ async_event</h2>
 <div class="line">    </div>
 <div class="line">    <span class="keywordtype">void</span> set();</div>
 <div class="line">    <span class="keywordtype">bool</span> is_set() <span class="keyword">const</span>;</div>
-<div class="line">    <span class="keywordtype">void</span> reset();</div>
 <div class="line">};</div>
 </div><!-- fragment --><h1><a class="anchor" id="autotoc_md48"></a>
 Task Completion and Control</h1>
@@ -250,7 +249,7 @@ task_completion_source&lt;T&gt;</h2>
 <div class="line">    </div>
 <div class="line">    <a class="code hl_namespace" href="namespacewebcraft.html">webcraft</a>::async::task&lt;T&gt; task();</div>
 <div class="line">};</div>
-<div class="ttc" id="anamespacewebcraft_html"><div class="ttname"><a href="namespacewebcraft.html">webcraft</a></div><div class="ttdef"><b>Definition</b> async_event.hpp:13</div></div>
+<div class="ttc" id="anamespacewebcraft_html"><div class="ttname"><a href="namespacewebcraft.html">webcraft</a></div><div class="ttdef"><b>Definition</b> async_event.hpp:12</div></div>
 </div><!-- fragment --><h2><a class="anchor" id="autotoc_md50"></a>
 fire_and_forget_task</h2>
 <p>A task type that runs without needing to be awaited. It will destroy itself once the coroutine has finished (reached final suspend or coroutine frame is destroyed via <code>h.destroy()</code>):</p>

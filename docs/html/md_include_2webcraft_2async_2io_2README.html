@@ -117,7 +117,7 @@ Async readable streams</h2>
 <div class="line"><span class="keyword">concept </span>async_buffered_readable_stream = async_readable_stream&lt;Derived, R&gt; &amp;&amp; <span class="keyword">requires</span>(Derived &amp;stream, std::span&lt;R&gt; buffer) {</div>
 <div class="line">    { stream.recv(buffer) } -&gt; std::same_as&lt;webcraft::async::task&lt;std::size_t&gt;&gt;;</div>
 <div class="line">};</div>
-</div><!-- fragment --><p>The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular <code>recv()</code> variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting.</p>
+</div><!-- fragment --><p>The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular <code>recv()</code> variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting. The ideal way that this works is, when the data becomes available from the other side of the stream, it will fill the buffer and let the user know that buffer has been filled (it will not wait until buffer is full as that would be quite problematic for asynchronous programming where you've got small data packets being sent on both sides with a large buffer but I yap)</p>
 <h2><a class="anchor" id="autotoc_md3"></a>
 Async writable streams</h2>
 <p>The definition is shown below:</p>
@@ -146,7 +146,7 @@ Async stream helpers</h2>
 <div class="line"> </div>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> R&gt;</div>
 <div class="line">async_readable_stream&lt;R&gt; <span class="keyword">auto</span> to_readable_stream(<a class="code hl_class" href="classcppcoro_1_1async__generator.html">cppcoro::async_generator&lt;R&gt;</a> &amp;&amp;gen);</div>
-<div class="ttc" id="aclasscppcoro_1_1async__generator_html"><div class="ttname"><a href="classcppcoro_1_1async__generator.html">cppcoro::async_generator</a></div><div class="ttdef"><b>Definition</b> async_generator.hpp:340</div></div>
+<div class="ttc" id="aclasscppcoro_1_1async__generator_html"><div class="ttname"><a href="classcppcoro_1_1async__generator.html">cppcoro::async_generator</a></div><div class="ttdef"><b>Definition</b> async_generator.hpp:342</div></div>
 <div class="ttc" id="aclasswebcraft_1_1async_1_1task_html"><div class="ttname"><a href="classwebcraft_1_1async_1_1task.html">webcraft::async::task</a></div><div class="ttdef"><b>Definition</b> task.hpp:102</div></div>
 </div><!-- fragment --><p>The batched <code>recv()</code> and <code>send()</code> functions call the buffered stream variants if a buffered stream is passed, otherwise they call the non-buffered variants repeatedly until the span is filled or until no more data can be read/written.</p>
 <p>The conversion to and from async generators are provided for readable streams since it enables powerful functional-style stream processing:</p>
@@ -235,7 +235,7 @@ Transform adaptor</h3>
 <div class="line">    });</div>
 <div class="line">});</div>
 <div class="line"><span class="comment">// Result: [&quot;1&quot;, &quot;2&quot;, &quot;2&quot;, &quot;4&quot;, &quot;3&quot;, &quot;6&quot;, &quot;4&quot;, &quot;8&quot;, &quot;5&quot;, &quot;10&quot;]</span></div>
-<div class="ttc" id="aasync__generator_8hpp_html_a4d7b3885bfafff1b24249b43416127d2"><div class="ttname"><a href="async__generator_8hpp.html#a4d7b3885bfafff1b24249b43416127d2">for_each_async</a></div><div class="ttdeci">#define for_each_async(value, gen, code)</div><div class="ttdef"><b>Definition</b> async_generator.hpp:422</div></div>
+<div class="ttc" id="aasync__generator_8hpp_html_a4d7b3885bfafff1b24249b43416127d2"><div class="ttname"><a href="async__generator_8hpp.html#a4d7b3885bfafff1b24249b43416127d2">for_each_async</a></div><div class="ttdeci">#define for_each_async(value, gen, code)</div><div class="ttdef"><b>Definition</b> async_generator.hpp:424</div></div>
 </div><!-- fragment --><h3><a class="anchor" id="autotoc_md9"></a>
 Map adaptor</h3>
 <p>Definition:</p>
@@ -578,7 +578,7 @@ TCP Listeners Table</h2>
 </ul>
 <h2><a class="anchor" id="autotoc_md38"></a>
 UDP Datagram Sockets</h2>
-<p>Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. They are also unreliable but fast.</p>
+<p>Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. Due to this feature of theirs, they are very fast and can scale very easily to handle 1000s of clients, but they are very unreliable as packet loss and broken messages can occur from time to time.</p>
 <table class="markdownTable">
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Library   </th><th class="markdownTableHeadNone">Platforms Supported   </th><th class="markdownTableHeadNone">Special Create?   </th><th class="markdownTableHeadNone">Async Bind?   </th><th class="markdownTableHeadNone">Async Receive From?   </th><th class="markdownTableHeadNone">Async Send to?   </th><th class="markdownTableHeadNone">Async Close?   </th><th class="markdownTableHeadNone">Notes    </th></tr>
@@ -1028,8 +1028,15 @@ Planned implementation:</h1>
 <div class="line">    <span class="keyword">auto</span> descriptor = <span class="keyword">co_await</span> detail::make_tcp_listener_descriptor();</div>
 <div class="line">    <span class="keyword">co_return</span> tcp_listener(std::move(descriptor));</div>
 <div class="line">}</div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1socket_html_a482e358e1f53606e06109999484276b3"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a482e358e1f53606e06109999484276b3">webcraft::async::io::socket::make_tcp_socket</a></div><div class="ttdeci">tcp_socket make_tcp_socket()</div><div class="ttdef"><b>Definition</b> socket.hpp:288</div></div>
-<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1socket_html_a861e0c806d177e378bae72a3cfb5f0e2"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a861e0c806d177e378bae72a3cfb5f0e2">webcraft::async::io::socket::make_tcp_listener</a></div><div class="ttdeci">tcp_listener make_tcp_listener()</div><div class="ttdef"><b>Definition</b> socket.hpp:293</div></div>
+<div class="line"> </div>
+<div class="line"><a class="code hl_class" href="classwebcraft_1_1async_1_1task.html">task&lt;udp_socket&gt;</a> <a class="code hl_function" href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a319519897370c3a984eff4980a5f6e18">make_udp_socket</a>()</div>
+<div class="line">{</div>
+<div class="line">    <span class="keyword">auto</span> descriptor = <span class="keyword">co_await</span> detail::make_udp_socket_descriptor();</div>
+<div class="line">    <span class="keyword">co_return</span> udp_socket(std::move(descriptor));</div>
+<div class="line">}</div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1socket_html_a319519897370c3a984eff4980a5f6e18"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a319519897370c3a984eff4980a5f6e18">webcraft::async::io::socket::make_udp_socket</a></div><div class="ttdeci">udp_socket make_udp_socket(std::optional&lt; ip_version &gt; version=std::nullopt)</div><div class="ttdef"><b>Definition</b> socket.hpp:365</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1socket_html_a482e358e1f53606e06109999484276b3"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a482e358e1f53606e06109999484276b3">webcraft::async::io::socket::make_tcp_socket</a></div><div class="ttdeci">tcp_socket make_tcp_socket()</div><div class="ttdef"><b>Definition</b> socket.hpp:355</div></div>
+<div class="ttc" id="anamespacewebcraft_1_1async_1_1io_1_1socket_html_a861e0c806d177e378bae72a3cfb5f0e2"><div class="ttname"><a href="namespacewebcraft_1_1async_1_1io_1_1socket.html#a861e0c806d177e378bae72a3cfb5f0e2">webcraft::async::io::socket::make_tcp_listener</a></div><div class="ttdeci">tcp_listener make_tcp_listener()</div><div class="ttdef"><b>Definition</b> socket.hpp:360</div></div>
 <div class="ttc" id="anamespacewebcraft_1_1async_html_a32cc887e48f12d360656c6f023977a2d"><div class="ttname"><a href="namespacewebcraft_1_1async.html#a32cc887e48f12d360656c6f023977a2d">webcraft::async::shutdown</a></div><div class="ttdeci">task&lt; void &gt; shutdown()</div><div class="ttdef"><b>Definition</b> runtime.hpp:245</div></div>
 <div class="ttc" id="anamespacewebcraft_1_1async_html_aa32214c386ded164491af1d325b36e11"><div class="ttname"><a href="namespacewebcraft_1_1async.html#aa32214c386ded164491af1d325b36e11">webcraft::async::fire_and_forget</a></div><div class="ttdeci">fire_and_forget_task fire_and_forget(task&lt; void &gt; t)</div><div class="ttdef"><b>Definition</b> fire_and_forget_task.hpp:33</div></div>
 </div><!-- fragment --><h1><a class="anchor" id="autotoc_md40"></a>

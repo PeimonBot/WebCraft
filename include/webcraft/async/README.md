@@ -160,7 +160,6 @@ struct async_event
     
     void set();
     bool is_set() const;
-    void reset();
 };
 ```
 

@@ -20,7 +20,8 @@ var annotated_dup =
             [ "tcp_listener", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__listener.html", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__listener" ],
             [ "tcp_rstream", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__rstream.html", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__rstream" ],
             [ "tcp_socket", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket.html", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket" ],
-            [ "tcp_wstream", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream.html", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream" ]
+            [ "tcp_wstream", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream.html", "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream" ],
+            [ "udp_socket", "classwebcraft_1_1async_1_1io_1_1socket_1_1udp__socket.html", "classwebcraft_1_1async_1_1io_1_1socket_1_1udp__socket" ]
           ] ]
         ] ],
         [ "async_event", "structwebcraft_1_1async_1_1async__event.html", "structwebcraft_1_1async_1_1async__event" ],
