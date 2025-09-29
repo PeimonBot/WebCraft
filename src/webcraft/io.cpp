@@ -927,7 +927,6 @@ public:
     constexpr bool await_ready() { return false; }
     void await_suspend(std::coroutine_handle<> h)
     {
-        // std::cout << "Setting the handle value to wait on." << std::endl;
         this->handle = h;
     }
     constexpr void await_resume()
@@ -939,9 +938,7 @@ public:
     {
         if (handle.has_value() && handle.value() && !handle.value().done())
         {
-            // std::cout << "Performing resume: " << event_name << std::endl;
             handle.value().resume();
-            // std::cout << "Resume performed: " << event_name << std::endl;
         }
     }
 };
@@ -1008,22 +1005,17 @@ public:
             co_return buffer.size();
         }
 
-        std::cout << "Taking a nap til event wakes me" << std::endl;
         co_await read_event;
-        std::cout << "Awoken" << std::endl;
 
         if (no_more_bytes)
             co_return 0;
 
         // copy what can fit into the buffer
-        std::cout << "Copy what can fit" << std::endl;
         auto min_read = std::min(buffer.size(), read_buffer.size());
         std::copy(read_buffer.begin(), read_buffer.begin() + min_read, buffer.begin());
 
-        std::cout << "Data copied" << std::endl;
         // remove the read portions of the read buffer
         read_buffer.erase(read_buffer.begin(), read_buffer.begin() + min_read);
-        std::cout << "Data offset" << std::endl;
 
         co_return min_read;
     }
@@ -1165,7 +1157,6 @@ public:
             std::cerr << "Could not unregister listener" << std::endl;
         }
 
-        std::cout << "Notify that no more reads are going to be arriving" << std::endl;
         no_more_bytes = true;
         read_event.notify();
     }
@@ -1184,12 +1175,9 @@ public:
                 return;
 
             std::array<char, 1024> buffer{};
-            std::cout << "Performing read on read buffer" << std::endl;
             while (true)
             {
-                std::cout << "Reading some bytes" << std::endl;
                 int bytes_read = ::recv(fd, buffer.data(), buffer.size(), 0);
-                std::cout << "Bytes read: " << bytes_read << std::endl;
                 if (bytes_read < 0)
                 {
                     if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -1201,14 +1189,9 @@ public:
                 if (bytes_read == 0)
                     break;
 
-                std::cout << "Dumping bytes into buffer" << std::endl;
                 read_buffer.insert(read_buffer.end(), buffer.begin(), buffer.begin() + bytes_read);
             }
-            std::cout << "Done reading all available bytes. Read buffer grew to " << read_buffer.size() << std::endl;
-            if (read_buffer[0] == '\0')
-            {
-                std::cout << "Something went wrong while reading" << std::endl;
-            }
+
             read_event.notify();
         }
 
@@ -1898,7 +1881,6 @@ public:
         }
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
-        std::cout << "Bound to socket " << socket << std::endl;
 
         if (!flag)
             throw std::ios_base::failure("Failed to create socket: " + std::string(get_error_string(get_last_socket_error())));
