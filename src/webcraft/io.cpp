@@ -1525,7 +1525,8 @@ class kqueue_tcp_listener_descriptor : public webcraft::async::io::socket::detai
 private:
     int fd;
     std::atomic<bool> closed{false};
-    async_event read_ev;
+    bool no_more_connections{false};
+    async_single_resumer_latch read_event{"read_event"};
     int kq;
 
 public:
@@ -1635,8 +1636,13 @@ public:
 
     task<std::shared_ptr<tcp_socket_descriptor>> accept() override
     {
+        if (no_more_connections)
+            co_return nullptr;
 
-        co_await read_ev;
+        co_await read_event;
+
+        if (no_more_connections)
+            co_return nullptr;
 
         int fd = this->fd;
         struct sockaddr_storage addr;
@@ -1679,6 +1685,9 @@ public:
         {
             std::cerr << "Could not unregister listener" << std::endl;
         }
+
+        no_more_connections = true;
+        read_event.notify();
     }
 
     void try_execute(int result, bool cancelled) override
@@ -1688,7 +1697,7 @@ public:
 
         if (filter == EVFILT_READ)
         {
-            read_ev.set();
+            read_event.notify();
         }
     }
 };

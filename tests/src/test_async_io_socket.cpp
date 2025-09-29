@@ -172,6 +172,7 @@ public:
         while (!token.stop_requested())
         {
             tcp_socket client_socket = co_await listener.accept();
+
             handle_client(std::move(client_socket));
         }
     }

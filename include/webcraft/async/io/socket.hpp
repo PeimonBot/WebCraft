@@ -239,6 +239,8 @@ namespace webcraft::async::io::socket
 
         void shutdown_channel(socket_stream_mode mode)
         {
+            if (!descriptor)
+                throw std::runtime_error("Descriptor is null");
             if (mode == socket_stream_mode::READ && !read_shutdown)
             {
                 descriptor->shutdown(socket_stream_mode::READ);
