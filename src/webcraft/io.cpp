@@ -1164,24 +1164,25 @@ public:
         {
             std::cerr << "Could not unregister listener" << std::endl;
         }
+
+        std::cout << "Notify that no more reads are going to be arriving" << std::endl;
+        no_more_bytes = true;
+        read_event.notify();
     }
 
     void try_execute(int result, bool cancelled) override
     {
+        if (closed)
+            return;
+
         auto filter = webcraft::async::detail::get_kqueue_filter();
         auto flags = webcraft::async::detail::get_kqueue_flags();
 
-        if (flags & EV_EOF)
-        {
-            std::cout << "Notify that no more reads are going to be arriving" << std::endl;
-            no_more_bytes = true;
-            read_event.notify();
-        }
-
-        // std::cout << "Getting some signals: " << filter << " " << flags << std::endl;
-
         if (filter == EVFILT_READ)
         {
+            if (no_more_bytes)
+                return;
+
             std::array<char, 1024> buffer{};
             std::cout << "Performing read on read buffer" << std::endl;
             while (true)
@@ -1196,6 +1197,9 @@ public:
                     else
                         throw std::runtime_error("This should not have happened but read failed: " + std::to_string(errno));
                 }
+
+                if (bytes_read == 0)
+                    break;
 
                 std::cout << "Dumping bytes into buffer" << std::endl;
                 read_buffer.insert(read_buffer.end(), buffer.begin(), buffer.begin() + bytes_read);
@@ -1692,11 +1696,16 @@ public:
 
     void try_execute(int result, bool cancelled) override
     {
+        if (closed)
+            return;
         auto filter = webcraft::async::detail::get_kqueue_filter();
         auto flags = webcraft::async::detail::get_kqueue_flags();
 
         if (filter == EVFILT_READ)
         {
+            if (no_more_connections)
+                return;
+
             read_event.notify();
         }
     }
