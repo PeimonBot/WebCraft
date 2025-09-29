@@ -147,8 +147,10 @@ namespace cppcoro
         public:
             bool await_ready() const noexcept { return false; }
 
-            [[gnu::noinline]] std::coroutine_handle<>
-            await_suspend(std::coroutine_handle<> consumerCoroutine) noexcept
+#ifndef _WIN32
+            [[gnu::noinline]]
+#endif
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<> consumerCoroutine) noexcept
             {
                 m_promise->m_consumerCoroutine = consumerCoroutine;
                 return m_producerCoroutine;

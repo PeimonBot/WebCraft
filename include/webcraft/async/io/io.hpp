@@ -10,3 +10,5 @@
 #include "adaptors.hpp"
 #include "fs.hpp"
 #include "socket.hpp"
+
+#define WEBCRAFT_UDP_MOCK

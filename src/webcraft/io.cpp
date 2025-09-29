@@ -3,7 +3,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include <webcraft/async/io/io.hpp>
 #include <webcraft/async/runtime.hpp>
 #include <webcraft/async/task_completion_source.hpp>
@@ -83,7 +82,6 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
 }
 
 #elif defined(__linux__)
-
 
 int ios_to_posix(std::ios_base::openmode mode)
 {
@@ -470,6 +468,37 @@ std::pair<std::string, uint16_t> addr_to_host_port(
     return {std::string(host), static_cast<uint16_t>(std::stoi(service))};
 }
 
+using on_address_resolved = std::function<bool(sockaddr *addr, socklen_t addrlen)>;
+
+bool host_port_to_addr(const webcraft::async::io::socket::connection_info &info, on_address_resolved callback)
+{
+    struct addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP
+
+    struct addrinfo *res;
+    int ret = getaddrinfo(info.host.c_str(), std::to_string(info.port).c_str(), &hints, &res);
+    if (ret != 0)
+    {
+        return false;
+    }
+
+    // Call the callback with the resolved address
+    bool check = false;
+
+    for (auto *rp = res; rp; rp = rp->ai_next)
+    {
+        check = callback(rp->ai_addr, (socklen_t)rp->ai_addrlen);
+        if (check)
+            break;
+        else
+            continue;
+    }
+
+    freeaddrinfo(res);
+    return check;
+}
+
 #if defined(WEBCRAFT_MOCK_SOCKET_TESTS)
 
 std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make_tcp_socket_descriptor()
@@ -779,7 +808,6 @@ public:
                 throw std::runtime_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
             }
 
-
             int result = ::connect(fd, res->ai_addr, (int)res->ai_addrlen);
             if (result == SOCKET_ERROR)
             {
@@ -888,7 +916,35 @@ std::shared_ptr<tcp_socket_descriptor> webcraft::async::io::socket::detail::make
 
 #include <fcntl.h>
 
-class kqueue_tcp_socket_descriptor : public tcp_socket_descriptor, public webcraft::async::detail::runtime_callback
+class async_single_resumer_latch
+{
+    std::optional<std::coroutine_handle<>> handle;
+    std::string event_name;
+
+public:
+    explicit async_single_resumer_latch(std::string event_name) : event_name(event_name), handle(std::nullopt) {}
+
+    constexpr bool await_ready() { return false; }
+    void await_suspend(std::coroutine_handle<> h)
+    {
+        this->handle = h;
+    }
+    constexpr void await_resume()
+    {
+        handle = std::nullopt;
+    }
+
+    void notify()
+    {
+        if (handle.has_value() && handle.value() && !handle.value().done())
+        {
+            handle.value().resume();
+        }
+    }
+};
+
+class kqueue_tcp_socket_descriptor : public tcp_socket_descriptor,
+                                     public webcraft::async::detail::runtime_callback
 {
 private:
     int fd;
@@ -899,7 +955,10 @@ private:
 
     int kq;
 
-    async_event read_ev, write_ev;
+    std::vector<char> read_buffer;
+    std::vector<char> write_buffer;
+    async_single_resumer_latch read_event{"read_event"};
+    async_single_resumer_latch write_event{"write_event"};
     bool no_more_bytes{false};
 
 public:
@@ -937,43 +996,40 @@ public:
         if (no_more_bytes)
             co_return 0;
 
-        int bytes_read = 0;
-        bool wait_async = ((bytes_read = recv(fd, buffer.data(), buffer.size(), 0)) < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
-
-        if (!wait_async)
-            co_return bytes_read;
-
-        co_await read_ev;
-
-        read_ev.reset();
-
-        if ((bytes_read = recv(fd, buffer.data(), buffer.size(), 0)) < 0)
+        if (buffer.size() <= read_buffer.size())
         {
-            throw std::ios_base::failure("Failed to read with error: " + std::string(strerror(errno)));
+            std::copy(read_buffer.begin(), read_buffer.begin() + buffer.size(), buffer.begin());
+
+            // remove the read portions of the read buffer
+            read_buffer.erase(read_buffer.begin(), read_buffer.begin() + buffer.size());
+            co_return buffer.size();
         }
 
-        co_return bytes_read;
+        co_await read_event;
+
+        if (no_more_bytes)
+            co_return 0;
+
+        // copy what can fit into the buffer
+        auto min_read = std::min(buffer.size(), read_buffer.size());
+        std::copy(read_buffer.begin(), read_buffer.begin() + min_read, buffer.begin());
+
+        // remove the read portions of the read buffer
+        read_buffer.erase(read_buffer.begin(), read_buffer.begin() + min_read);
+
+        co_return min_read;
     }
 
     task<size_t> write(std::span<const char> buffer) override
     {
+        write_buffer.insert(write_buffer.end(), buffer.begin(), buffer.end());
 
-        int bytes_written = 0;
-        bool wait_async = ((bytes_written = send(fd, buffer.data(), buffer.size(), 0)) < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
+        // drain the write buffer
+        while (write_buffer.size() > 0)
+            co_await write_event;
 
-        if (!wait_async)
-            co_return bytes_written;
-
-        co_await write_ev;
-
-        write_ev.reset();
-
-        if ((bytes_written = send(fd, buffer.data(), buffer.size(), 0)) < 0)
-        {
-            throw std::ios_base::failure("Failed to write with error: " + std::string(strerror(errno)));
-        }
-
-        co_return bytes_written;
+        // Look at the difference in size of the buffer
+        co_return buffer.size();
     }
 
     task<void> connect(const webcraft::async::io::socket::connection_info &info) override
@@ -1028,17 +1084,6 @@ public:
         if (!flag)
             throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
 
-        int flags = fcntl(fd, F_GETFL, 0);
-        if (flags == -1)
-        {
-            throw std::runtime_error("fnctl(F_GETFL) failed");
-        }
-
-        if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-        {
-            throw std::runtime_error("fnctl(F_SETFL) failed");
-        }
-
         register_with_queue();
         co_return;
     }
@@ -1069,6 +1114,18 @@ public:
 
     void register_with_queue()
     {
+        // make socket non-blocking
+        int flags = ::fcntl(fd, F_GETFL, 0);
+        if (flags == -1)
+        {
+            throw std::runtime_error("Error in getting socket flags");
+        }
+        int res = ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        if (res == -1)
+        {
+            throw std::runtime_error("Error in setting non-blocking flag");
+        }
+
         kq = (int)webcraft::async::detail::get_native_handle();
 
         struct kevent kev;
@@ -1099,26 +1156,53 @@ public:
         {
             std::cerr << "Could not unregister listener" << std::endl;
         }
+
+        no_more_bytes = true;
+        read_event.notify();
     }
 
     void try_execute(int result, bool cancelled) override
     {
+        if (closed)
+            return;
+
         auto filter = webcraft::async::detail::get_kqueue_filter();
         auto flags = webcraft::async::detail::get_kqueue_flags();
 
-        if (flags & EV_EOF)
-        {
-            no_more_bytes = true;
-        }
-
         if (filter == EVFILT_READ)
         {
-            read_ev.set();
+            if (no_more_bytes)
+                return;
+
+            std::array<char, 1024> buffer{};
+            while (true)
+            {
+                int bytes_read = ::recv(fd, buffer.data(), buffer.size(), 0);
+                if (bytes_read < 0)
+                {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK)
+                        break;
+                    else
+                        throw std::runtime_error("This should not have happened but read failed: " + std::to_string(errno));
+                }
+
+                if (bytes_read == 0)
+                    break;
+
+                read_buffer.insert(read_buffer.end(), buffer.begin(), buffer.begin() + bytes_read);
+            }
+
+            read_event.notify();
         }
 
         if (filter == EVFILT_WRITE)
         {
-            write_ev.set();
+            if (!write_buffer.empty())
+            {
+                int bytes_written = ::send(fd, write_buffer.data(), write_buffer.size(), 0);
+                write_buffer.erase(write_buffer.begin(), write_buffer.begin() + bytes_written);
+                write_event.notify();
+            }
         }
     }
 };
@@ -1428,7 +1512,8 @@ class kqueue_tcp_listener_descriptor : public webcraft::async::io::socket::detai
 private:
     int fd;
     std::atomic<bool> closed{false};
-    async_event read_ev;
+    bool no_more_connections{false};
+    async_single_resumer_latch read_event{"read_event"};
     int kq;
 
 public:
@@ -1538,8 +1623,13 @@ public:
 
     task<std::shared_ptr<tcp_socket_descriptor>> accept() override
     {
+        if (no_more_connections)
+            co_return nullptr;
 
-        co_await read_ev;
+        co_await read_event;
+
+        if (no_more_connections)
+            co_return nullptr;
 
         int fd = this->fd;
         struct sockaddr_storage addr;
@@ -1582,16 +1672,24 @@ public:
         {
             std::cerr << "Could not unregister listener" << std::endl;
         }
+
+        no_more_connections = true;
+        read_event.notify();
     }
 
     void try_execute(int result, bool cancelled) override
     {
+        if (closed)
+            return;
         auto filter = webcraft::async::detail::get_kqueue_filter();
         auto flags = webcraft::async::detail::get_kqueue_flags();
 
         if (filter == EVFILT_READ)
         {
-            read_ev.set();
+            if (no_more_connections)
+                return;
+
+            read_event.notify();
         }
     }
 };
@@ -1601,4 +1699,242 @@ std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> we
     return std::make_shared<kqueue_tcp_listener_descriptor>();
 }
 
+#endif
+
+#ifdef WEBCRAFT_UDP_MOCK
+
+#ifndef _WIN32
+#define SOCKET int
+
+int get_last_socket_error()
+{
+    return errno;
+}
+
+char *get_error_string(int error)
+{
+    return strerror(error);
+}
+#else
+
+int get_last_socket_error()
+{
+    return WSAGetLastError();
+}
+
+char *get_error_string(int err)
+{
+    static char buf[256];
+    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, err,
+                   MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   buf, (sizeof(buf) / sizeof(char)), NULL);
+    return buf;
+}
+
+#endif
+
+class mock_udp_socket_descriptor : public webcraft::async::io::socket::detail::udp_socket_descriptor
+{
+private:
+    SOCKET socket;
+    std::atomic<bool> closed{false};
+
+    void create_socket_if_not_exists(std::optional<webcraft::async::io::socket::ip_version> &version)
+    {
+        if (socket == -1)
+        {
+            // try ipv6 udp first for default
+            if (version == std::nullopt)
+            {
+                socket = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+
+                // if ipv6 isn't supported fallback to ipv4
+                if (socket < 0)
+                {
+#ifdef _WIN32
+                    if (WSAGetLastError() != WSAEAFNOSUPPORT)
+#else
+                    if (errno != EAFNOSUPPORT)
+#endif
+                    {
+                        socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                    }
+                }
+            }
+            // otherwise they want to force ip implementation then use it
+            else if (version == webcraft::async::io::socket::ip_version::IPv6)
+            {
+                socket = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+            }
+            else
+            {
+                socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            }
+
+            // if error creating socket throw
+            if (socket < 0)
+            {
+#ifdef _WIN32
+                auto err = WSAGetLastError();
+#else
+                auto err = errno;
+#endif
+                if (socket < 0)
+                    throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+            }
+        }
+    }
+
+    void close_socket()
+    {
+#ifdef _WIN32
+        ::closesocket(socket);
+#else
+        ::close(socket);
+#endif
+        socket = -1;
+    }
+
+public:
+    mock_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version) : webcraft::async::io::socket::detail::udp_socket_descriptor(version), socket(-1)
+    {
+        create_socket_if_not_exists(version);
+    }
+
+    ~mock_udp_socket_descriptor()
+    {
+        fire_and_forget(close());
+    }
+
+    task<void> close() override
+    {
+        if (socket != -1)
+        {
+            bool expected = false;
+            if (closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                close_socket();
+            }
+        }
+        co_return;
+    }
+
+    void bind(const webcraft::async::io::socket::connection_info &info) override
+    {
+        close_socket();
+
+        // Prepare address string for getaddrinfo
+        std::string port_str = std::to_string(info.port);
+        struct addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;    // Allow IPv4 or IPv6
+        hints.ai_socktype = SOCK_DGRAM; // UDP
+        hints.ai_protocol = IPPROTO_UDP;
+
+        struct addrinfo *res;
+        int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
+        if (ret != 0)
+        {
+            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        }
+
+        bool flag = false;
+
+        for (auto *rp = res; rp; rp = rp->ai_next)
+        {
+
+            int family = rp->ai_family;
+            int sock_type = rp->ai_socktype;
+            int protocol = rp->ai_protocol;
+            sockaddr *addr = rp->ai_addr;
+            socklen_t len = (socklen_t)rp->ai_addrlen;
+
+            SOCKET fd = ::socket(family, sock_type, protocol);
+            if (fd < 0)
+            {
+                continue;
+            }
+
+#ifndef _WIN32
+            int opt = 1;
+            if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+            {
+                close_socket();
+                continue;
+            }
+#endif
+
+            // Await io_uring bind
+            int result = ::bind(fd, addr, len);
+
+            if (result < 0)
+            {
+                close_socket();
+                continue;
+            }
+            else
+            {
+                this->socket = fd;
+                flag = true;
+                break;
+            }
+        }
+
+        freeaddrinfo(res); // Free memory allocated by getaddrinfo
+
+        if (!flag)
+            throw std::ios_base::failure("Failed to create socket: " + std::string(get_error_string(get_last_socket_error())));
+    }
+
+    task<size_t> recvfrom(std::span<char> buffer, webcraft::async::io::socket::connection_info &info) override
+    {
+        if (closed)
+            co_return 0;
+
+        sockaddr_storage addr;
+        socklen_t addr_len = sizeof(addr);
+        auto size = ::recvfrom(socket, buffer.data(), (int)buffer.size(), 0, (sockaddr *)&addr, &addr_len);
+        if (size < 0)
+        {
+            throw std::ios_base::failure("Failed to receive data: " + std::string(get_error_string(get_last_socket_error())));
+        }
+
+        // Extract connection info
+        auto [host, port] = addr_to_host_port(addr);
+
+        info.host = host;
+        info.port = port;
+
+        co_return size;
+    }
+
+    task<size_t> sendto(std::span<const char> buffer, const webcraft::async::io::socket::connection_info &info) override
+    {
+        if (closed)
+            co_return 0;
+
+        SOCKET socket = this->socket;
+        int bytes_sent = -1;
+        bool flag = host_port_to_addr(
+            info,
+            [&bytes_sent, buffer, socket](sockaddr *addr, socklen_t len)
+            {
+                bytes_sent = ::sendto(socket, buffer.data(), (int)buffer.size(), 0, addr, len);
+                return bytes_sent >= 0;
+            });
+
+        if (!flag)
+            throw std::ios_base::failure("Failed to send data: " + std::string(get_error_string(get_last_socket_error())));
+
+        co_return bytes_sent;
+    }
+};
+
+std::shared_ptr<webcraft::async::io::socket::detail::udp_socket_descriptor> webcraft::async::io::socket::detail::make_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version)
+{
+    return std::make_shared<mock_udp_socket_descriptor>(version);
+}
+#elif defined(_WIN32)
+#elif defined(__linux__)
+#elif defined(__APPLE__)
 #endif

@@ -5,13 +5,11 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include <coroutine>
 #include <vector>
 
 namespace webcraft::async
 {
-
     struct async_event
     {
     private:
@@ -28,27 +26,24 @@ namespace webcraft::async
 
         void set()
         {
-            if (flag.exchange(true, std::memory_order_release))
-                return;
-            // resumes the coroutine
-            for (auto &h : this->handles)
+            bool expected = false;
+            if (flag.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
             {
-                if (!h.done())
+                // resumes the coroutine
+                for (auto &h : this->handles)
                 {
-                    h.resume();
+                    if (!h.done())
+                    {
+                        h.resume();
+                    }
                 }
+                this->handles.clear();
             }
-            this->handles.clear();
         }
 
         bool is_set() const
         {
             return flag.load(std::memory_order_acquire);
-        }
-
-        void reset()
-        {
-            flag = false;
         }
     };
 }

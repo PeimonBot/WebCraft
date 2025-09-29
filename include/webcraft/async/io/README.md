@@ -37,7 +37,7 @@ concept async_buffered_readable_stream = async_readable_stream<Derived, R> && re
 };
 ```
 
-The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular `recv()` variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting.
+The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular `recv()` variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting. The ideal way that this works is, when the data becomes available from the other side of the stream, it will fill the buffer and let the user know that buffer has been filled (it will not wait until buffer is full as that would be quite problematic for asynchronous programming where you've got small data packets being sent on both sides with a large buffer but I yap)
 
 ### Async writable streams
 
@@ -709,7 +709,7 @@ Examples:
 
 ### UDP Datagram Sockets
 
-Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. They are also unreliable but fast.
+Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. Due to this feature of theirs, they are very fast and can scale very easily to handle 1000s of clients, but they are very unreliable as packet loss and broken messages can occur from time to time.
 
 | Library  | Platforms Supported | Special Create? | Async Bind? | Async Receive From? | Async Send to? | Async Close? | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1158,6 +1158,12 @@ task<tcp_listener> make_tcp_listener()
 {
     auto descriptor = co_await detail::make_tcp_listener_descriptor();
     co_return tcp_listener(std::move(descriptor));
+}
+
+task<udp_socket> make_udp_socket()
+{
+    auto descriptor = co_await detail::make_udp_socket_descriptor();
+    co_return udp_socket(std::move(descriptor));
 }
 ```
 

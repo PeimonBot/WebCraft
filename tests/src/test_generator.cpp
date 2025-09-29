@@ -23,7 +23,7 @@ TEST_CASE(ReturnsCopyTest)
 
     auto gen = f();
     auto iter = gen.begin();
-    
+
     EXPECT_TRUE(*iter == 1.0f);
     ++iter;
     EXPECT_TRUE(*iter == 2.0f);

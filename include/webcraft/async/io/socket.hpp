@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include "core.hpp"
 #include <webcraft/async/fire_and_forget_task.hpp>
 
@@ -15,6 +14,12 @@ namespace webcraft::async::io::socket
     {
         std::string host;
         uint16_t port;
+    };
+
+    enum class ip_version
+    {
+        IPv4,
+        IPv6
     };
 
     enum class socket_stream_mode
@@ -61,8 +66,22 @@ namespace webcraft::async::io::socket
             virtual task<std::shared_ptr<tcp_socket_descriptor>> accept() = 0; // Accept a new connection
         };
 
+        class udp_socket_descriptor
+        {
+        public:
+            udp_socket_descriptor(std::optional<ip_version> version) {}
+            virtual ~udp_socket_descriptor() = default;
+
+            virtual task<void> close() = 0;
+            virtual void bind(const connection_info &info) = 0;
+
+            virtual task<size_t> recvfrom(std::span<char> buffer, connection_info &info) = 0;
+            virtual task<size_t> sendto(std::span<const char> buffer, const connection_info &info) = 0;
+        };
+
         std::shared_ptr<tcp_socket_descriptor> make_tcp_socket_descriptor();
         std::shared_ptr<tcp_listener_descriptor> make_tcp_listener_descriptor();
+        std::shared_ptr<udp_socket_descriptor> make_udp_socket_descriptor(std::optional<ip_version> version = std::nullopt);
 
     }
 
@@ -220,6 +239,8 @@ namespace webcraft::async::io::socket
 
         void shutdown_channel(socket_stream_mode mode)
         {
+            if (!descriptor)
+                throw std::runtime_error("Descriptor is null");
             if (mode == socket_stream_mode::READ && !read_shutdown)
             {
                 descriptor->shutdown(socket_stream_mode::READ);
@@ -283,6 +304,52 @@ namespace webcraft::async::io::socket
         {
             co_return co_await descriptor->accept();
         }
+
+        task<void> close()
+        {
+            if (descriptor)
+            {
+                co_await descriptor->close();
+                descriptor.reset();
+            }
+        }
+    };
+
+    class udp_socket
+    {
+    private:
+        std::shared_ptr<detail::udp_socket_descriptor> descriptor;
+
+    public:
+        udp_socket(std::shared_ptr<detail::udp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+        ~udp_socket()
+        {
+            fire_and_forget(close());
+        }
+
+        task<void> close()
+        {
+            if (descriptor)
+            {
+                co_await descriptor->close();
+                descriptor.reset();
+            }
+        }
+
+        void bind(const connection_info &info)
+        {
+            descriptor->bind(info);
+        }
+
+        task<size_t> recvfrom(std::span<char> buffer, connection_info &info)
+        {
+            return descriptor->recvfrom(buffer, info);
+        }
+
+        task<size_t> sendto(std::span<const char> buffer, const connection_info &info)
+        {
+            return descriptor->sendto(buffer, info);
+        }
     };
 
     inline tcp_socket make_tcp_socket()
@@ -293,5 +360,10 @@ namespace webcraft::async::io::socket
     inline tcp_listener make_tcp_listener()
     {
         return tcp_listener(detail::make_tcp_listener_descriptor());
+    }
+
+    inline udp_socket make_udp_socket(std::optional<ip_version> version = std::nullopt)
+    {
+        return udp_socket(detail::make_udp_socket_descriptor(version));
     }
 }

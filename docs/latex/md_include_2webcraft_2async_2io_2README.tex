@@ -40,7 +40,7 @@ There is also a buffered variant for streams which implement buffering internall
 \end{DoxyCode}
 
 
-The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular {\ttfamily recv()} variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting.\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md3}{}\doxysubsection{\texorpdfstring{Async writable streams}{Async writable streams}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md3}
+The buffered variant allows you to receive multiple objects at once from the stream. Internally, the regular {\ttfamily recv()} variant will either call the buffered variant with a buffer size of 1 or buffer values internally, so if values already exist in the internal queue, it only needs to pop them instead of waiting. The ideal way that this works is, when the data becomes available from the other side of the stream, it will fill the buffer and let the user know that buffer has been filled (it will not wait until buffer is full as that would be quite problematic for asynchronous programming where you\textquotesingle{}ve got small data packets being sent on both sides with a large buffer but I yap)\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md3}{}\doxysubsection{\texorpdfstring{Async writable streams}{Async writable streams}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md3}
 The definition is shown below\+:
 
 
@@ -802,7 +802,7 @@ Examples\+:
 \item \href{https://gist.github.com/josephg/6c078a241b0e9e538ac04ef28be6e787}{\texttt{ https\+://gist.\+github.\+com/josephg/6c078a241b0e9e538ac04ef28be6e787}}
 \item KQUEUE Example\+: \href{https://dev.to/frevib/a-tcp-server-with-kqueue-527}{\texttt{ https\+://dev.\+to/frevib/a-\/tcp-\/server-\/with-\/kqueue-\/527}}
 \end{DoxyItemize}\hypertarget{md_include_2webcraft_2async_2io_2README_autotoc_md38}{}\doxysubsection{\texorpdfstring{UDP Datagram Sockets}{UDP Datagram Sockets}}\label{md_include_2webcraft_2async_2io_2README_autotoc_md38}
-Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. They are also unreliable but fast.
+Datagram sockets are different from traditional I/O models. Unlike TCP sockets which maintain a persistent connection between a client socket and a server socket, datagram send and receive data packets to and from other datagram sockets. Due to this feature of theirs, they are very fast and can scale very easily to handle 1000s of clients, but they are very unreliable as packet loss and broken messages can occur from time to time.
 
 \tabulinesep=1mm
 \begin{longtabu}spread 0pt [c]{*{8}{|X[-1]}|}
@@ -1260,6 +1260,12 @@ This is the following specification for using the {\bfseries{Async TCP Socket an
 \DoxyCodeLine{\{}
 \DoxyCodeLine{\ \ \ \ \textcolor{keyword}{auto}\ descriptor\ =\ \textcolor{keyword}{co\_await}\ detail::make\_tcp\_listener\_descriptor();}
 \DoxyCodeLine{\ \ \ \ \textcolor{keyword}{co\_return}\ tcp\_listener(std::move(descriptor));}
+\DoxyCodeLine{\}}
+\DoxyCodeLine{}
+\DoxyCodeLine{\mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<udp\_socket>}}\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a319519897370c3a984eff4980a5f6e18}{make\_udp\_socket}}()}
+\DoxyCodeLine{\{}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{auto}\ descriptor\ =\ \textcolor{keyword}{co\_await}\ detail::make\_udp\_socket\_descriptor();}
+\DoxyCodeLine{\ \ \ \ \textcolor{keyword}{co\_return}\ udp\_socket(std::move(descriptor));}
 \DoxyCodeLine{\}}
 
 \end{DoxyCode}
