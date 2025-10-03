@@ -564,10 +564,101 @@ namespace webcraft::web::payloads
 
     inline constexpr auto dispatch_string_payload(std::string_view data)
     {
-
         return [data](webcraft::web::core::web_write_stream auto &stream) -> async_t(void)
         {
             co_await stream.send(std::span<const char>(data.data(), data.size()));
+        };
+    }
+
+    // vector payload
+    inline constexpr auto handle_vector_payload()
+    {
+        return [](webcraft::web::core::web_read_stream auto &stream) -> async_t(std::vector<char>)
+        {
+            std::vector<char> content;
+
+            std::array<char, 4096> buffer{};
+            size_t n;
+            while ((n = co_await stream.recv(buffer)) > 0)
+            {
+                content.insert(content.end(), buffer.data(), buffer.data() + n);
+            }
+
+            co_return content;
+        };
+    }
+
+    inline constexpr auto dispatch_vector_payload(const std::vector<char> &data)
+    {
+        return [data](webcraft::web::core::web_write_stream auto &stream) -> async_t(void)
+        {
+            co_await stream.send(std::span<const char>(data.data(), data.size()));
+        };
+    }
+
+    template <webcraft::web::core::web_read_stream T>
+    auto create_wrapper_read_stream(T &inner_stream)
+    {
+        class wrapper_read_stream
+        {
+        private:
+            T *inner_stream;
+
+        public:
+            explicit wrapper_read_stream(T &stream) : inner_stream(&stream) {}
+
+            wrapper_read_stream(const wrapper_read_stream &) = delete;
+            wrapper_read_stream &operator=(const wrapper_read_stream &) = delete;
+
+            wrapper_read_stream(wrapper_read_stream &&other) noexcept : inner_stream(std::exchange(other.inner_stream, nullptr)) {}
+            wrapper_read_stream &operator=(wrapper_read_stream &&other) noexcept
+            {
+                if (this != &other)
+                {
+                    inner_stream = std::exchange(other.inner_stream, nullptr);
+                }
+                return *this;
+            }
+
+            async_t(size_t) recv(const std::span<char> buffer)
+            {
+                co_return co_await inner_stream->recv(buffer);
+            }
+
+            async_t(std::optional<char>) recv()
+            {
+                co_return co_await inner_stream->recv();
+            }
+
+            async_t(void) close()
+            {
+                co_await inner_stream->close();
+            }
+        };
+
+        return wrapper_read_stream{inner_stream};
+    }
+
+    // stream payloads
+    inline constexpr auto handle_stream_payload()
+    {
+        return [](webcraft::web::core::web_read_stream auto &stream) -> async_t(decltype(create_wrapper_read_stream(stream)))
+        {
+            co_return create_wrapper_read_stream(stream);
+        };
+    }
+
+    inline constexpr auto dispatch_stream_payload(webcraft::web::core::web_read_stream auto &data)
+    {
+        return [&data](webcraft::web::core::web_write_stream auto &stream) -> async_t(void)
+        {
+            std::array<char, 4096> buffer{};
+            size_t n;
+            while ((n = co_await data.recv(buffer)) > 0)
+            {
+                co_await stream.send(std::span<const char>(buffer.data(), n));
+            }
+            co_return;
         };
     }
 }
