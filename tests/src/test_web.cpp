@@ -257,3 +257,241 @@ TEST_CASE(TestDispatchStreamPayload)
     EXPECT_EQ(write_stream.available_data(), data);
     EXPECT_EQ(read_stream.available_data(), "");
 }
+
+// URI Tests
+TEST_CASE(TestUriParseSimpleHttp)
+{
+    auto result = webcraft::web::core::uri::parse("http://example.com");
+    EXPECT_TRUE(result.has_value());
+
+    auto uri = result.value();
+    EXPECT_TRUE(uri.is_absolute());
+    EXPECT_FALSE(uri.is_relative());
+    EXPECT_TRUE(uri.is_hierarchical());
+    EXPECT_FALSE(uri.is_opaque());
+    EXPECT_TRUE(uri.is_server_based_hierarchical());
+
+    EXPECT_EQ(uri.scheme().value(), "http");
+    EXPECT_EQ(uri.host().value(), "example.com");
+    EXPECT_EQ(uri.authority().value(), "example.com");
+    EXPECT_EQ(uri.path().value(), "");
+    EXPECT_FALSE(uri.port().has_value());
+    EXPECT_FALSE(uri.query().has_value());
+    EXPECT_FALSE(uri.fragment().has_value());
+    EXPECT_FALSE(uri.userinfo().has_value());
+}
+
+TEST_CASE(TestUriParseCompleteUri)
+{
+    auto result = webcraft::web::core::uri::parse("https://user:pass@example.com:8080/path/to/resource?param1=value1&param2=value2#fragment");
+    EXPECT_TRUE(result.has_value());
+
+    auto uri = result.value();
+    EXPECT_TRUE(uri.is_absolute());
+    EXPECT_TRUE(uri.is_hierarchical());
+    EXPECT_TRUE(uri.is_server_based_hierarchical());
+
+    EXPECT_EQ(uri.scheme().value(), "https");
+    EXPECT_EQ(uri.userinfo().value(), "user:pass");
+    EXPECT_EQ(uri.host().value(), "example.com");
+    EXPECT_EQ(uri.port().value(), 8080);
+    EXPECT_EQ(uri.path().value(), "/path/to/resource");
+    EXPECT_EQ(uri.query().value(), "param1=value1&param2=value2");
+    EXPECT_EQ(uri.fragment().value(), "fragment");
+    EXPECT_EQ(uri.authority().value(), "user:pass@example.com:8080");
+}
+
+TEST_CASE(TestUriParseRelativeUri)
+{
+    auto result = webcraft::web::core::uri::parse("/path/to/resource?query=value#fragment");
+    EXPECT_TRUE(result.has_value());
+
+    auto uri = result.value();
+    EXPECT_FALSE(uri.is_absolute());
+    EXPECT_TRUE(uri.is_relative());
+    EXPECT_TRUE(uri.is_hierarchical());
+    EXPECT_FALSE(uri.is_opaque());
+
+    EXPECT_FALSE(uri.scheme().has_value());
+    EXPECT_EQ(uri.path().value(), "/path/to/resource");
+    EXPECT_EQ(uri.query().value(), "query=value");
+    EXPECT_EQ(uri.fragment().value(), "fragment");
+    EXPECT_FALSE(uri.authority().has_value());
+}
+
+TEST_CASE(TestUriParseOpaqueUri)
+{
+    auto result = webcraft::web::core::uri::parse("mailto:test@example.com");
+    EXPECT_TRUE(result.has_value());
+
+    auto uri = result.value();
+    EXPECT_TRUE(uri.is_absolute());
+    EXPECT_FALSE(uri.is_relative());
+    EXPECT_FALSE(uri.is_hierarchical());
+    EXPECT_TRUE(uri.is_opaque());
+
+    EXPECT_EQ(uri.scheme().value(), "mailto");
+    EXPECT_EQ(uri.scheme_specific_part(), "test@example.com");
+    EXPECT_FALSE(uri.path().has_value());
+    EXPECT_FALSE(uri.authority().has_value());
+}
+
+TEST_CASE(TestUriParseIpv6)
+{
+    auto result = webcraft::web::core::uri::parse("http://[2001:db8::1]:8080/path");
+    EXPECT_TRUE(result.has_value());
+
+    auto uri = result.value();
+    EXPECT_TRUE(uri.is_server_based_hierarchical());
+
+    EXPECT_EQ(uri.scheme().value(), "http");
+    EXPECT_EQ(uri.host().value(), "[2001:db8::1]");
+    EXPECT_EQ(uri.port().value(), 8080);
+    EXPECT_EQ(uri.path().value(), "/path");
+}
+
+TEST_CASE(TestUriParseWithoutScheme)
+{
+    auto result = webcraft::web::core::uri::parse("//example.com/path");
+    EXPECT_TRUE(result.has_value());
+
+    auto uri = result.value();
+    EXPECT_FALSE(uri.is_absolute());
+    EXPECT_TRUE(uri.is_relative());
+    EXPECT_TRUE(uri.is_hierarchical());
+
+    EXPECT_FALSE(uri.scheme().has_value());
+    EXPECT_EQ(uri.authority().value(), "example.com");
+    EXPECT_EQ(uri.host().value(), "example.com");
+    EXPECT_EQ(uri.path().value(), "/path");
+}
+
+TEST_CASE(TestUriEquality)
+{
+    auto uri1 = webcraft::web::core::uri::parse("http://example.com/path").value();
+    auto uri2 = webcraft::web::core::uri::parse("http://example.com/path").value();
+    auto uri3 = webcraft::web::core::uri::parse("https://example.com/path").value();
+
+    EXPECT_TRUE(uri1 == uri2);
+    EXPECT_FALSE(uri1 == uri3);
+}
+
+TEST_CASE(TestUriConversions)
+{
+    auto uri = webcraft::web::core::uri::parse("http://example.com/path").value();
+
+    std::string_view sv = uri;
+    std::string s = uri;
+
+    EXPECT_EQ(sv, "http://example.com/path");
+    EXPECT_EQ(s, "http://example.com/path");
+}
+
+// URI Builder Tests
+TEST_CASE(TestUriBuilderBasic)
+{
+    auto result = webcraft::web::core::uri_builder()
+                      .scheme("https")
+                      .host("example.com")
+                      .port(443)
+                      .path("/api/v1")
+                      .build();
+
+    EXPECT_TRUE(result.has_value());
+    auto uri = result.value();
+
+    EXPECT_EQ(uri.scheme().value(), "https");
+    EXPECT_EQ(uri.host().value(), "example.com");
+    EXPECT_EQ(uri.port().value(), 443);
+    EXPECT_EQ(uri.path().value(), "/api/v1");
+}
+
+TEST_CASE(TestUriBuilderComplete)
+{
+    auto result = webcraft::web::core::uri_builder()
+                      .scheme("https")
+                      .userinfo("user:pass")
+                      .host("example.com")
+                      .port(8080)
+                      .path("/api")
+                      .append_query_param("param1", "value1")
+                      .append_query_param("param2", "value2")
+                      .fragment("section1")
+                      .build();
+
+    EXPECT_TRUE(result.has_value());
+    auto uri = result.value();
+
+    EXPECT_EQ(uri.scheme().value(), "https");
+    EXPECT_EQ(uri.userinfo().value(), "user:pass");
+    EXPECT_EQ(uri.host().value(), "example.com");
+    EXPECT_EQ(uri.port().value(), 8080);
+    EXPECT_EQ(uri.path().value(), "/api");
+    EXPECT_EQ(uri.query().value(), "param1=value1&param2=value2");
+    EXPECT_EQ(uri.fragment().value(), "section1");
+}
+
+TEST_CASE(TestUriBuilderPathAppend)
+{
+    auto result = webcraft::web::core::uri_builder()
+                      .scheme("http")
+                      .host("example.com")
+                      .append_path("api")
+                      .append_path("v1")
+                      .append_path("users")
+                      .build();
+
+    EXPECT_TRUE(result.has_value());
+    auto uri = result.value();
+
+    EXPECT_EQ(uri.path().value(), "/api/v1/users");
+}
+
+TEST_CASE(TestUriBuilderFromExistingUri)
+{
+    auto original = webcraft::web::core::uri::parse("http://example.com/path").value();
+
+    auto result = webcraft::web::core::uri_builder(original)
+                      .scheme("https")
+                      .port(443)
+                      .append_path("api")
+                      .build();
+
+    EXPECT_TRUE(result.has_value());
+    auto uri = result.value();
+
+    EXPECT_EQ(uri.scheme().value(), "https");
+    EXPECT_EQ(uri.host().value(), "example.com");
+    EXPECT_EQ(uri.port().value(), 443);
+    EXPECT_EQ(uri.path().value(), "/path/api");
+}
+
+TEST_CASE(TestUriBuilderAuthority)
+{
+    auto result = webcraft::web::core::uri_builder()
+                      .scheme("http")
+                      .authority("user:pass", "example.com", 8080)
+                      .path("/test")
+                      .build();
+
+    EXPECT_TRUE(result.has_value());
+    auto uri = result.value();
+
+    EXPECT_EQ(uri.userinfo().value(), "user:pass");
+    EXPECT_EQ(uri.host().value(), "example.com");
+    EXPECT_EQ(uri.port().value(), 8080);
+}
+
+TEST_CASE(TestUriBuilderBuildString)
+{
+    auto builder = webcraft::web::core::uri_builder()
+                       .scheme("https")
+                       .host("example.com")
+                       .port(443)
+                       .path("/api")
+                       .query("test=value")
+                       .fragment("section");
+
+    auto uri_string = builder.build_string();
+    EXPECT_EQ(uri_string, "https://example.com:443/api?test=value#section");
+}

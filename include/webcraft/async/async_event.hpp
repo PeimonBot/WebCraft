@@ -7,6 +7,7 @@
 
 #include <coroutine>
 #include <vector>
+#include <atomic>
 
 namespace webcraft::async
 {

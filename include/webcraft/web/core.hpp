@@ -8,6 +8,10 @@
 #include <utility>
 #include <span>
 #include <expected>
+#include <string>
+#include <string_view>
+#include <optional>
+#include <cstdint>
 
 #include <webcraft/async/async.hpp>
 
@@ -326,6 +330,184 @@ namespace webcraft::web::core
         { t3(stream) } -> std::same_as<async_t(Ret)>;
     };
 
+    class uri
+    {
+    private:
+        std::string uri_string;
+        std::string_view scheme_part;
+        std::string_view scheme_specific_part_view;
+        std::string_view fragment_part;
+        std::string_view authority_part;
+        std::string_view path_part;
+        std::string_view query_part;
+        std::string_view userinfo_part;
+        std::string_view host_part;
+        std::optional<uint16_t> port_number;
+        bool has_scheme = false;
+        bool has_fragment = false;
+        bool has_authority = false;
+        bool has_query = false;
+        bool has_userinfo = false;
+        bool has_host = false;
+        bool has_port = false;
+
+        constexpr uri(std::string uri_str) : uri_string(std::move(uri_str)),
+                                             scheme_part{}, scheme_specific_part_view{}, fragment_part{},
+                                             authority_part{}, path_part{}, query_part{}, userinfo_part{}, host_part{} {}
+
+    public:
+        // URIs syntax [scheme:]scheme-specific-part[#fragment]
+        constexpr std::optional<std::string_view> scheme() const noexcept
+        {
+            return has_scheme ? std::optional<std::string_view>{scheme_part} : std::nullopt;
+        }
+
+        constexpr std::string_view scheme_specific_part() const noexcept
+        {
+            return scheme_specific_part_view;
+        }
+
+        constexpr std::optional<std::string_view> fragment() const noexcept
+        {
+            return has_fragment ? std::optional<std::string_view>{fragment_part} : std::nullopt;
+        }
+
+        // absolute vs relative URIs
+        // absolute uri syntax: scheme:scheme-specific-part[#fragment]
+        constexpr bool is_absolute() const noexcept
+        {
+            return scheme().has_value();
+        }
+        // relative uri syntax: scheme-specific-part[#fragment]
+        constexpr bool is_relative() const noexcept
+        {
+            return !is_absolute();
+        }
+
+        // hierarchical vs opaque
+        // opaque uri syntax: scheme:non-hierarchical-part[#fragment]
+        constexpr bool is_opaque() const noexcept
+        {
+            return is_absolute() && !scheme_specific_part().empty() && scheme_specific_part().front() != '/';
+        }
+        // hierarchical uri syntax: [scheme:][//authority][path][?query][#fragment]
+        constexpr bool is_hierarchical() const noexcept
+        {
+            return !is_opaque() || is_relative();
+        }
+
+        // authority, path, query (only for hierarchical URIs)
+        constexpr std::optional<std::string_view> authority() const noexcept
+        {
+            return has_authority ? std::optional<std::string_view>{authority_part} : std::nullopt;
+        }
+
+        constexpr std::optional<std::string_view> path() const noexcept
+        {
+            return is_hierarchical() ? std::optional<std::string_view>{path_part} : std::nullopt;
+        }
+
+        constexpr std::optional<std::string_view> query() const noexcept
+        {
+            return has_query ? std::optional<std::string_view>{query_part} : std::nullopt;
+        }
+
+        // hierarchical URI types
+        // server-based hierarchical URI syntax: authority: [user-info@]host[:port]
+        constexpr bool is_server_based_hierarchical() const noexcept
+        {
+            return is_hierarchical() && host().has_value();
+        }
+        constexpr bool is_registry_based_hierarchical() const noexcept
+        {
+            return is_hierarchical() && !is_server_based_hierarchical();
+        }
+
+        // userinfo, host, port (only for server-based hierarchical URIs)
+        constexpr std::optional<std::string_view> userinfo() const
+        {
+            return has_userinfo ? std::optional<std::string_view>{userinfo_part} : std::nullopt;
+        }
+
+        constexpr std::optional<std::string_view> host() const
+        {
+            return has_host ? std::optional<std::string_view>{host_part} : std::nullopt;
+        }
+
+        constexpr std::optional<uint16_t> port() const noexcept
+        {
+            return has_port ? port_number : std::nullopt;
+        }
+
+        operator std::string_view() const
+        {
+            return uri_string;
+        }
+
+        operator std::string() const
+        {
+            return uri_string;
+        }
+
+        constexpr bool operator==(const uri &other) const noexcept
+        {
+            return uri_string == other.uri_string;
+        }
+
+        static std::expected<uri, std::string> parse(std::string_view uri_str) noexcept;
+    };
+
+    class uri_builder
+    {
+    private:
+        std::string scheme_str;
+        std::string userinfo_str;
+        std::string host_str;
+        std::optional<uint16_t> port_num;
+        std::string path_str;
+        std::string query_str;
+        std::string fragment_str;
+        bool has_scheme_val = false;
+        bool has_userinfo_val = false;
+        bool has_host_val = false;
+        bool has_port_val = false;
+        bool has_query_val = false;
+        bool has_fragment_val = false;
+
+    public:
+        uri_builder() = default;
+        uri_builder(const uri_builder &) = default;
+        uri_builder &operator=(const uri_builder &) = default;
+        uri_builder(uri_builder &&) = default;
+        uri_builder &operator=(uri_builder &&) = default;
+
+        explicit uri_builder(const uri &u);
+
+        // Component setters
+        uri_builder &scheme(std::string_view scheme);
+
+        uri_builder &userinfo(std::string_view userinfo);
+
+        uri_builder &host(std::string_view host);
+
+        uri_builder &port(uint16_t port);
+
+        uri_builder &path(std::string_view path);
+        uri_builder &append_path(std::string_view segment);
+
+        uri_builder &query(std::string_view query);
+        uri_builder &append_query_param(std::string_view name, std::string_view value);
+
+        uri_builder &fragment(std::string_view fragment);
+
+        // Convenience methods
+        uri_builder &authority(std::string_view userinfo, std::string_view host, std::optional<uint16_t> port = std::nullopt);
+        uri_builder &authority(std::string_view host, std::optional<uint16_t> port = std::nullopt);
+
+        // Build methods
+        std::expected<uri, std::string> build() const;
+        std::string build_string() const;
+    };
 }
 
 namespace webcraft::web::connection
