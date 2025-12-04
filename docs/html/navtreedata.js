@@ -99,47 +99,6 @@ var NAVTREE =
       [ "Thread Pool", "md_include_2webcraft_2async_2README.html#autotoc_md58", null ],
       [ "Macros and Type Aliases", "md_include_2webcraft_2async_2README.html#autotoc_md59", null ]
     ] ],
-    [ "Web Specification", "md_include_2webcraft_2web_2README.html", [
-      [ "Introduction", "md_include_2webcraft_2web_2README.html#autotoc_md61", null ],
-      [ "Implementation", "md_include_2webcraft_2web_2README.html#autotoc_md62", null ],
-      [ "namespace webcraft::web::core", "md_include_2webcraft_2web_2README.html#autotoc_md63", [
-        [ "message", "md_include_2webcraft_2web_2README.html#autotoc_md64", null ],
-        [ "web_read_stream", "md_include_2webcraft_2web_2README.html#autotoc_md65", null ],
-        [ "web_write_stream", "md_include_2webcraft_2web_2README.html#autotoc_md66", null ],
-        [ "http_method", "md_include_2webcraft_2web_2README.html#autotoc_md67", null ],
-        [ "http_response_code", "md_include_2webcraft_2web_2README.html#autotoc_md68", null ],
-        [ "payload_dispatcher", "md_include_2webcraft_2web_2README.html#autotoc_md69", null ],
-        [ "payload_handler", "md_include_2webcraft_2web_2README.html#autotoc_md70", null ],
-        [ "headers namespace", "md_include_2webcraft_2web_2README.html#autotoc_md71", null ],
-        [ "payloads namespace", "md_include_2webcraft_2web_2README.html#autotoc_md72", null ]
-      ] ],
-      [ "namespace webcraft::web::connection", "md_include_2webcraft_2web_2README.html#autotoc_md73", [
-        [ "connection", "md_include_2webcraft_2web_2README.html#autotoc_md74", null ],
-        [ "connection_provider", "md_include_2webcraft_2web_2README.html#autotoc_md75", [
-          [ "Usage", "md_include_2webcraft_2web_2README.html#autotoc_md76", null ]
-        ] ],
-        [ "connection_protocol", "md_include_2webcraft_2web_2README.html#autotoc_md77", null ]
-      ] ],
-      [ "namespace webcraft::web::client", "md_include_2webcraft_2web_2README.html#autotoc_md78", [
-        [ "web_client", "md_include_2webcraft_2web_2README.html#autotoc_md79", null ],
-        [ "web_connection_builder", "md_include_2webcraft_2web_2README.html#autotoc_md80", null ],
-        [ "web_response_base", "md_include_2webcraft_2web_2README.html#autotoc_md81", null ],
-        [ "web_client_connection", "md_include_2webcraft_2web_2README.html#autotoc_md82", null ],
-        [ "web_socket_connection", "md_include_2webcraft_2web_2README.html#autotoc_md83", null ],
-        [ "web_response", "md_include_2webcraft_2web_2README.html#autotoc_md84", null ]
-      ] ],
-      [ "namespace webcraft::web::server", "md_include_2webcraft_2web_2README.html#autotoc_md85", [
-        [ "web_server", "md_include_2webcraft_2web_2README.html#autotoc_md86", null ],
-        [ "server_state_cb & web_server_context_manager", "md_include_2webcraft_2web_2README.html#autotoc_md87", null ],
-        [ "web_route & error_handler_route & cors_config", "md_include_2webcraft_2web_2README.html#autotoc_md88", null ],
-        [ "web_route_handler & http_route_handler & web_socket_handler & error_handler_cb", "md_include_2webcraft_2web_2README.html#autotoc_md89", null ],
-        [ "web_server_context_view", "md_include_2webcraft_2web_2README.html#autotoc_md90", null ],
-        [ "Web Requests", "md_include_2webcraft_2web_2README.html#autotoc_md91", null ],
-        [ "Web Responses", "md_include_2webcraft_2web_2README.html#autotoc_md92", null ]
-      ] ],
-      [ "namespace webcraft::web::secure", "md_include_2webcraft_2web_2README.html#autotoc_md93", null ],
-      [ "Resources", "md_include_2webcraft_2web_2README.html#autotoc_md94", null ]
-    ] ],
     [ "Namespaces", "namespaces.html", [
       [ "Namespace List", "namespaces.html", "namespaces_dup" ],
       [ "Namespace Members", "namespacemembers.html", [
@@ -175,9 +134,9 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "adaptors_8hpp.html",
-"classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream.html#a70af1e7d471d109dc49d87fddd95f15b",
-"conceptwebcraft_1_1async_1_1io_1_1async__buffered__readable__stream.html",
-"ranges_8hpp_source.html"
+"classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream.html#a8d38dd95d1ec9723bb489e27a4962a03",
+"conceptwebcraft_1_1async_1_1io_1_1async__buffered__writable__stream.html",
+"structwebcraft_1_1async_1_1io_1_1socket_1_1connection__info.html"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';
