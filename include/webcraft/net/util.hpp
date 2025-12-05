@@ -22,6 +22,8 @@
 
 #endif
 
+#include <webcraft/async/task.hpp>
+
 #include <string.h>
 
 namespace webcraft::net::util
@@ -74,4 +76,5 @@ namespace webcraft::net::util
         freeaddrinfo(res);
         return check;
     }
+
 }
