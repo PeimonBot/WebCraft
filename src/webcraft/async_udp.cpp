@@ -198,6 +198,7 @@ public:
         hints.ai_family = AF_UNSPEC;    // Allow IPv4 or IPv6
         hints.ai_socktype = SOCK_DGRAM; // UDP
         hints.ai_protocol = IPPROTO_UDP;
+        hints.ai_flags = AI_PASSIVE;
 
         struct addrinfo *res;
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
@@ -389,6 +390,7 @@ public:
         hints.ai_family = AF_UNSPEC;    // Allow IPv4 or IPv6
         hints.ai_socktype = SOCK_DGRAM; // UDP
         hints.ai_protocol = IPPROTO_UDP;
+        hints.ai_flags = AI_PASSIVE;
 
         struct addrinfo *res;
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
@@ -630,6 +632,7 @@ public:
         hints.ai_family = AF_UNSPEC;    // Allow IPv4 or IPv6
         hints.ai_socktype = SOCK_DGRAM; // UDP
         hints.ai_protocol = IPPROTO_UDP;
+        hints.ai_flags = AI_PASSIVE;
 
         struct addrinfo *res;
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
@@ -771,4 +774,278 @@ std::shared_ptr<webcraft::async::io::socket::detail::udp_socket_descriptor> webc
 }
 
 #elif defined(__APPLE__)
+
+#include "async_tcp_socket_decl.hpp"
+
+class kqueue_udp_socket_descriptor : public webcraft::async::io::socket::detail::udp_socket_descriptor,
+                                     public webcraft::async::detail::runtime_callback
+{
+private:
+    int socket;
+    std::atomic<bool> closed{false};
+    int kq;
+
+    async_single_resumer_latch read_event{};
+
+    void create_socket_if_not_exists(std::optional<webcraft::async::io::socket::ip_version> &version)
+    {
+        if (socket == -1)
+        {
+            // try ipv6 udp first for default
+            if (version == std::nullopt || version == webcraft::async::io::socket::ip_version::IPv6)
+            {
+                socket = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+            }
+
+            if (socket < 0 && (version == std::nullopt || version == webcraft::async::io::socket::ip_version::IPv4))
+            {
+                socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            }
+            
+            // if error creating socket throw
+            if (socket < 0)
+            {
+                auto err = errno;
+                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+            }
+
+            register_with_queue();
+        }
+    }
+
+    void close_socket()
+    {
+        deregister_with_queue();
+        ::close(socket);
+        socket = -1;
+    }
+
+public:
+    kqueue_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version) : webcraft::async::io::socket::detail::udp_socket_descriptor(version), socket(-1)
+    {
+        create_socket_if_not_exists(version);
+    }
+
+    ~kqueue_udp_socket_descriptor()
+    {
+        fire_and_forget(close());
+    }
+
+    task<void> close() override
+    {
+        if (socket != -1)
+        {
+            bool expected = false;
+            if (closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                close_socket();
+            }
+        }
+        co_return;
+    }
+
+    void bind(const webcraft::async::io::socket::connection_info &info) override
+    {
+        close_socket();
+
+        // Prepare address string for getaddrinfo
+        std::string port_str = std::to_string(info.port);
+        struct addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;    // Allow IPv4 or IPv6
+        hints.ai_socktype = SOCK_DGRAM; // UDP
+        hints.ai_protocol = IPPROTO_UDP;
+        hints.ai_flags = AI_PASSIVE;
+
+        struct addrinfo *res;
+        int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
+        if (ret != 0)
+        {
+            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        }
+
+        bool flag = false;
+
+        for (auto *rp = res; rp; rp = rp->ai_next)
+        {
+
+            int family = rp->ai_family;
+            int sock_type = rp->ai_socktype;
+            int protocol = rp->ai_protocol;
+            sockaddr *addr = rp->ai_addr;
+            socklen_t len = (socklen_t)rp->ai_addrlen;
+
+            int fd = ::socket(family, sock_type, protocol);
+            if (fd < 0)
+            {
+                continue;
+            }
+
+            // Reuse address is often useful for UDP
+            int on = 1;
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
+            // Await io_uring bind
+            int result = ::bind(fd, addr, len);
+
+            if (result < 0)
+            {
+                close_socket();
+                continue;
+            }
+            else
+            {
+                this->socket = fd;
+                flag = true;
+                break;
+            }
+        }
+
+        freeaddrinfo(res); // Free memory allocated by getaddrinfo
+
+        if (!flag)
+            throw std::ios_base::failure("Failed to create socket: " + std::string(get_error_string(get_last_socket_error())));
+        
+        register_with_queue();
+    }
+
+    // ---------------------------------------------------------
+    // The Async Read Implementation (Lazy/On-Demand)
+    // ---------------------------------------------------------
+    task<size_t> recvfrom(std::span<char> buffer, webcraft::async::io::socket::connection_info &info) override
+    {
+        if (closed || socket == -1)
+            co_return 0;
+
+        while (true)
+        {
+            sockaddr_storage addr{};
+            socklen_t addr_len = sizeof(addr);
+
+            // 1. Try to read immediately (non-blocking)
+            ssize_t size = ::recvfrom(socket, buffer.data(), (int)buffer.size(), 0, (sockaddr *)&addr, &addr_len);
+
+            if (size >= 0)
+            {
+                // Success! Parse address and return.
+                auto [host, port] = webcraft::net::util::addr_to_host_port(addr);
+                info.host = host;
+                info.port = port;
+                co_return (size_t) size;
+            }
+
+            // 2. Handle Errors
+            int err = errno;
+            if (err == EAGAIN || err == EWOULDBLOCK)
+            {
+                // No data yet. Suspend coroutine and wait for kqueue to wake us.
+                co_await read_event;
+
+                // When we wake up, loop back to step 1 and try reading again.
+                // We check 'closed' again in case socket was closed while we waited.
+                if (closed)
+                    co_return 0;
+                continue;
+            }
+            else if (err == EINTR)
+            {
+                continue;
+            }
+            else
+            {
+                throw std::ios_base::failure("UDP recvfrom failed: " + std::string(strerror(err)));
+            }
+        }
+    }
+
+    task<size_t> sendto(std::span<const char> buffer, const webcraft::async::io::socket::connection_info &info) override
+    {
+        if (closed || socket == -1)
+            co_return 0;
+        int bytes_sent = -1;
+
+        // Note: Because register_with_queue sets O_NONBLOCK, sendto *might* fail with EAGAIN
+        // if the kernel buffer is full. Since you want sync writes, we technically should
+        // spin or wait here, but for UDP, it is standard to just let it fail/drop
+        // or return the error to the user.
+
+        bool flag = webcraft::net::util::host_port_to_addr(
+            info,
+            [&](sockaddr *addr, socklen_t len)
+            {
+                bytes_sent = ::sendto(socket, buffer.data(), (int)buffer.size(), 0, addr, len);
+                return bytes_sent >= 0;
+            });
+
+        if (!flag)
+        {
+            // If errno is EAGAIN here, it means the network is saturated.
+            // You can choose to throw or return 0.
+            throw std::ios_base::failure("UDP sendto failed: " + std::string(strerror(errno)));
+        }
+
+        co_return bytes_sent;
+    }
+    // ---------------------------------------------------------
+    // Kqueue Management
+    // ---------------------------------------------------------
+    void register_with_queue()
+    {
+        if (socket == -1)
+            return;
+
+        // Make socket non-blocking
+        int flags = ::fcntl(socket, F_GETFL, 0);
+        if (flags == -1)
+            throw std::runtime_error("fcntl get failed");
+
+        if (::fcntl(socket, F_SETFL, flags | O_NONBLOCK) == -1)
+            throw std::runtime_error("fcntl set nonblock failed");
+
+        kq = (int)webcraft::async::detail::get_native_handle();
+
+        // Register READ interest.
+        // We do NOT register WRITE interest because you requested synchronous writes.
+        struct kevent kev;
+        EV_SET(&kev, socket, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, (webcraft::async::detail::runtime_callback *)this);
+        if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
+        {
+            throw std::runtime_error("Could not register UDP kqueue listener");
+        }
+    }
+
+    void deregister_with_queue()
+    {
+        if (socket_fd == -1)
+            return;
+
+        struct kevent kev;
+        EV_SET(&kev, socket, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+        // Best effort, ignore errors on close
+        kevent(kq, &kev, 1, NULL, 0, NULL);
+
+        // Wake up any pending readers so they can exit/fail
+        read_event.notify();
+    }
+
+    void try_execute(int result, bool cancelled) override
+    {
+        if (closed)
+            return;
+
+        auto filter = webcraft::async::detail::get_kqueue_filter();
+
+        // When kqueue says there is data, we simply wake up the coroutine.
+        // The coroutine (in recvfrom) will perform the actual read.
+        if (filter == EVFILT_READ)
+        {
+            read_event.notify();
+        }
+    }
+};
+
+std::shared_ptr<webcraft::async::io::socket::detail::udp_socket_descriptor> webcraft::async::io::socket::detail::make_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version)
+{
+    return std::make_shared<kqueue_udp_socket_descriptor>(version);
+}
+
 #endif
