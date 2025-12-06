@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['value_5ftype_0',['value_type',['../classcppcoro_1_1async__generator.html#a7032c82ac1de013361ce4cda60c6457f',1,'cppcoro::async_generator::value_type'],['../classwebcraft_1_1async_1_1task__completion__source.html#a0bc1c99fc8884263d51c08f535c905b5',1,'webcraft::async::task_completion_source::value_type'],['../classwebcraft_1_1async_1_1task__completion__source_3_01void_01_4.html#a84bd49e22916744fce0f7b8aa627b2cc',1,'webcraft::async::task_completion_source&lt; void &gt;::value_type']]]
+  ['promise_5ftype_0',['promise_type',['../classcppcoro_1_1async__generator.html#a499dd8116a5fb93fd965f42de23bdca3',1,'cppcoro::async_generator::promise_type'],['../classcppcoro_1_1generator.html#acb32a62be62c620fbff7dae25fa4b710',1,'cppcoro::generator::promise_type'],['../classwebcraft_1_1async_1_1task.html#a704da2949b629368c2ee67d47789bcf4',1,'webcraft::async::task::promise_type'],['../classwebcraft_1_1async_1_1task_3_01void_01_4.html#a511751ec663fe9c7a96ea011c5729ca9',1,'webcraft::async::task&lt; void &gt;::promise_type']]]
 ];

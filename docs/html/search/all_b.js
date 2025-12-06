@@ -12,7 +12,6 @@ var searchData=
   ['matches_20adaptor_9',['matches adaptor',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md28',1,'All matches adaptor'],['../md_include_2webcraft_2async_2io_2README.html#autotoc_md27',1,'Any matches adaptor'],['../md_include_2webcraft_2async_2io_2README.html#autotoc_md29',1,'None matches adaptor']]],
   ['max_10',['max',['../namespacewebcraft_1_1async_1_1io_1_1adaptors.html#a5d9d3a60fa12ea699dc5fc59ae5d0f63',1,'webcraft::async::io::adaptors']]],
   ['max_20adaptor_11',['Max adaptor',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md23',1,'']]],
-  ['message_12',['message',['../md_include_2webcraft_2web_2README.html#autotoc_md64',1,'']]],
-  ['min_13',['min',['../namespacewebcraft_1_1async_1_1io_1_1adaptors.html#abe983922626e1ab45c906444bbf74239',1,'webcraft::async::io::adaptors']]],
-  ['min_20adaptor_14',['Min adaptor',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md22',1,'']]]
+  ['min_12',['min',['../namespacewebcraft_1_1async_1_1io_1_1adaptors.html#abe983922626e1ab45c906444bbf74239',1,'webcraft::async::io::adaptors']]],
+  ['min_20adaptor_13',['Min adaptor',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md22',1,'']]]
 ];

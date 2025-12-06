@@ -404,20 +404,7 @@ TEST_CASE(TestAsyncUdpServer)
     std::cout << "Starting Async UDP Echo Server on " << info.host << ":" << info.port << std::endl;
     async_udp_echo_server server(info);
 
-    // TODO: Uncomment this once true async udp is implemented, replace the below implementation with the commented one
-    // auto server_task = server.run();
-
-    auto server_task = co_async
-    {
-        task_completion_source<void> tcs;
-        std::thread([&]
-                    { 
-            sync_wait(server.run());
-            tcs.set_value(); })
-            .detach();
-        co_await tcs.task();
-    }
-    ();
+    auto server_task = server.run();
 
     std::cout << "Creating UDP Socket for server at " << info.host << ":" << info.port << std::endl;
 
@@ -434,6 +421,42 @@ TEST_CASE(TestAsyncUdpServer)
 
     std::cout << "Closing UDP Echo Client" << std::endl;
     client.close();
+
+    std::cout << "Shutting down Async UDP Echo Server" << std::endl;
+    sync_wait(server.shutdown());
+    std::cout << "Finishing task" << std::endl;
+
+    sync_wait(server_task);
+    std::cout << "Tearing down runtime" << std::endl;
+}
+
+TEST_CASE(TestAsyncUdpServerWithAsyncClient)
+{
+    runtime_context context;
+    std::cout << "Starting Async UDP Echo Server on " << info.host << ":" << info.port << std::endl;
+    async_udp_echo_server server(info);
+
+    auto server_task = server.run();
+
+    std::cout << "Creating UDP Socket for server at " << info.host << ":" << info.port << std::endl;
+
+    auto task_fn = co_async
+    {
+        async_udp_echo_client client(version);
+        const std::string message = "Hello, Async UDP Echo!";
+
+        for (size_t i = 0; i < 5; ++i)
+        {
+            std::cout << "Async UDP Echo Attempt " << (i + 1) << std::endl;
+            bool success = co_await client.echo(message, info);
+            EXPECT_TRUE(success) << "Async UDP Echo should succeeded on the " << (i + 1) << " attempt";
+        }
+
+        std::cout << "Closing Async UDP Echo Client" << std::endl;
+        co_await client.close();
+    };
+
+    sync_wait(task_fn());
 
     std::cout << "Shutting down Async UDP Echo Server" << std::endl;
     sync_wait(server.shutdown());
