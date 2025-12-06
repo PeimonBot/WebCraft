@@ -416,13 +416,6 @@ public:
                 continue;
             }
 
-            int opt = 1;
-            if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-            {
-                close_socket();
-                continue;
-            }
-
             // Await io_uring bind
             int result = ::bind(fd, addr, len);
 
@@ -903,7 +896,7 @@ public:
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
         if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::string(get_error_string(get_last_socket_error())));
+            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
         
         register_with_queue();
     }
@@ -1015,7 +1008,7 @@ public:
 
     void deregister_with_queue()
     {
-        if (socket_fd == -1)
+        if (socket == -1)
             return;
 
         struct kevent kev;

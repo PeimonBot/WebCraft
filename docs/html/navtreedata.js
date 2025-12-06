@@ -136,7 +136,7 @@ var NAVTREEINDEX =
 "adaptors_8hpp.html",
 "classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream.html#a8d38dd95d1ec9723bb489e27a4962a03",
 "conceptwebcraft_1_1async_1_1io_1_1async__buffered__writable__stream.html",
-"structwebcraft_1_1async_1_1io_1_1socket_1_1connection__info.html"
+"structwebcraft_1_1async_1_1io_1_1adaptors_1_1async__readable__stream__adaptor.html#ace1f32bf4f7374ba019e88c99597a7cd"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

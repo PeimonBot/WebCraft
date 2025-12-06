@@ -204,7 +204,7 @@ iocp_tcp_socket_descriptor::iocp_tcp_socket_descriptor(SOCKET sock, std::string 
     }
 }
 
-~iocp_tcp_socket_descriptor()
+iocp_tcp_socket_descriptor::~iocp_tcp_socket_descriptor()
 {
     fire_and_forget(close());
 }

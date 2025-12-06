@@ -215,7 +215,7 @@ private:
 public:
     kqueue_tcp_socket_descriptor();
 
-    kqueue_tcp_socket_descriptor(int fd, std::string host, uint16_t port) : fd(fd), host(std::move(host)), port(port);
+    kqueue_tcp_socket_descriptor(int fd, std::string host, uint16_t port);
 
     ~kqueue_tcp_socket_descriptor();
 
