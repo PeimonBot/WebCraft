@@ -399,7 +399,7 @@ private:
     int fd;
     std::atomic<bool> closed{false};
     bool no_more_connections{false};
-    async_single_resumer_latch read_event{"read_event"};
+    async_single_resumer_latch read_event{};
     int kq;
 
 public:
