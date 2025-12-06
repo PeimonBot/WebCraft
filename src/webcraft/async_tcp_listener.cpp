@@ -192,6 +192,7 @@ private:
     SOCKET socket;
     HANDLE iocp;
     std::atomic<bool> closed{false};
+    int family; // Store the address family (AF_INET/AF_INET6)
 
 public:
     iocp_tcp_socket_listener() : socket(INVALID_SOCKET), iocp(INVALID_HANDLE_VALUE)
@@ -257,6 +258,7 @@ public:
             {
 
                 this->socket = fd;
+                this->family = family;
                 flag = true;
                 break;
             }
@@ -282,28 +284,93 @@ public:
 
     task<std::shared_ptr<tcp_socket_descriptor>> accept() override
     {
+        if (socket == INVALID_SOCKET)
+            co_return nullptr;
 
-        SOCKET fd = this->socket;
+        SOCKET listen_socket = this->socket;
 
-        task_completion_source<SOCKET> accept_socket_source;
-        struct sockaddr_storage addr;
-        socklen_t addr_len = sizeof(addr);
-
-        pool.submit([fd, &addr, &addr_len, &accept_socket_source]
-                    {
-            SOCKET result = ::accept(fd, (struct sockaddr *)&addr, &addr_len);
-            accept_socket_source.set_value(result); });
-
-        SOCKET acceptSocket = co_await accept_socket_source.task();
-
-        if (acceptSocket == INVALID_SOCKET)
+        // 1. Pre-create the socket that will become the accepted client.
+        // It must match the family (IPv4/IPv6) of the listener.
+        SOCKET accept_socket = ::socket(this->family, SOCK_STREAM, IPPROTO_TCP);
+        if (accept_socket == INVALID_SOCKET)
         {
+            throw std::ios_base::failure("Failed to create accept socket: " + std::to_string(WSAGetLastError()));
+        }
+
+        // 2. Prepare the buffer.
+        // AcceptEx requires: (sizeof(sockaddr_storage) + 16) for *each* address (local and remote).
+        // We aren't reading initial data, so the data buffer size is 0.
+        const DWORD addr_len = sizeof(sockaddr_storage) + 16;
+        const DWORD buffer_size = addr_len * 2;
+
+        // We keep this buffer alive in the coroutine frame until co_await returns
+        std::vector<char> output_buffer(buffer_size);
+
+        auto event = webcraft::async::detail::as_awaitable(
+            webcraft::async::detail::windows::create_async_socket_overlapped_event(
+                listen_socket,
+                [listen_socket, accept_socket, &output_buffer, buffer_size, addr_len](LPDWORD bytesReceived, LPOVERLAPPED overlapped)
+                {
+                    // 3. Call AcceptEx
+                    // Note: We pass 0 for dwReceiveDataLength because we only want to accept the connection,
+                    // we don't want to wait for the first bytes of data (which can open DoS vulnerabilities).
+                    return get_extension_manager().AcceptEx(
+                        listen_socket,
+                        accept_socket,
+                        output_buffer.data(),
+                        0,        // dwReceiveDataLength
+                        addr_len, // dwLocalAddressLength
+                        addr_len, // dwRemoteAddressLength
+                        bytesReceived,
+                        overlapped);
+                }));
+
+        // 4. Wait for the IOCP completion
+        co_await event;
+
+        // If the socket was closed while waiting, cleanup
+        if (socket == INVALID_SOCKET || closed)
+        {
+            ::closesocket(accept_socket);
             co_return nullptr;
         }
 
-        auto [remote_host, remote_port] = webcraft::net::util::addr_to_host_port(addr);
+        // 5. Context Update (CRITICAL STEP)
+        // Without this, SO_KEEPALIVE, SO_LINGER, etc., are broken on the new socket.
+        if (setsockopt(accept_socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+                       (char *)&listen_socket, sizeof(listen_socket)) != 0)
+        {
+            ::closesocket(accept_socket);
+            throw std::ios_base::failure("Failed to update accept context: " + std::to_string(WSAGetLastError()));
+        }
 
-        co_return std::make_shared<iocp_tcp_socket_descriptor>(acceptSocket, remote_host, remote_port);
+        // 6. Parse addresses to get the Remote Host and Port
+        sockaddr *local_addr = nullptr;
+        sockaddr *remote_addr = nullptr;
+        int local_addr_len = 0;
+        int remote_addr_len = 0;
+
+        GetAcceptExSockaddrs(
+            output_buffer.data(),
+            0, // dwReceiveDataLength must match what was passed to AcceptEx
+            addr_len,
+            addr_len,
+            &local_addr,
+            &local_addr_len,
+            &remote_addr,
+            &remote_addr_len);
+
+        // Convert parsed sockaddr to our helper struct
+        // (Assuming you have a helper that takes sockaddr*)
+        sockaddr_storage remote_storage{};
+        std::memcpy(&remote_storage, remote_addr, remote_addr_len);
+
+        auto [remote_host, remote_port] = webcraft::net::util::addr_to_host_port(remote_storage);
+
+        // 7. Return the descriptor
+        // The iocp_tcp_socket_descriptor constructor will call CreateIoCompletionPort
+        // to associate this new 'accept_socket' with the global IOCP handle.
+        co_return std::make_shared<iocp_tcp_socket_descriptor>(accept_socket, remote_host, remote_port);
     }
 
     task<void> close() override

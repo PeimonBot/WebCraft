@@ -312,6 +312,24 @@ private:
     SOCKET socket;
     std::atomic<bool> closed{false};
 
+    // Helper to associate socket with the runtime's IOCP handle
+    void associate_with_iocp(SOCKET socket)
+    {
+        if (socket == INVALID_SOCKET)
+            return;
+
+        HANDLE iocp = ::CreateIoCompletionPort(
+            (HANDLE)socket,
+            (HANDLE)webcraft::async::detail::get_native_handle(),
+            0,
+            0);
+
+        if (iocp == NULL)
+        {
+            throw std::runtime_error("Failed to associate UDP socket with IOCP: " + std::to_string(GetLastError()));
+        }
+    }
+
     void create_socket_if_not_exists(std::optional<webcraft::async::io::socket::ip_version> &version)
     {
         if (socket == -1)
@@ -347,6 +365,8 @@ private:
 
                 throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
             }
+
+            associate_with_iocp(socket);
         }
     }
 
@@ -415,6 +435,8 @@ public:
             {
                 continue;
             }
+
+            associate_with_iocp(fd);
 
             // Await io_uring bind
             int result = ::bind(fd, addr, len);
