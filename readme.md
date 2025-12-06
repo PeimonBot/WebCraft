@@ -1,6 +1,6 @@
 # WebCraft
 
-> An async first framework leveraging powerful features of C++23 built for scale, speed, and ease.
+> An async first networking library leveraging powerful features of C++23 built for scale, speed, and ease.
 
 NOTE: This codebase is recommended to run on C++ 23 since most of the features are geared to it. If its possible try to get your compiler to compile with experimental libraries enabled (which will enable all the features the compiler may not have implemented for C++ 23).
 
@@ -9,13 +9,7 @@ The following compilers (and anything newer) are supported: GCC 13, MSVC 2022, C
 ## Features / Modules
 
 1. Asynchronous Runtime, Supporting Yielding and working with timeouts that are not thread based
-2. Basic networking API (Sockets, Server Sockets, async read & write) via I/O streams
-3. Web API and WebApplication wrapper (everything before was mostly console or cmdline based)
-4. Raw request/response handling with streams vs composable stream adaptor based handling (both are supported by nature)
-5. TLS support for server and client side
-
-Features 1 & 2 are supported in version 0.5. The features 3 & 4 will be available in v1. TLS may arrive in v2.
-
+2. Basic networking API (TCP & UDP Sockets, async file read & write) via I/O streams.
 
 ## Contributing to it
 
