@@ -149,8 +149,7 @@ private:
 #else
                 auto err = errno;
 #endif
-                if (socket < 0)
-                    throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
             }
         }
     }
@@ -305,6 +304,246 @@ std::shared_ptr<webcraft::async::io::socket::detail::udp_socket_descriptor> webc
     return std::make_shared<mock_udp_socket_descriptor>(version);
 }
 #elif defined(_WIN32)
+
+class iocp_udp_socket_descriptor : public webcraft::async::io::socket::detail::udp_socket_descriptor
+{
+private:
+    SOCKET socket;
+    std::atomic<bool> closed{false};
+
+    void create_socket_if_not_exists(std::optional<webcraft::async::io::socket::ip_version> &version)
+    {
+        if (socket == -1)
+        {
+            // try ipv6 udp first for default
+            if (version == std::nullopt)
+            {
+                socket = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+
+                // if ipv6 isn't supported fallback to ipv4
+                if (socket == INVALID_SOCKET)
+                {
+                    if (WSAGetLastError() != WSAEAFNOSUPPORT)
+                    {
+                        socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+                    }
+                }
+            }
+            // otherwise they want to force ip implementation then use it
+            else if (version == webcraft::async::io::socket::ip_version::IPv6)
+            {
+                socket = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+            }
+            else
+            {
+                socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            }
+
+            // if error creating socket throw
+            if (socket == INVALID_SOCKET)
+            {
+                auto err = WSAGetLastError();
+
+                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+            }
+        }
+    }
+
+    void close_socket()
+    {
+        ::closesocket(socket);
+        socket = INVALID_SOCKET;
+    }
+
+public:
+    iocp_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version) : webcraft::async::io::socket::detail::udp_socket_descriptor(version), socket(INVALID_SOCKET)
+    {
+        create_socket_if_not_exists(version);
+    }
+
+    ~iocp_udp_socket_descriptor()
+    {
+        fire_and_forget(close());
+    }
+
+    task<void> close() override
+    {
+        if (socket != INVALID_SOCKET)
+        {
+            bool expected = false;
+            if (closed.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                close_socket();
+            }
+        }
+        co_return;
+    }
+
+    void bind(const webcraft::async::io::socket::connection_info &info) override
+    {
+        close_socket();
+
+        // Prepare address string for getaddrinfo
+        std::string port_str = std::to_string(info.port);
+        struct addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;    // Allow IPv4 or IPv6
+        hints.ai_socktype = SOCK_DGRAM; // UDP
+        hints.ai_protocol = IPPROTO_UDP;
+
+        struct addrinfo *res;
+        int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
+        if (ret != 0)
+        {
+            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        }
+
+        bool flag = false;
+
+        for (auto *rp = res; rp; rp = rp->ai_next)
+        {
+
+            int family = rp->ai_family;
+            int sock_type = rp->ai_socktype;
+            int protocol = rp->ai_protocol;
+            sockaddr *addr = rp->ai_addr;
+            socklen_t len = (socklen_t)rp->ai_addrlen;
+
+            SOCKET fd = ::socket(family, sock_type, protocol);
+            if (fd == INVALID_SOCKET)
+            {
+                continue;
+            }
+
+            int opt = 1;
+            if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+            {
+                close_socket();
+                continue;
+            }
+
+            // Await io_uring bind
+            int result = ::bind(fd, addr, len);
+
+            if (result < 0)
+            {
+                close_socket();
+                continue;
+            }
+            else
+            {
+                this->socket = fd;
+                flag = true;
+                break;
+            }
+        }
+
+        freeaddrinfo(res); // Free memory allocated by getaddrinfo
+
+        if (!flag)
+            throw std::ios_base::failure("Failed to create socket: " + std::to_string(WSAGetLastError()));
+    }
+
+    task<size_t> recvfrom(std::span<char> buffer, webcraft::async::io::socket::connection_info &info) override
+    {
+        if (closed)
+            co_return 0;
+
+        sockaddr_storage addr;
+        socklen_t addr_len = sizeof(addr);
+
+        SOCKET fd = this->socket;
+        WSABUF wsabuf;
+        wsabuf.buf = const_cast<char *>(buffer.data());
+        wsabuf.len = (ULONG)buffer.size();
+        DWORD flags = 0;
+
+        auto event = webcraft::async::detail::as_awaitable(
+            webcraft::async::detail::windows::create_async_socket_overlapped_event(
+                fd,
+                [fd, &wsabuf, &flags, &addr, &addr_len](LPDWORD numberOfBytesTransfered, LPOVERLAPPED overlapped)
+                {
+                    return WSARecvFrom(fd,
+                                       &wsabuf,
+                                       1,
+                                       numberOfBytesTransfered,
+                                       &flags,
+                                       (sockaddr *)&addr,
+                                       &addr_len,
+                                       overlapped,
+                                       nullptr);
+                }));
+
+        co_await event;
+
+        auto size = event.get_result();
+
+        if (size < 0)
+        {
+            throw std::ios_base::failure("Failed to receive data: " + std::to_string(WSAGetLastError()));
+        }
+
+        // Extract connection info
+        auto [host, port] = webcraft::net::util::addr_to_host_port(addr);
+
+        info.host = host;
+        info.port = port;
+
+        co_return size;
+    }
+
+    task<size_t> sendto(std::span<const char> buffer, const webcraft::async::io::socket::connection_info &info) override
+    {
+        if (closed)
+            co_return 0;
+
+        SOCKET socket = this->socket;
+        int bytes_sent = -1;
+
+        std::function<task<bool>(sockaddr *, socklen_t)> async_func = [&bytes_sent, buffer, socket](sockaddr *addr, socklen_t len) -> task<bool>
+        {
+            WSABUF wsabuf;
+            wsabuf.buf = const_cast<char *>(buffer.data());
+            wsabuf.len = (ULONG)buffer.size();
+
+            auto event = webcraft::async::detail::as_awaitable(
+                webcraft::async::detail::windows::create_async_socket_overlapped_event(
+                    socket,
+                    [socket, &wsabuf, addr, len](LPDWORD numberOfBytesTransfered, LPWSAOVERLAPPED overlapped)
+                    {
+                        return WSASendTo(
+                            socket,
+                            &wsabuf,
+                            1,
+                            numberOfBytesTransfered,
+                            0,
+                            (sockaddr *)addr,
+                            len,
+                            overlapped,
+                            nullptr);
+                    }));
+
+            co_await event;
+
+            bytes_sent = event.get_result();
+
+            co_return bytes_sent >= 0;
+        };
+
+        bool flag = co_await async_host_port_to_addr(
+            info, async_func);
+
+        if (!flag)
+            throw std::ios_base::failure("Failed to send data: " + std::to_string(WSAGetLastError()));
+
+        co_return bytes_sent;
+    }
+};
+
+std::shared_ptr<webcraft::async::io::socket::detail::udp_socket_descriptor> webcraft::async::io::socket::detail::make_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version)
+{
+    return std::make_shared<iocp_udp_socket_descriptor>(version);
+}
+
 #elif defined(__linux__)
 
 class io_uring_udp_socket_descriptor : public webcraft::async::io::socket::detail::udp_socket_descriptor
@@ -346,8 +585,7 @@ private:
             {
                 auto err = errno;
 
-                if (socket < 0)
-                    throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
             }
         }
     }
@@ -469,7 +707,6 @@ public:
         msg.msg_controllen = 0;
         msg.msg_flags = 0;
 
-        // TODO: Use io_uring_prep_recvmsg
         int fd = socket;
         auto event = webcraft::async::detail::as_awaitable(
             webcraft::async::detail::linux::create_io_uring_event(
@@ -504,7 +741,6 @@ public:
 
         std::function<task<bool>(sockaddr *, socklen_t)> async_func = [&bytes_sent, buffer, socket](sockaddr *addr, socklen_t len) -> task<bool>
         {
-            // bytes_sent = ::sendto(socket, buffer.data(), (int)buffer.size(), 0, addr, len);
             auto event = webcraft::async::detail::as_awaitable(
                 webcraft::async::detail::linux::create_io_uring_event(
                     [socket, buffer, addr, len](struct io_uring_sqe *sqe)
