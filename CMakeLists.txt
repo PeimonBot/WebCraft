@@ -34,5 +34,10 @@ add_library(WebCraft STATIC ${WebCraft_SOURCES})
 target_include_directories(WebCraft PUBLIC ${CPP_ASYNC_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(WebCraft PUBLIC ${WEBCRAFT_PLATFORM_LIBS})
 
-enable_testing()
-add_subdirectory(tests)
+# Make tests optional
+option(WEBCRAFT_BUILD_TESTS "Build WebCraft tests" OFF)
+
+if(WEBCRAFT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
