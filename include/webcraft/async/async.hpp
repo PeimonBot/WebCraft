@@ -5,6 +5,7 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
+#include <atomic>
 #include "async_event.hpp"
 #include "async_generator.hpp"
 #include "awaitable.hpp"

@@ -90,16 +90,18 @@ jobs:
                   -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
                   -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
                   -S ${{ github.workspace }}
+                  -DWEBCRAFT_BUILD_TESTS=ON
 
             - name: Configure CMake for MacOS
               if: ${{ matrix.os == 'macos-latest' }}
-              run: |
-                  cmake \
-                  --preset=${{ matrix.preset }} \
-                  -B ${{ steps.strings.outputs.build-output-dir }} \
-                  -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
-                  -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+              run: >
+                  cmake
+                  --preset=${{ matrix.preset }}
+                  -B ${{ steps.strings.outputs.build-output-dir }}
+                  -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+                  -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
                   -S ${{ github.workspace }}
+                  -DWEBCRAFT_BUILD_TESTS=ON
 
             - name: Build not for MacOS
               if: ${{ matrix.os != 'macos-latest' }}
