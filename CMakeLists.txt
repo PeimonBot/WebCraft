@@ -6,7 +6,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # --- 1. Platform Dependencies ---
 if (WIN32)
-    set(WEBCRAFT_PLATFORM_LIBS ws2_32)
+    set(WEBCRAFT_PLATFORM_LIBS ws2_32 Mswsock)
 elseif (UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(uring REQUIRED IMPORTED_TARGET liburing)
