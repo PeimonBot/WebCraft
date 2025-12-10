@@ -6,15 +6,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # --- 1. Platform Dependencies ---
 if (WIN32)
-    set(WEBCRAFT_PLATFORM_LIBS wsock32 ws2_32)
+    set(WEBCRAFT_PLATFORM_LIBS ws2_32 Mswsock)
 elseif (UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(uring REQUIRED IMPORTED_TARGET liburing)
     set(WEBCRAFT_PLATFORM_LIBS PkgConfig::uring)
-elseif (UNIX AND APPLE)
-    set(WEBCRAFT_PLATFORM_LIBS "")
 else()
-    message(FATAL_ERROR "Unsupported platform")
+    set(WEBCRAFT_PLATFORM_LIBS "")
 endif()
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -49,7 +47,7 @@ install(DIRECTORY include/ DESTINATION include)
 install(EXPORT WebCraftTargets
     FILE WebCraftTargets.cmake
     NAMESPACE WebCraft::
-    DESTINATION share/webcraft
+    DESTINATION share/WebCraft
 )
 
 # --- 4. Testing ---
