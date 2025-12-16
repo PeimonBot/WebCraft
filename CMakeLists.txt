@@ -64,8 +64,6 @@ write_basic_package_version_file(
 # 2. Create the Config file content dynamically
 # We need to ensure downstream users also find PkgConfig/liburing if on Linux
 set(WEBCRAFT_CONFIG_CONTENT "
-@PACKAGE_INIT@
-
 include(CMakeFindDependencyMacro)
 
 # If we are on Linux (and not Android), we need to ensure liburing is found
@@ -76,8 +74,6 @@ endif()
 
 # Include the targets file we exported earlier
 include(\"\${CMAKE_CURRENT_LIST_DIR}/WebCraftTargets.cmake\")
-
-check_required_components(WebCraft)
 ")
 
 # 3. Write the content to a file
