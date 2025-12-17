@@ -29,4 +29,4 @@ If you plan on working on an issue, add a comment saying that you're working on 
 
 ## Using it in your project
 
-TBD. Currently, WebCraft does not have a port for vcpkg. If one of the contributors can add this library to vcpkg, that would be great (Here's how to do it. I think it should be intuitive enough: [https://learn.microsoft.com/en-gb/vcpkg/get_started/get-started-packaging?pivots=shell-bash](https://learn.microsoft.com/en-gb/vcpkg/get_started/get-started-packaging?pivots=shell-bash))!
+We've got a vcpkg port for it. Run `vcpkg install webcraft` or add it in your vcpkg.json.
