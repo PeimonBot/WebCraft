@@ -29,4 +29,4 @@ If you plan on working on an issue, add a comment saying that you're working on 
 
 ## Using it in your project
 
-We've got a vcpkg port for it. Run `vcpkg install webcraft` or add it in your vcpkg.json.
+We've got a vcpkg port for it. Run `vcpkg install webcraft` or add it in your vcpkg.json. An example of its usage is here to build a simple HTTP server: https://github.com/adityarao2005/http-server-webcraft
