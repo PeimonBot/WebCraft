@@ -133,12 +133,24 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
 
 std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail::post_sleep_event(std::chrono::steady_clock::duration duration, std::stop_token token)
 {
-    return webcraft::async::detail::linux::create_io_uring_event([duration](struct io_uring_sqe *sqe)
-                                                                 {
-                                                                     __kernel_timespec its;
-                                                                     its.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-                                                                     its.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(duration % std::chrono::seconds(1)).count();
-                                                                     io_uring_prep_timeout(sqe, &its, 0, 0); }, token);
+    struct timeout_event : public webcraft::async::detail::linux::io_uring_runtime_event
+    {
+        __kernel_timespec its;
+
+        timeout_event(std::chrono::steady_clock::duration duration, std::stop_token token)
+            : io_uring_runtime_event(token)
+        {
+            its.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+            its.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(duration % std::chrono::seconds(1)).count();
+        }
+
+        void perform_io_uring_operation(struct io_uring_sqe *sqe) override
+        {
+            io_uring_prep_timeout(sqe, &its, 0, 0);
+        }
+    };
+
+    return std::make_unique<timeout_event>(duration, token);
 }
 
 #elif defined(_WIN32)
