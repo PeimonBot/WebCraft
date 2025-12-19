@@ -36,7 +36,7 @@ namespace webcraft::async::detail::macos
 
         void try_native_cancel() override
         {
-            boolean expected = false;
+            bool expected = false;
             if (!cancelled.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
                 return;
 
