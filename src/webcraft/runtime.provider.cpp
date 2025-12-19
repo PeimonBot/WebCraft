@@ -93,7 +93,7 @@ void run_loop(std::stop_token token)
             break; // Other error, exit loop
         }
 
-        if (cqe)
+        if (cqe && cqe->res != -ECANCELED)
         {
             // Process the completion event
             auto user_data = cqe->user_data;
