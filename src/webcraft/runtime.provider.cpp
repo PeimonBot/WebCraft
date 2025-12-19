@@ -93,17 +93,21 @@ void run_loop(std::stop_token token)
             break; // Other error, exit loop
         }
 
-        if (cqe && cqe->res != -ECANCELED)
+        if (cqe)
         {
-            // Process the completion event
-            auto user_data = cqe->user_data;
             io_uring_cqe_seen(&global_ring, cqe);
-            // Call the callback or handle the event based on user_data
-            auto *event = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
-            if (event)
+
+            if (cqe->res != -ECANCELED)
             {
-                // Call the callback function
-                event->try_execute(cqe->res);
+                // Process the completion event
+                auto user_data = cqe->user_data;
+                // Call the callback or handle the event based on user_data
+                auto *event = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
+                if (event)
+                {
+                    // Call the callback function
+                    event->try_execute(cqe->res);
+                }
             }
         }
     }
