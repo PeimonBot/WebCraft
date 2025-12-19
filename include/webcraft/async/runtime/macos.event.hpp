@@ -18,7 +18,7 @@ namespace webcraft::async::detail::macos
     struct kqueue_runtime_event : public webcraft::async::detail::runtime_event
     {
     private:
-        bool cancelled{false};
+        std::atomic<bool> cancelled{false};
         struct kevent event;
         int queue;
 
@@ -30,24 +30,26 @@ namespace webcraft::async::detail::macos
 
         ~kqueue_runtime_event()
         {
-            if (!cancelled)
+            if (!cancelled.load(std::memory_order_acquire))
                 try_native_cancel();
         }
 
         void try_native_cancel() override
         {
+            bool expected = false;
+            if (!cancelled.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+                return;
+
             // remove yield event listener
             EV_SET(&event, event.ident, event.filter, EV_DELETE, 0, 0, nullptr);
             int result = kevent(queue, &event, 1, nullptr, 0, nullptr);
-            if (result < 0)
-            {
-                throw std::runtime_error("Failed to remove event from kqueue: " + std::to_string(result));
-            }
-            cancelled = true;
         }
 
         void try_start() override
         {
+            if (cancelled.load(std::memory_order_acquire))
+                return;
+
             // listen to the yield event
             void *data = (webcraft::async::detail::runtime_callback *)this;
 
