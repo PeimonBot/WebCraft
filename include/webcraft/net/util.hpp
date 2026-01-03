@@ -37,7 +37,7 @@ namespace webcraft::net::util
         explicit get_addr_info_error(int ret)
         {
             std::stringstream ss;
-            ss << "getaddrinfo failed: " << " (Error Code: " << ret_ << ")";
+            ss << "getaddrinfo failed: " << " (Error Code: " << ret << ")";
             message_ = ss.str();
         }
         virtual const char *what() const noexcept override
