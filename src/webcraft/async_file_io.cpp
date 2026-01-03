@@ -252,7 +252,7 @@ public:
 
         if (fd == INVALID_HANDLE_VALUE)
         {
-            throw overlapped_runtime_event_error("Failed to create file");
+            throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to create file");
         }
 
         // Associate this file handle with the global IOCP
@@ -261,7 +261,7 @@ public:
         if (iocp == nullptr)
         {
             CloseHandle(fd);
-            throw overlapped_runtime_event_error("Failed to associate file with IO completion port");
+            throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to associate file with IO completion port");
         }
     }
 
