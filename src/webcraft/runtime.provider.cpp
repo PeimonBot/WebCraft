@@ -40,78 +40,149 @@ void webcraft::async::detail::initialize_runtime() noexcept
     run_thread = std::make_unique<std::jthread>(run_loop);
 }
 
-void webcraft::async::detail::shutdown_runtime() noexcept
-{
-    if (!is_running.exchange(false))
-    {
-        return; // Runtime not running, nothing to shut down
-    }
-
-    // Check if thread exists and is joinable before stopping
-    if (run_thread && run_thread->joinable())
-    {
-        // stop running the io_uring loop
-        run_thread->request_stop();
-
-        // Wait for thread to finish
-        run_thread->join();
-    }
-
-    // Reset the thread pointer
-    run_thread.reset();
-}
-
 #ifdef __linux__
+#include <sys/eventfd.h>
+
+// Temporarily save and undefine BLOCK_SIZE macro from kernel headers
+// to avoid collision with concurrentqueue's BLOCK_SIZE constant
+#pragma push_macro("BLOCK_SIZE")
+#undef BLOCK_SIZE
+#include <concurrentqueue/concurrentqueue.h>
+#pragma pop_macro("BLOCK_SIZE")
+
 #include <liburing.h>
 #include <webcraft/async/runtime/linux.event.hpp>
 
-static std::mutex io_uring_mutex;
+int evfd = 0;
+uint64_t evfd_buffer = 0;
+moodycamel::ConcurrentQueue<webcraft::async::detail::io_uring_operation> operation_queue{};
+const uint64_t EVFD_TOKEN = 0xDEADBEEF;
 static io_uring global_ring;
-
-std::mutex &webcraft::async::detail::get_runtime_mutex()
-{
-    return io_uring_mutex;
-}
+alignas(64) std::atomic<bool> is_sleeping{false};
 
 uint64_t webcraft::async::detail::get_native_handle()
 {
     return reinterpret_cast<uint64_t>(&global_ring);
 }
 
+void arm_eventfd()
+{
+    struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+    io_uring_prep_read(sqe, evfd, &evfd_buffer, sizeof(uint64_t), 0);
+    io_uring_sqe_set_data64(sqe, EVFD_TOKEN);
+    io_uring_submit(&global_ring);
+}
+
+void webcraft::async::detail::submit_runtime_operation(io_uring_operation op)
+{
+    operation_queue.enqueue(std::move(op));
+
+    if (is_sleeping.load(std::memory_order_acquire))
+    {
+        // Wake up the io_uring loop by writing to the eventfd
+        uint64_t one = 1;
+        ssize_t n = write(evfd, &one, sizeof(one));
+    }
+}
+
+void drain_pending_queue()
+{
+
+    webcraft::async::detail::io_uring_operation bulk_buf[64];
+    size_t count = 0;
+    bool did_work = false;
+
+    // try_dequeue_bulk is much faster than individual pops
+    while ((count = operation_queue.try_dequeue_bulk(bulk_buf, 64)) != 0)
+    {
+        did_work = true;
+        for (size_t i = 0; i < count; ++i)
+        {
+            // Convert Task to Ring Submission
+            // (This usually calls io_uring_get_sqe + prep_read/write)
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&global_ring);
+            bulk_buf[i](sqe);
+        }
+
+        // Check if SQ is full, if so, submit now to flush
+        if (io_uring_sq_space_left(&global_ring) < 64)
+        {
+            io_uring_submit(&global_ring);
+        }
+    }
+
+    // Final flush of any pending SQEs
+    if (did_work)
+    {
+        io_uring_submit(&global_ring);
+    }
+}
+
+void process_io_uring_ops(struct io_uring_cqe *initial_cqe)
+{
+
+    struct io_uring_cqe *cqe = initial_cqe;
+    unsigned head;
+    unsigned count = 0;
+
+    io_uring_for_each_cqe(&global_ring, head, cqe)
+    {
+        count++;
+
+        if (cqe->user_data == EVFD_TOKEN)
+        {
+            // Rearm the eventfd read
+            arm_eventfd();
+        }
+        else if (cqe->res != -ECANCELED)
+        {
+            // Normal completion event
+            auto user_data = cqe->user_data;
+            // Call the callback or handle the event based on user_data
+            auto *event = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
+            if (event)
+            {
+                // Call the callback function
+                event->try_execute(cqe->res);
+            }
+        }
+    }
+    io_uring_cq_advance(&global_ring, count);
+}
+
 void run_loop(std::stop_token token)
 {
+
     // while we're running, we will wait for events
     while (!token.stop_requested())
     {
-        __kernel_timespec ts = {0, 0};
-        ts.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(wait_timeout).count(); // 10ms timeout
+        is_sleeping.store(false, std::memory_order_release);
+        drain_pending_queue();
+        is_sleeping.store(true, std::memory_order_release);
+
+        if (operation_queue.size_approx() > 0)
+        {
+            is_sleeping.store(false, std::memory_order_release);
+            continue; // New operations added, skip waiting
+        }
 
         struct io_uring_cqe *cqe;
-        int ret = io_uring_wait_cqe_timeout(&global_ring, &cqe, &ts);
+        int ret = io_uring_wait_cqe(&global_ring, &cqe);
+
         if (ret < 0 && ret != -ETIME)
         {
             break; // Other error, exit loop
         }
 
-        if (cqe)
+        if (token.stop_requested())
         {
-            io_uring_cqe_seen(&global_ring, cqe);
-
-            if (cqe->res != -ECANCELED)
-            {
-                // Process the completion event
-                auto user_data = cqe->user_data;
-                // Call the callback or handle the event based on user_data
-                auto *event = reinterpret_cast<webcraft::async::detail::runtime_event *>(user_data);
-                if (event)
-                {
-                    // Call the callback function
-                    event->try_execute(cqe->res);
-                }
-            }
+            break; // Stop requested, exit loop
         }
+
+        process_io_uring_ops(cqe);
     }
 
+    ::close(evfd);
     // Only cleanup if we were the ones who initialized it
     io_uring_queue_exit(&global_ring);
 }
@@ -126,6 +197,9 @@ bool start_runtime_async() noexcept
         std::cerr << "Failed to initialize io_uring: " << std::strerror(-ret) << std::endl;
         return false;
     }
+
+    evfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    arm_eventfd();
     return true;
 }
 
@@ -272,7 +346,7 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
             BOOL result = PostQueuedCompletionStatus(iocp, *bytesTransferred, 0, ptr);
             if (!result)
             {
-                throw std::runtime_error("Failed to post yield event: " + std::to_string(GetLastError()));
+                throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to post yield event");
             }
             SetLastError(ERROR_IO_PENDING);
             return false;
@@ -390,14 +464,14 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
             int result = kevent(queue, event, 1, nullptr, 0, nullptr);
             if (result != 0)
             {
-                throw std::runtime_error("Failed to register yield event: " + std::to_string(result));
+                throw webcraft::async::detail::macos::kqueue_runtime_error("Failed to register yield event: " + std::to_string(result));
             }
 
             EV_SET(event, id, EVFILT_USER, 0, NOTE_TRIGGER, 0, data);
             result = kevent(queue, event, 1, nullptr, 0, nullptr);
             if (result != 0)
             {
-                throw std::runtime_error("Failed to fire yield event: " + std::to_string(result));
+                throw webcraft::async::detail::macos::kqueue_runtime_error("Failed to fire yield event: " + std::to_string(result));
             }
         });
 }
@@ -414,10 +488,40 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
             int result = kevent(queue, event, 1, nullptr, 0, nullptr);
             if (result < 0)
             {
-                throw std::runtime_error("Failed to spawn timer event to kqueue" + std::to_string(result));
+                throw webcraft::async::detail::macos::kqueue_runtime_error("Failed to spawn timer event to kqueue" + std::to_string(result));
             }
         },
         token);
 }
 
 #endif
+
+void webcraft::async::detail::shutdown_runtime() noexcept
+{
+    if (!is_running.exchange(false))
+    {
+        return; // Runtime not running, nothing to shut down
+    }
+
+    // Check if thread exists and is joinable before stopping
+    if (run_thread && run_thread->joinable())
+    {
+        // stop running the io_uring loop
+        run_thread->request_stop();
+
+#ifdef __linux__
+        webcraft::async::detail::submit_runtime_operation(
+            [](struct io_uring_sqe *sqe)
+            {
+                io_uring_prep_nop(sqe);
+                io_uring_sqe_set_data64(sqe, 0);
+            });
+#endif
+
+        // Wait for thread to finish
+        run_thread->join();
+    }
+
+    // Reset the thread pointer
+    run_thread.reset();
+}

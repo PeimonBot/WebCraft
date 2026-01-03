@@ -6,11 +6,13 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef _WIN32
+#include <sstream>
 #include <webcraft/async/runtime.hpp>
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <winsock2.h>
+#include <system_error>
 
 namespace webcraft::async::detail::windows
 {
@@ -26,6 +28,18 @@ namespace webcraft::async::detail::windows
 
     using overlapped_operation = std::function<BOOL(LPDWORD, LPOVERLAPPED)>;
     using overlapped_cancel = std::function<void(LPOVERLAPPED)>;
+
+    inline std::system_error overlapped_runtime_event_error(std::string message)
+    {
+        std::error_code ec(GetLastError(), std::system_category());
+        return std::system_error(ec, message);
+    }
+
+    inline std::system_error overlapped_winsock2_runtime_error(std::string message)
+    {
+        std::error_code ec(WSAGetLastError(), std::system_category());
+        return std::system_error(ec, message);
+    }
 
     struct overlapped_runtime_event : public webcraft::async::detail::runtime_event
     {
@@ -52,7 +66,7 @@ namespace webcraft::async::detail::windows
             else if (!result && GetLastError() != ERROR_IO_PENDING)
             {
                 // Operation failed
-                throw std::runtime_error("Failed to post overlapped event: " + std::to_string(GetLastError())); // something is not working with the awaiting code? its not throwing an exception and instead is segfaulting
+                throw overlapped_runtime_event_error("Failed to post overlapped event");
             }
         }
 
@@ -84,7 +98,7 @@ namespace webcraft::async::detail::windows
             BOOL result = CancelIoEx(file, overlapped);
             if (!result && GetLastError() != ERROR_NOT_FOUND)
             {
-                throw std::runtime_error("Failed to cancel IO operation: " + std::to_string(GetLastError()));
+                throw overlapped_runtime_event_error("Failed to cancel IO operation");
             }
         }
     };
@@ -155,7 +169,7 @@ namespace webcraft::async::detail::windows
                     int error = WSAGetLastError();
                     if (error != WSA_IO_PENDING)
                     {
-                        throw std::ios_base::failure("Failed to perform overlapped operation: " + std::to_string(error));
+                        throw overlapped_winsock2_runtime_error("Failed to perform overlapped operation");
                     }
                     return FALSE; // Operation is pending
                 }

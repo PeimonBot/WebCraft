@@ -41,6 +41,11 @@ var annotated_dup =
         [ "thread_pool_shutdown_error", "classwebcraft_1_1async_1_1thread__pool__shutdown__error.html", "classwebcraft_1_1async_1_1thread__pool__shutdown__error" ],
         [ "thread_pool_worker", "classwebcraft_1_1async_1_1thread__pool__worker.html", "classwebcraft_1_1async_1_1thread__pool__worker" ]
       ] ],
+      [ "net", "namespacewebcraft_1_1net.html", [
+        [ "util", "namespacewebcraft_1_1net_1_1util.html", [
+          [ "get_addr_info_error", "classwebcraft_1_1net_1_1util_1_1get__addr__info__error.html", "classwebcraft_1_1net_1_1util_1_1get__addr__info__error" ]
+        ] ]
+      ] ],
       [ "ranges", "namespacewebcraft_1_1ranges.html", [
         [ "to", "classwebcraft_1_1ranges_1_1to.html", "classwebcraft_1_1ranges_1_1to" ]
       ] ]

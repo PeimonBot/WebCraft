@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <webcraft/async/thread_pool.hpp>
 #include <webcraft/async/async_event.hpp>
+#include <system_error>
 
 using namespace webcraft::async;
 using namespace webcraft::async::io::fs;
@@ -141,7 +142,7 @@ public:
     {
         if ((mode & std::ios::in) != std::ios::in)
         {
-            throw std::ios_base::failure("File not open for reading");
+            throw std::logic_error("File not open for reading");
         }
 
         int fd = this->fd;
@@ -157,7 +158,7 @@ public:
     {
         if ((mode & std::ios::out) != std::ios::out)
         {
-            throw std::ios_base::failure("File not open for writing");
+            throw std::logic_error("File not open for writing");
         }
 
         int fd = this->fd;
@@ -195,13 +196,16 @@ task<std::shared_ptr<file_descriptor>> webcraft::async::io::fs::detail::make_fil
     int fd = event.get_result();
     if (fd < 0)
     {
-        throw std::ios_base::failure("Failed to open file");
+        std::error_code ec(-fd, std::system_category());
+        throw std::system_error(ec, "Failed to open file: " + p.string());
     }
 
     co_return std::make_shared<io_uring_file_descriptor>(fd, mode);
 }
 
 #elif defined(_WIN32)
+
+#include <webcraft/async/runtime/windows.event.hpp>
 
 class iocp_file_descriptor : public file_descriptor
 {
@@ -248,7 +252,7 @@ public:
 
         if (fd == INVALID_HANDLE_VALUE)
         {
-            throw std::runtime_error("Failed to create file: " + std::to_string(GetLastError()));
+            throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to create file");
         }
 
         // Associate this file handle with the global IOCP
@@ -257,7 +261,7 @@ public:
         if (iocp == nullptr)
         {
             CloseHandle(fd);
-            throw std::runtime_error("Failed to associate file with IO completion port: " + std::to_string(GetLastError()));
+            throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to associate file with IO completion port");
         }
     }
 
@@ -290,7 +294,7 @@ public:
 
             co_return event.get_result();
         }
-        throw std::ios_base::failure("The file is not opened in read mode");
+        throw std::logic_error("The file is not opened in read mode");
     }
 
     task<size_t> write(std::span<char> buffer)
@@ -312,14 +316,14 @@ public:
 
             if (event.get_result() < 0)
             {
-                throw std::ios_base::failure("Writing the file failed with error code: " + std::to_string(GetLastError()));
+                throw webcraft::async::detail::windows::overlapped_runtime_event_error("Writing the file failed with error code");
             }
 
             fileOffset += event.get_result();
 
             co_return event.get_result();
         }
-        throw std::ios_base::failure("The file is not opened in write mode");
+        throw std::logic_error("The file is not opened in write mode");
     }
 
     task<void> close()

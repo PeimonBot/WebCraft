@@ -15,6 +15,19 @@
 namespace webcraft::async::detail::macos
 {
 
+    class kqueue_runtime_error : public std::exception
+    {
+    public:
+        explicit kqueue_runtime_error(std::string message) : msg_(message) {}
+        virtual const char *what() const noexcept override
+        {
+            return msg_.c_str();
+        }
+
+    private:
+        std::string msg_;
+    };
+
     struct kqueue_runtime_event : public webcraft::async::detail::runtime_event
     {
     private:

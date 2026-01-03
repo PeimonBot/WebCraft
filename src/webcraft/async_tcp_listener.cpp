@@ -23,6 +23,7 @@ using namespace webcraft::async::io::socket::detail;
 #include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <webcraft/async/runtime/linux.event.hpp>
 
 #elif defined(_WIN32)
 
@@ -91,7 +92,7 @@ public:
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
         if (ret != 0)
         {
-            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+            throw webcraft::net::util::get_addr_info_error(ret);
         }
 
         bool flag = false;
@@ -136,8 +137,11 @@ public:
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
-        if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
+        if (!flag) {
+            std::error_code ec(errno, std::system_category());
+
+            throw std::system_error(ec, "Failed to create socket");
+        }
     }
 
     void listen(int backlog) override
@@ -148,7 +152,8 @@ public:
 
         if (result < 0)
         {
-            throw std::ios_base::failure("Failed to listen: " + std::to_string(result) + ", value: " + strerror(errno));
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to listen");
         }
     }
 
@@ -165,7 +170,8 @@ public:
 
         if (event.get_result() < 0)
         {
-            throw std::ios_base::failure("Failed to accept connection: " + std::to_string(event.get_result()) + ", value: " + strerror(-event.get_result()));
+            std::error_code ec(-event.get_result(), std::system_category());
+            throw std::system_error(ec, "Failed to accept connection");
         }
 
         auto [host, port] = webcraft::net::util::addr_to_host_port(addr);
@@ -219,7 +225,7 @@ public:
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
         if (ret != 0)
         {
-            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+            throw webcraft::net::util::get_addr_info_error(ret);
         }
 
         bool flag = false;
@@ -266,8 +272,9 @@ public:
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
-        if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::to_string(WSAGetLastError()));
+        if (!flag) {
+            throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to create socket");
+        }
     }
 
     void listen(int backlog) override
@@ -278,7 +285,7 @@ public:
 
         if (result < 0)
         {
-            throw std::ios_base::failure("Failed to listen: " + std::to_string(result) + ", value: " + std::to_string(WSAGetLastError()));
+            throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to listen");
         }
     }
 
@@ -294,7 +301,7 @@ public:
         SOCKET accept_socket = ::socket(this->family, SOCK_STREAM, IPPROTO_TCP);
         if (accept_socket == INVALID_SOCKET)
         {
-            throw std::ios_base::failure("Failed to create accept socket: " + std::to_string(WSAGetLastError()));
+            throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to create accept socket");
         }
 
         // 2. Prepare the buffer.
@@ -341,7 +348,7 @@ public:
                        (char *)&listen_socket, sizeof(listen_socket)) != 0)
         {
             ::closesocket(accept_socket);
-            throw std::ios_base::failure("Failed to update accept context: " + std::to_string(WSAGetLastError()));
+            throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to update accept context");
         }
 
         // 6. Parse addresses to get the Remote Host and Port
@@ -392,6 +399,8 @@ std::shared_ptr<webcraft::async::io::socket::detail::tcp_listener_descriptor> we
 }
 
 #elif defined(__APPLE__)
+
+#include <webcraft/async/runtime/macos.event.hpp>
 
 class kqueue_tcp_listener_descriptor : public webcraft::async::io::socket::detail::tcp_listener_descriptor, public webcraft::async::detail::runtime_callback
 {
@@ -444,7 +453,7 @@ public:
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
         if (ret != 0)
         {
-            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+            throw webcraft::net::util::get_addr_info_error(ret);
         }
 
         bool flag = false;
@@ -489,8 +498,10 @@ public:
 
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
-        if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
+        if (!flag) {
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to create socket");
+        }
     }
 
     void listen(int backlog) override
@@ -501,7 +512,8 @@ public:
 
         if (result < 0)
         {
-            throw std::ios_base::failure("Failed to listen: " + std::to_string(result) + ", value: " + strerror(errno));
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to listen");
         }
 
         register_with_queue();
@@ -525,7 +537,8 @@ public:
 
         if (result < 0)
         {
-            throw std::ios_base::failure("Failed to accept connection: " + std::to_string(result) + ", value: " + strerror(errno));
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to accept connection");
         }
 
         auto [host, port] = webcraft::net::util::addr_to_host_port(addr);
@@ -546,7 +559,7 @@ public:
         EV_SET(&kev, fd, EVFILT_READ, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
         if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
         {
-            throw std::runtime_error("Could not register read listener");
+            throw webcraft::async::detail::macos::kqueue_runtime_error("Could not register read listener");
         }
     }
 

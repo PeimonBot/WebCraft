@@ -1,8 +1,4 @@
 var namespacewebcraft_1_1net =
 [
-    [ "util", "namespacewebcraft_1_1net_1_1util.html", [
-      [ "on_address_resolved", "namespacewebcraft_1_1net_1_1util.html#ab2b6e4887c083400ff40f68f06545dcf", null ],
-      [ "addr_to_host_port", "namespacewebcraft_1_1net_1_1util.html#a775955cd186c9fa74a1e9831a7e0969c", null ],
-      [ "host_port_to_addr", "namespacewebcraft_1_1net_1_1util.html#a96e3abcd87cfe0a3fc6a68e47cd3ca75", null ]
-    ] ]
+    [ "util", "namespacewebcraft_1_1net_1_1util.html", "namespacewebcraft_1_1net_1_1util" ]
 ];

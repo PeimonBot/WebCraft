@@ -103,23 +103,24 @@ $(document).ready(function(){initNavTree('async_8hpp_source.html',''); initResiz
 <div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment">// Copyright (c) Aditya Rao</span></div>
 <div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">// Licenced under MIT license. See LICENSE.txt for details.</span></div>
 <div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span> </div>
-<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="preprocessor">#include &quot;<a class="code" href="async__event_8hpp.html">async_event.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="preprocessor">#include &quot;<a class="code" href="async__generator_8hpp.html">async_generator.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="preprocessor">#include &quot;<a class="code" href="awaitable_8hpp.html">awaitable.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="preprocessor">#include &quot;<a class="code" href="event__signal_8hpp.html">event_signal.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="preprocessor">#include &quot;<a class="code" href="fire__and__forget__task_8hpp.html">fire_and_forget_task.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="preprocessor">#include &quot;<a class="code" href="generator_8hpp.html">generator.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="preprocessor">#include &quot;<a class="code" href="runtime_8hpp.html">runtime.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="preprocessor">#include &quot;<a class="code" href="sync__wait_8hpp.html">sync_wait.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#include &quot;<a class="code" href="task__completion__source_8hpp.html">task_completion_source.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#include &quot;<a class="code" href="task_8hpp.html">task.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#include &quot;<a class="code" href="thread__pool_8hpp.html">thread_pool.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;<a class="code" href="when__all_8hpp.html">when_all.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#include &quot;<a class="code" href="when__any_8hpp.html">when_any.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &lt;<a class="code" href="io_8hpp.html">webcraft/async/io/io.hpp</a>&gt;</span></div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno"><a class="line" href="async_8hpp.html#a7e84a3cbfc9d41237f7c292a96053679">   23</a></span><span class="preprocessor">#define co_async [&amp;]() -&gt; ::webcraft::async::task&lt;void&gt;</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno"><a class="line" href="async_8hpp.html#a90487a295616cb8cb36ce0c38e0b7417">   24</a></span><span class="preprocessor">#define async_t(T) ::webcraft::async::task&lt;T&gt;</span></div>
+<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="preprocessor">#include &lt;atomic&gt;</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="preprocessor">#include &quot;<a class="code" href="async__event_8hpp.html">async_event.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="preprocessor">#include &quot;<a class="code" href="async__generator_8hpp.html">async_generator.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="preprocessor">#include &quot;<a class="code" href="awaitable_8hpp.html">awaitable.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="preprocessor">#include &quot;<a class="code" href="event__signal_8hpp.html">event_signal.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="preprocessor">#include &quot;<a class="code" href="fire__and__forget__task_8hpp.html">fire_and_forget_task.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="preprocessor">#include &quot;<a class="code" href="generator_8hpp.html">generator.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="preprocessor">#include &quot;<a class="code" href="runtime_8hpp.html">runtime.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#include &quot;<a class="code" href="sync__wait_8hpp.html">sync_wait.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#include &quot;<a class="code" href="task__completion__source_8hpp.html">task_completion_source.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#include &quot;<a class="code" href="task_8hpp.html">task.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;<a class="code" href="thread__pool_8hpp.html">thread_pool.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#include &quot;<a class="code" href="when__all_8hpp.html">when_all.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &quot;<a class="code" href="when__any_8hpp.html">when_any.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="preprocessor">#include &lt;<a class="code" href="io_8hpp.html">webcraft/async/io/io.hpp</a>&gt;</span></div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span> </div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno"><a class="line" href="async_8hpp.html#a7e84a3cbfc9d41237f7c292a96053679">   24</a></span><span class="preprocessor">#define co_async [&amp;]() -&gt; ::webcraft::async::task&lt;void&gt;</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno"><a class="line" href="async_8hpp.html#a90487a295616cb8cb36ce0c38e0b7417">   25</a></span><span class="preprocessor">#define async_t(T) ::webcraft::async::task&lt;T&gt;</span></div>
 <div class="ttc" id="aasync__event_8hpp_html"><div class="ttname"><a href="async__event_8hpp.html">async_event.hpp</a></div></div>
 <div class="ttc" id="aasync__generator_8hpp_html"><div class="ttname"><a href="async__generator_8hpp.html">async_generator.hpp</a></div></div>
 <div class="ttc" id="aawaitable_8hpp_html"><div class="ttname"><a href="awaitable_8hpp.html">awaitable.hpp</a></div></div>

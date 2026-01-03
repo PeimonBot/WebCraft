@@ -218,7 +218,7 @@ namespace webcraft::async::io::socket
         task<void> connect(const connection_info &info)
         {
             if (!descriptor)
-                throw std::runtime_error("Descriptor is null");
+                throw std::logic_error("Descriptor is null");
 
             co_await descriptor->connect(info);
         }
@@ -226,21 +226,21 @@ namespace webcraft::async::io::socket
         tcp_rstream &get_readable_stream()
         {
             if (!descriptor)
-                throw std::runtime_error("Descriptor is null");
+                throw std::logic_error("Descriptor is null");
             return read_stream;
         }
 
         tcp_wstream &get_writable_stream()
         {
             if (!descriptor)
-                throw std::runtime_error("Descriptor is null");
+                throw std::logic_error("Descriptor is null");
             return write_stream;
         }
 
         void shutdown_channel(socket_stream_mode mode)
         {
             if (!descriptor)
-                throw std::runtime_error("Descriptor is null");
+                throw std::logic_error("Descriptor is null");
             if (mode == socket_stream_mode::READ && !read_shutdown)
             {
                 descriptor->shutdown(socket_stream_mode::READ);

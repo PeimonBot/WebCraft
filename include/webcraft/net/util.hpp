@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sstream>
+
 #if defined(__linux__)
 
 #include <unistd.h>
@@ -28,6 +30,24 @@
 
 namespace webcraft::net::util
 {
+
+    class get_addr_info_error : public std::exception
+    {
+    public:
+        explicit get_addr_info_error(int ret)
+        {
+            std::stringstream ss;
+            ss << "getaddrinfo failed: " << " (Error Code: " << ret << ")";
+            message_ = ss.str();
+        }
+        virtual const char *what() const noexcept override
+        {
+            return message_.c_str();
+        }
+
+    private:
+        std::string message_;
+    };
 
     inline std::pair<std::string, uint16_t> addr_to_host_port(
         const struct sockaddr_storage &addr)

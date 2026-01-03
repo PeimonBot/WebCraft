@@ -104,13 +104,13 @@ struct WSAExtensionManager
             // Get the ConnectEx function pointer
             if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidConnectEx, sizeof(guidConnectEx), &ConnectEx, sizeof(ConnectEx), &bytes, nullptr, nullptr) != 0)
             {
-                throw std::runtime_error("Failed to get ConnectEx function pointer: " + std::to_string(WSAGetLastError()));
+                throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to get ConnectEx function pointer");
             }
 
             // Get the AcceptEx function pointer
             if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guidAcceptEx, sizeof(guidAcceptEx), &AcceptEx, sizeof(AcceptEx), &bytes, nullptr, nullptr) != 0)
             {
-                throw std::runtime_error("Failed to get AcceptEx function pointer: " + std::to_string(WSAGetLastError()));
+                throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to get AcceptEx function pointer");
             }
 
             closesocket(sock);
