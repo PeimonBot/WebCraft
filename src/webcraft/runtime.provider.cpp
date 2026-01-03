@@ -53,9 +53,9 @@ void webcraft::async::detail::initialize_runtime() noexcept
 #include <liburing.h>
 #include <webcraft/async/runtime/linux.event.hpp>
 
-int evfd;
+int evfd = 0;
 uint64_t evfd_buffer = 0;
-moodycamel::ConcurrentQueue<webcraft::async::detail::io_uring_operation> operation_queue;
+moodycamel::ConcurrentQueue<webcraft::async::detail::io_uring_operation> operation_queue{};
 const uint64_t EVFD_TOKEN = 0xDEADBEEF;
 static io_uring global_ring;
 alignas(64) std::atomic<bool> is_sleeping{false};
@@ -152,15 +152,13 @@ void process_io_uring_ops(struct io_uring_cqe *initial_cqe)
 
 void run_loop(std::stop_token token)
 {
-    evfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    arm_eventfd();
 
     // while we're running, we will wait for events
     while (!token.stop_requested())
     {
         is_sleeping.store(false, std::memory_order_release);
         drain_pending_queue();
-        is_sleeping.store(true, std::memory_order_acquire);
+        is_sleeping.store(true, std::memory_order_release);
 
         if (operation_queue.size_approx() > 0)
         {
@@ -184,6 +182,7 @@ void run_loop(std::stop_token token)
         process_io_uring_ops(cqe);
     }
 
+    ::close(evfd);
     // Only cleanup if we were the ones who initialized it
     io_uring_queue_exit(&global_ring);
 }
@@ -198,6 +197,9 @@ bool start_runtime_async() noexcept
         std::cerr << "Failed to initialize io_uring: " << std::strerror(-ret) << std::endl;
         return false;
     }
+
+    evfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    arm_eventfd();
     return true;
 }
 
