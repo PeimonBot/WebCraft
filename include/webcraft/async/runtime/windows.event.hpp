@@ -29,13 +29,13 @@ namespace webcraft::async::detail::windows
     using overlapped_operation = std::function<BOOL(LPDWORD, LPOVERLAPPED)>;
     using overlapped_cancel = std::function<void(LPOVERLAPPED)>;
 
-    std::system_error overlapped_runtime_event_error(std::string message)
+    inline std::system_error overlapped_runtime_event_error(std::string message)
     {
         std::error_code ec(GetLastError(), std::system_category());
         return std::system_error(ec, message);
     }
 
-    std::system_error overlapped_winsock2_runtime_error(std::string message)
+    inline std::system_error overlapped_winsock2_runtime_error(std::string message)
     {
         std::error_code ec(WSAGetLastError(), std::system_category());
         return std::system_error(ec, message);
