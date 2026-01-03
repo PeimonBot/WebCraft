@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #include <functional>
 #include <chrono>
 #include <stop_token>
@@ -16,6 +15,10 @@
 #include <webcraft/async/task.hpp>
 #include <webcraft/async/sync_wait.hpp>
 #include <webcraft/async/fire_and_forget_task.hpp>
+
+#ifdef __linux__
+#include <liburing.h>
+#endif
 
 namespace webcraft::async
 {
@@ -170,7 +173,8 @@ namespace webcraft::async
         uint64_t get_native_handle();
 
 #ifdef __linux__
-        std::mutex &get_runtime_mutex();
+        using io_uring_operation = std::function<void(struct io_uring_sqe *)>;
+        void submit_runtime_operation(io_uring_operation op);
 #elif defined(__APPLE__)
         int16_t get_kqueue_filter();
         uint32_t get_kqueue_flags();
