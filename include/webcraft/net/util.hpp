@@ -34,16 +34,19 @@ namespace webcraft::net::util
     class get_addr_info_error : public std::exception
     {
     public:
-        explicit get_addr_info_error(int ret) : ret_(ret) {}
-        virtual const char *what() const noexcept override
+        explicit get_addr_info_error(int ret)
         {
             std::stringstream ss;
             ss << "getaddrinfo failed: " << " (Error Code: " << ret_ << ")";
-            return ss.str().c_str();
+            message_ = ss.str();
+        }
+        virtual const char *what() const noexcept override
+        {
+            return message_.c_str();
         }
 
     private:
-        int ret_;
+        std::string message_;
     };
 
     inline std::pair<std::string, uint16_t> addr_to_host_port(
