@@ -14,6 +14,16 @@
 namespace webcraft::async::detail::linux
 {
 
+    class io_uring_runtime_error : public std::exception {
+    public:
+        explicit io_uring_runtime_error(std::string message) : msg_(message) {}
+        virtual const char* what() const noexcept override {
+            return msg_.c_str();
+        }
+    private:
+        std::string msg_;
+    };
+
     struct io_uring_runtime_event : public webcraft::async::detail::runtime_event
     {
         std::mutex &io_uring_mutex;
@@ -31,13 +41,13 @@ namespace webcraft::async::detail::linux
             struct io_uring_sqe *sqe = io_uring_get_sqe(global_ring);
             if (!sqe)
             {
-                throw std::runtime_error("Failed to get SQE from io_uring");
+                throw io_uring_runtime_error("Failed to get SQE from io_uring");
             }
             io_uring_prep_cancel64(sqe, get_user_data(), IORING_ASYNC_CANCEL_USERDATA);
             int ret = io_uring_submit(global_ring);
             if (ret < 0)
             {
-                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::to_string(-ret));
+                throw io_uring_runtime_error("Failed to submit SQE to io_uring: " + std::to_string(-ret));
             }
         }
 
@@ -47,7 +57,7 @@ namespace webcraft::async::detail::linux
             struct io_uring_sqe *sqe = io_uring_get_sqe(global_ring);
             if (!sqe)
             {
-                throw std::runtime_error("Failed to get SQE from io_uring");
+                throw io_uring_runtime_error("Failed to get SQE from io_uring");
             }
 
             perform_io_uring_operation(sqe);
@@ -56,7 +66,7 @@ namespace webcraft::async::detail::linux
             int ret = io_uring_submit(global_ring);
             if (ret < 0)
             {
-                throw std::runtime_error("Failed to submit SQE to io_uring: " + std::to_string(-ret));
+                throw io_uring_runtime_error("Failed to submit SQE to io_uring: " + std::to_string(-ret));
             }
         }
 

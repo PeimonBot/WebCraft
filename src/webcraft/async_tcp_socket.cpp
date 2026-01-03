@@ -11,6 +11,7 @@
 #include <webcraft/async/runtime/linux.event.hpp>
 #include <cstdio>
 #include <webcraft/async/async_event.hpp>
+#include <system_error>
 #include "async_tcp_socket_decl.hpp"
 
 using namespace webcraft::async;
@@ -70,7 +71,8 @@ task<size_t> io_uring_tcp_socket_descriptor::read(std::span<char> buffer)
 
     if (event.get_result() < 0)
     {
-        throw std::ios_base::failure("Failed to connect with error: " + std::to_string(event.get_result()));
+        std::error_code ec(-event.get_result(), std::system_category());
+        throw std::system_error(ec, "Failed to read from socket");
     }
 
     co_return event.get_result();
@@ -86,7 +88,8 @@ task<size_t> io_uring_tcp_socket_descriptor::write(std::span<const char> buffer)
 
     if (event.get_result() < 0)
     {
-        throw std::ios_base::failure("Failed to connect with error: " + std::to_string(event.get_result()));
+        std::error_code ec(-event.get_result(), std::system_category());
+        throw std::system_error(ec, "Failed to write to socket");
     }
 
     co_return event.get_result();
@@ -109,7 +112,7 @@ task<void> io_uring_tcp_socket_descriptor::connect(const webcraft::async::io::so
     int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
     if (ret != 0)
     {
-        throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        throw webcraft::net::util::get_addr_info_error(ret);
     }
 
     bool flag = false;
@@ -153,7 +156,10 @@ task<void> io_uring_tcp_socket_descriptor::connect(const webcraft::async::io::so
     freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
     if (!flag)
-        throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
+    {
+        std::error_code ec(errno, std::system_category());
+        throw std::system_error(ec, "Failed to create socket");
+    }
 }
 
 void io_uring_tcp_socket_descriptor::shutdown(webcraft::async::io::socket::socket_stream_mode mode)
@@ -200,7 +206,7 @@ iocp_tcp_socket_descriptor::iocp_tcp_socket_descriptor(SOCKET sock, std::string 
     if (iocp == nullptr)
     {
         ::closesocket(socket);
-        throw std::runtime_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
+        throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
     }
 }
 
@@ -225,7 +231,7 @@ task<void> iocp_tcp_socket_descriptor::connect(const webcraft::async::io::socket
     int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
     if (ret != 0)
     {
-        throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        throw webcraft::net::util::get_addr_info_error(ret);
     }
 
     bool flag = false;
@@ -249,7 +255,7 @@ task<void> iocp_tcp_socket_descriptor::connect(const webcraft::async::io::socket
         if (iocp == nullptr)
         {
             ::closesocket(fd);
-            throw std::runtime_error("Failed to associate socket with IO completion port: " + std::to_string(GetLastError()));
+            throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to associate socket with IO completion port");
         }
 
         int result = ::connect(fd, res->ai_addr, (int)res->ai_addrlen);
@@ -269,7 +275,7 @@ task<void> iocp_tcp_socket_descriptor::connect(const webcraft::async::io::socket
     freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
     if (!flag)
-        throw std::ios_base::failure("Failed to create socket: " + std::to_string(WSAGetLastError()));
+        throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to create socket");
 
     co_return;
 }
@@ -292,6 +298,12 @@ task<size_t> iocp_tcp_socket_descriptor::read(std::span<char> buffer)
 
     co_await event;
 
+    if (event.get_result() < 0)
+    {
+        std::error_code ec(-event.get_result(), std::system_category());
+        throw std::system_error(ec, "Failed to read from socket");
+    }
+
     co_return event.get_result();
 }
 
@@ -312,6 +324,12 @@ task<size_t> iocp_tcp_socket_descriptor::write(std::span<const char> buffer)
             }));
 
     co_await event;
+
+    if (event.get_result() < 0)
+    {
+        std::error_code ec(-event.get_result(), std::system_category());
+        throw std::system_error(ec, "Failed to write to socket");
+    }
 
     co_return event.get_result();
 }
@@ -444,7 +462,7 @@ task<void> kqueue_tcp_socket_descriptor::connect(const webcraft::async::io::sock
     int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
     if (ret != 0)
     {
-        throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+        throw webcraft::net::util::get_addr_info_error(ret);
     }
 
     bool flag = false;
@@ -476,9 +494,11 @@ task<void> kqueue_tcp_socket_descriptor::connect(const webcraft::async::io::sock
 
     freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
-    if (!flag)
-        throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
-
+    if (!flag) {
+        std::error_code ec(errno, std::system_category());
+        throw std::system_error(ec, "Failed to create socket");
+    }
+    
     register_with_queue();
     co_return;
 }
@@ -513,12 +533,12 @@ void kqueue_tcp_socket_descriptor::register_with_queue()
     int flags = ::fcntl(fd, F_GETFL, 0);
     if (flags == -1)
     {
-        throw std::runtime_error("Error in getting socket flags");
+        throw webcraft::async::detail::macos::kqueue_runtime_error("Error in getting socket flags");
     }
     int res = ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     if (res == -1)
     {
-        throw std::runtime_error("Error in setting non-blocking flag");
+        throw webcraft::async::detail::macos::kqueue_runtime_error("Error in setting non-blocking flag");
     }
 
     kq = (int)webcraft::async::detail::get_native_handle();
@@ -527,13 +547,13 @@ void kqueue_tcp_socket_descriptor::register_with_queue()
     EV_SET(&kev, fd, EVFILT_READ, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
     if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
     {
-        throw std::runtime_error("Could not register read listener");
+        throw webcraft::async::detail::macos::kqueue_runtime_error("Could not register read listener");
     }
 
     EV_SET(&kev, fd, EVFILT_WRITE, EV_ADD, 0, 0, (webcraft::async::detail::runtime_callback *)this);
     if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
     {
-        throw std::runtime_error("Could not register write listener");
+        throw webcraft::async::detail::macos::kqueue_runtime_error("Could not register write listener");
     }
 }
 
@@ -577,8 +597,17 @@ void kqueue_tcp_socket_descriptor::try_execute(int result, bool cancelled)
             {
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
                     break;
-                else
-                    throw std::runtime_error("This should not have happened but read failed: " + std::to_string(errno));
+                else {
+                    if (errno == ECONNRESET)
+                    {
+                        no_more_bytes = true;
+                        break;
+                    }
+                    else {
+                        std::error_code ec(errno, std::system_category());
+                        throw std::system_error(ec, "This should not have happened but read failed");
+                    }
+                }
             }
 
             if (bytes_read == 0)

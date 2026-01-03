@@ -13,6 +13,7 @@
 #include <webcraft/async/thread_pool.hpp>
 #include <webcraft/async/async_event.hpp>
 #include <webcraft/net/util.hpp>
+#include <system_error>
 
 using namespace webcraft::async;
 using namespace webcraft::async::io::socket::detail;
@@ -149,7 +150,8 @@ private:
 #else
                 auto err = errno;
 #endif
-                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+                std::error_code ec(err, std::system_category());
+                throw std::system_error(ec, "Failed to create UDP socket");
             }
         }
     }
@@ -204,7 +206,7 @@ public:
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
         if (ret != 0)
         {
-            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+            throw webcraft::net::util::get_addr_info_error(ret);
         }
 
         bool flag = false;
@@ -252,7 +254,10 @@ public:
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
         if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::string(get_error_string(get_last_socket_error())));
+        {
+            std::error_code ec(get_last_socket_error(), std::system_category());
+            throw std::system_error(ec, "Failed to create socket");
+        }
     }
 
     task<size_t> recvfrom(std::span<char> buffer, webcraft::async::io::socket::connection_info &info) override
@@ -266,7 +271,8 @@ public:
         auto size = ::recvfrom(socket, buffer.data(), (int)buffer.size(), 0, (sockaddr *)&addr, &addr_len);
         if (size < 0)
         {
-            throw std::ios_base::failure("Failed to receive data: " + std::string(get_error_string(get_last_socket_error())));
+            std::error_code ec(get_last_socket_error(), std::system_category());
+            throw std::system_error(ec, "Failed to receive data");
         }
 
         // Extract connection info
@@ -294,8 +300,10 @@ public:
             });
 
         if (!flag)
-            throw std::ios_base::failure("Failed to send data: " + std::string(get_error_string(get_last_socket_error())));
-
+        {
+            std::error_code ec(get_last_socket_error(), std::system_category());
+            throw std::system_error(ec, "Failed to send data");
+        }
         co_return bytes_sent;
     }
 };
@@ -326,7 +334,7 @@ private:
 
         if (iocp == NULL)
         {
-            throw std::runtime_error("Failed to associate UDP socket with IOCP: " + std::to_string(GetLastError()));
+            throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to associate UDP socket with IOCP");
         }
     }
 
@@ -361,9 +369,7 @@ private:
             // if error creating socket throw
             if (socket == INVALID_SOCKET)
             {
-                auto err = WSAGetLastError();
-
-                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+                throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to create UDP socket");
             }
 
             associate_with_iocp(socket);
@@ -416,7 +422,7 @@ public:
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
         if (ret != 0)
         {
-            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+            throw webcraft::net::util::get_addr_info_error(ret);
         }
 
         bool flag = false;
@@ -457,7 +463,9 @@ public:
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
         if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::to_string(WSAGetLastError()));
+        {
+            throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to create UDP socket");
+        }
     }
 
     task<size_t> recvfrom(std::span<char> buffer, webcraft::async::io::socket::connection_info &info) override
@@ -496,7 +504,7 @@ public:
 
         if (size < 0)
         {
-            throw std::ios_base::failure("Failed to receive data: " + std::to_string(WSAGetLastError()));
+            throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to receive data");
         }
 
         // Extract connection info
@@ -550,7 +558,7 @@ public:
             info, async_func);
 
         if (!flag)
-            throw std::ios_base::failure("Failed to send data: " + std::to_string(WSAGetLastError()));
+            throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to send data");
 
         co_return bytes_sent;
     }
@@ -600,9 +608,8 @@ private:
             // if error creating socket throw
             if (socket < 0)
             {
-                auto err = errno;
-
-                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+                std::error_code ec(errno, std::system_category());
+                throw std::system_error(ec, "Failed to create UDP socket");
             }
         }
     }
@@ -653,7 +660,7 @@ public:
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
         if (ret != 0)
         {
-            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+            throw webcraft::net::util::get_addr_info_error(ret);
         }
 
         bool flag = false;
@@ -699,7 +706,10 @@ public:
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
         if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
+        {
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to create socket");
+        }
     }
 
     task<size_t> recvfrom(std::span<char> buffer, webcraft::async::io::socket::connection_info &info) override
@@ -737,7 +747,8 @@ public:
 
         if (event.get_result() < 0)
         {
-            throw std::ios_base::failure("Failed to receive data: " + std::string(strerror(errno)));
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to receive data");
         }
 
         // Extract connection info
@@ -777,7 +788,10 @@ public:
             info, async_func);
 
         if (!flag)
-            throw std::ios_base::failure("Failed to send data: " + std::string(strerror(errno)));
+        {
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to send data");
+        }
 
         co_return bytes_sent;
     }
@@ -816,12 +830,12 @@ private:
             {
                 socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
             }
-            
+
             // if error creating socket throw
             if (socket < 0)
             {
-                auto err = errno;
-                throw std::ios_base::failure("Failed to create UDP socket: " + std::to_string(err));
+                std::error_code ec(errno, std::system_category());
+                throw std::system_error(ec, "Failed to create UDP socket");
             }
 
             register_with_queue();
@@ -875,7 +889,7 @@ public:
         int ret = getaddrinfo(info.host.c_str(), port_str.c_str(), &hints, &res);
         if (ret != 0)
         {
-            throw std::runtime_error(std::string("getaddrinfo failed: ") + gai_strerror(ret));
+            throw webcraft::net::util::get_addr_info_error(ret);
         }
 
         bool flag = false;
@@ -918,8 +932,11 @@ public:
         freeaddrinfo(res); // Free memory allocated by getaddrinfo
 
         if (!flag)
-            throw std::ios_base::failure("Failed to create socket: " + std::string(strerror(errno)));
-        
+        {
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to create socket");
+        }
+
         register_with_queue();
     }
 
@@ -967,7 +984,8 @@ public:
             }
             else
             {
-                throw std::ios_base::failure("UDP recvfrom failed: " + std::string(strerror(err)));
+                std::error_code ec(err, std::system_category());
+                throw std::system_error(ec, "Failed to receive data");
             }
         }
     }
@@ -995,7 +1013,8 @@ public:
         {
             // If errno is EAGAIN here, it means the network is saturated.
             // You can choose to throw or return 0.
-            throw std::ios_base::failure("UDP sendto failed: " + std::string(strerror(errno)));
+            std::error_code ec(errno, std::system_category());
+            throw std::system_error(ec, "Failed to send data");
         }
 
         co_return bytes_sent;
@@ -1011,10 +1030,10 @@ public:
         // Make socket non-blocking
         int flags = ::fcntl(socket, F_GETFL, 0);
         if (flags == -1)
-            throw std::runtime_error("fcntl get failed");
+            throw webcraft::async::detail::macos::kqueue_runtime_error("fcntl get failed");
 
         if (::fcntl(socket, F_SETFL, flags | O_NONBLOCK) == -1)
-            throw std::runtime_error("fcntl set nonblock failed");
+            throw webcraft::async::detail::macos::kqueue_runtime_error("fcntl set nonblock failed");
 
         kq = (int)webcraft::async::detail::get_native_handle();
 
@@ -1024,7 +1043,7 @@ public:
         EV_SET(&kev, socket, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, (webcraft::async::detail::runtime_callback *)this);
         if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1)
         {
-            throw std::runtime_error("Could not register UDP kqueue listener");
+            throw webcraft::async::detail::macos::kqueue_runtime_error("Could not register UDP kqueue listener");
         }
     }
 

@@ -220,7 +220,7 @@
 \DoxyCodeLine{00218\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{classwebcraft_1_1async_1_1task}{task<void>}}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket_a752996511bdda3f0aff66167e80ea015}{connect}}(\textcolor{keyword}{const}\ \mbox{\hyperlink{structwebcraft_1_1async_1_1io_1_1socket_1_1connection__info}{connection\_info}}\ \&info)}
 \DoxyCodeLine{00219\ \ \ \ \ \ \ \ \ \{}
 \DoxyCodeLine{00220\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!descriptor)}
-\DoxyCodeLine{00221\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
+\DoxyCodeLine{00221\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::logic\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
 \DoxyCodeLine{00222\ }
 \DoxyCodeLine{00223\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keyword}{co\_await}\ descriptor-\/>connect(info);}
 \DoxyCodeLine{00224\ \ \ \ \ \ \ \ \ \}}
@@ -228,21 +228,21 @@
 \DoxyCodeLine{00226\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__rstream}{tcp\_rstream}}\ \&\mbox{\hyperlink{classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket_ab400995cd34206abb90c0853e30fb0a0}{get\_readable\_stream}}()}
 \DoxyCodeLine{00227\ \ \ \ \ \ \ \ \ \{}
 \DoxyCodeLine{00228\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!descriptor)}
-\DoxyCodeLine{00229\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
+\DoxyCodeLine{00229\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::logic\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
 \DoxyCodeLine{00230\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ read\_stream;}
 \DoxyCodeLine{00231\ \ \ \ \ \ \ \ \ \}}
 \DoxyCodeLine{00232\ }
 \DoxyCodeLine{00233\ \ \ \ \ \ \ \ \ \mbox{\hyperlink{classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__wstream}{tcp\_wstream}}\ \&\mbox{\hyperlink{classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket_a89cf069aa2d0e1404faa53f13b1117ee}{get\_writable\_stream}}()}
 \DoxyCodeLine{00234\ \ \ \ \ \ \ \ \ \{}
 \DoxyCodeLine{00235\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!descriptor)}
-\DoxyCodeLine{00236\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
+\DoxyCodeLine{00236\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::logic\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
 \DoxyCodeLine{00237\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ write\_stream;}
 \DoxyCodeLine{00238\ \ \ \ \ \ \ \ \ \}}
 \DoxyCodeLine{00239\ }
 \DoxyCodeLine{00240\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{void}\ \mbox{\hyperlink{classwebcraft_1_1async_1_1io_1_1socket_1_1tcp__socket_a0c833045b874efac508f3911911eebd7}{shutdown\_channel}}(\mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a9f2887d3f56db5de0b9d3a9bc63b8688}{socket\_stream\_mode}}\ mode)}
 \DoxyCodeLine{00241\ \ \ \ \ \ \ \ \ \{}
 \DoxyCodeLine{00242\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!descriptor)}
-\DoxyCodeLine{00243\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::runtime\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
+\DoxyCodeLine{00243\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{throw}\ std::logic\_error(\textcolor{stringliteral}{"{}Descriptor\ is\ null"{}});}
 \DoxyCodeLine{00244\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (mode\ ==\ \mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a9f2887d3f56db5de0b9d3a9bc63b8688a3466fab4975481651940ed328aa990e4}{socket\_stream\_mode::READ}}\ \&\&\ !read\_shutdown)}
 \DoxyCodeLine{00245\ \ \ \ \ \ \ \ \ \ \ \ \ \{}
 \DoxyCodeLine{00246\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ descriptor-\/>shutdown(\mbox{\hyperlink{namespacewebcraft_1_1async_1_1io_1_1socket_a9f2887d3f56db5de0b9d3a9bc63b8688a3466fab4975481651940ed328aa990e4}{socket\_stream\_mode::READ}});}

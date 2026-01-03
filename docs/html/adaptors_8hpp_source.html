@@ -368,7 +368,7 @@ $(document).ready(function(){initNavTree('adaptors_8hpp_source.html',''); initRe
 <div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span> </div>
 <div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>                    <span class="keywordflow">if</span> (itr == gen.<a class="code hl_function" href="classcppcoro_1_1async__generator.html#a0ed729f4c0a1537a56833ffebfdab94c">end</a>())</div>
 <div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>                    {</div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>                        <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;Cannot reduce an empty generator&quot;</span>);</div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>                        <span class="keywordflow">throw</span> std::logic_error(<span class="stringliteral">&quot;Cannot reduce an empty generator&quot;</span>);</div>
 <div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>                    }</div>
 <div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>                    T result = *itr;</div>
 <div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>                    <span class="keyword">co_await</span> ++itr;</div>

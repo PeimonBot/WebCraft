@@ -28,13 +28,14 @@ var searchData=
   ['webcraft_3a_3anot_5fsame_5fas_25',['not_same_as',['../conceptwebcraft_1_1not__same__as.html',1,'webcraft']]],
   ['webcraft_3a_3anot_5ftrue_26',['not_true',['../conceptwebcraft_1_1not__true.html',1,'webcraft']]],
   ['webcraft_3a_3aranges_27',['ranges',['../namespacewebcraft_1_1ranges.html',1,'webcraft']]],
-  ['when_5fall_28',['when_all',['../md_include_2webcraft_2async_2README.html#autotoc_md52',1,'when_all'],['../namespacewebcraft_1_1async.html#adefc58a669759c7bf7067728c34cfbf5',1,'webcraft::async::when_all(Range &amp;&amp;tasks)'],['../namespacewebcraft_1_1async.html#ab5be7b95a948cae4e62eae315112097d',1,'webcraft::async::when_all(Range &amp;&amp;tasks)'],['../namespacewebcraft_1_1async.html#a8101de822056b473833adc0e5408022b',1,'webcraft::async::when_all(std::tuple&lt; Tasks... &gt; tasks)'],['../namespacewebcraft_1_1async.html#a13bbc27f5b631d3acb57bf3376614164',1,'webcraft::async::when_all(Tasks &amp;&amp;...tasks)']]],
-  ['when_5fall_2ehpp_29',['when_all.hpp',['../when__all_8hpp.html',1,'']]],
-  ['when_5fany_30',['when_any',['../md_include_2webcraft_2async_2README.html#autotoc_md53',1,'when_any'],['../namespacewebcraft_1_1async.html#a9ca722dc3d2eed95e56f4d1d0b352673',1,'webcraft::async::when_any(Tasks &amp;&amp;...tasks)'],['../namespacewebcraft_1_1async.html#a2c5d38e8801b57b1ab7200366a8e22dc',1,'webcraft::async::when_any(Range &amp;&amp;tasks)']]],
-  ['when_5fany_2ehpp_31',['when_any.hpp',['../when__any_8hpp.html',1,'']]],
-  ['while_20adaptor_32',['while adaptor',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md15',1,'Drop while adaptor'],['../md_include_2webcraft_2async_2io_2README.html#autotoc_md14',1,'Take while adaptor']]],
-  ['windows_2eevent_2ehpp_33',['windows.event.hpp',['../windows_8event_8hpp.html',1,'']]],
-  ['windows_5ftimer_5fmanager_2ehpp_34',['windows_timer_manager.hpp',['../windows__timer__manager_8hpp.html',1,'']]],
-  ['writable_20streams_35',['Async writable streams',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md3',1,'']]],
-  ['write_36',['WRITE',['../namespacewebcraft_1_1async_1_1io_1_1socket.html#a9f2887d3f56db5de0b9d3a9bc63b8688ad4b9e47f65b6e79b010582f15785867e',1,'webcraft::async::io::socket']]]
+  ['what_28',['what',['../classwebcraft_1_1net_1_1util_1_1get__addr__info__error.html#ad1cb74c3520d8622427abe89da48ca75',1,'webcraft::net::util::get_addr_info_error']]],
+  ['when_5fall_29',['when_all',['../md_include_2webcraft_2async_2README.html#autotoc_md52',1,'when_all'],['../namespacewebcraft_1_1async.html#adefc58a669759c7bf7067728c34cfbf5',1,'webcraft::async::when_all(Range &amp;&amp;tasks)'],['../namespacewebcraft_1_1async.html#ab5be7b95a948cae4e62eae315112097d',1,'webcraft::async::when_all(Range &amp;&amp;tasks)'],['../namespacewebcraft_1_1async.html#a8101de822056b473833adc0e5408022b',1,'webcraft::async::when_all(std::tuple&lt; Tasks... &gt; tasks)'],['../namespacewebcraft_1_1async.html#a13bbc27f5b631d3acb57bf3376614164',1,'webcraft::async::when_all(Tasks &amp;&amp;...tasks)']]],
+  ['when_5fall_2ehpp_30',['when_all.hpp',['../when__all_8hpp.html',1,'']]],
+  ['when_5fany_31',['when_any',['../md_include_2webcraft_2async_2README.html#autotoc_md53',1,'when_any'],['../namespacewebcraft_1_1async.html#a9ca722dc3d2eed95e56f4d1d0b352673',1,'webcraft::async::when_any(Tasks &amp;&amp;...tasks)'],['../namespacewebcraft_1_1async.html#a2c5d38e8801b57b1ab7200366a8e22dc',1,'webcraft::async::when_any(Range &amp;&amp;tasks)']]],
+  ['when_5fany_2ehpp_32',['when_any.hpp',['../when__any_8hpp.html',1,'']]],
+  ['while_20adaptor_33',['while adaptor',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md15',1,'Drop while adaptor'],['../md_include_2webcraft_2async_2io_2README.html#autotoc_md14',1,'Take while adaptor']]],
+  ['windows_2eevent_2ehpp_34',['windows.event.hpp',['../windows_8event_8hpp.html',1,'']]],
+  ['windows_5ftimer_5fmanager_2ehpp_35',['windows_timer_manager.hpp',['../windows__timer__manager_8hpp.html',1,'']]],
+  ['writable_20streams_36',['Async writable streams',['../md_include_2webcraft_2async_2io_2README.html#autotoc_md3',1,'']]],
+  ['write_37',['WRITE',['../namespacewebcraft_1_1async_1_1io_1_1socket.html#a9f2887d3f56db5de0b9d3a9bc63b8688ad4b9e47f65b6e79b010582f15785867e',1,'webcraft::async::io::socket']]]
 ];

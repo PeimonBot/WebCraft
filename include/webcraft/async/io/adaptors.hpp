@@ -242,7 +242,7 @@ namespace webcraft::async::io::adaptors
 
                     if (itr == gen.end())
                     {
-                        throw std::runtime_error("Cannot reduce an empty generator");
+                        throw std::logic_error("Cannot reduce an empty generator");
                     }
                     T result = *itr;
                     co_await ++itr;

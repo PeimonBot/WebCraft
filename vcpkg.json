@@ -7,6 +7,10 @@
       "platform": "linux"
     },
     {
+      "name": "concurrentqueue",
+      "platform": "linux"
+    },
+    {
       "name": "winsock2",
       "platform": "windows"
     },

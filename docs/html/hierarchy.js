@@ -6,6 +6,9 @@ var hierarchy =
     [ "webcraft::async::io::adaptors::async_readable_stream_adaptor< collector_stream_adaptor< ToType, StreamType, Collector >, StreamType >", "structwebcraft_1_1async_1_1io_1_1adaptors_1_1async__readable__stream__adaptor.html", null ],
     [ "webcraft::async::task_completion_source_base::awaitable", "structwebcraft_1_1async_1_1task__completion__source__base_1_1awaitable.html", null ],
     [ "webcraft::async::io::socket::connection_info", "structwebcraft_1_1async_1_1io_1_1socket_1_1connection__info.html", null ],
+    [ "std::exception", null, [
+      [ "webcraft::net::util::get_addr_info_error", "classwebcraft_1_1net_1_1util_1_1get__addr__info__error.html", null ]
+    ] ],
     [ "webcraft::async::io::fs::file", "classwebcraft_1_1async_1_1io_1_1fs_1_1file.html", null ],
     [ "webcraft::async::io::fs::detail::file_stream", null, [
       [ "webcraft::async::io::fs::file_rstream", "classwebcraft_1_1async_1_1io_1_1fs_1_1file__rstream.html", null ],

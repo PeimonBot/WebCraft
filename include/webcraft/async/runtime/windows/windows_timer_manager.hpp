@@ -5,7 +5,6 @@
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #ifdef _WIN32
 
 #include <functional>
@@ -29,6 +28,19 @@ namespace webcraft::async::runtime::detail
 
         data_entry(std::function<void()> cb, timer_manager *mgr)
             : callback(std::move(cb)), manager(mgr) {}
+    };
+
+    class windows_timer_manager_error : public std::exception
+    {
+    public:
+        explicit windows_timer_manager_error(std::string message) : msg_(message) {}
+        virtual const char *what() const noexcept override
+        {
+            return msg_.c_str();
+        }
+
+    private:
+        std::string msg_;
     };
 
     class timer_manager
@@ -58,7 +70,7 @@ namespace webcraft::async::runtime::detail
                                           new data_entry(std::move(callback), this), nullptr);
             if (timer == nullptr)
             {
-                throw std::runtime_error("Failed to create thread pool timer");
+                throw windows_timer_manager_error("Failed to create thread pool timer");
             }
         }
 

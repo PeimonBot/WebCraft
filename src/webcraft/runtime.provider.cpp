@@ -272,7 +272,7 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
             BOOL result = PostQueuedCompletionStatus(iocp, *bytesTransferred, 0, ptr);
             if (!result)
             {
-                throw std::runtime_error("Failed to post yield event: " + std::to_string(GetLastError()));
+                throw webcraft::async::detail::windows::overlapped_runtime_event_error("Failed to post yield event");
             }
             SetLastError(ERROR_IO_PENDING);
             return false;
@@ -390,14 +390,14 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
             int result = kevent(queue, event, 1, nullptr, 0, nullptr);
             if (result != 0)
             {
-                throw std::runtime_error("Failed to register yield event: " + std::to_string(result));
+                throw webcraft::async::detail::macos::kqueue_runtime_error("Failed to register yield event: " + std::to_string(result));
             }
 
             EV_SET(event, id, EVFILT_USER, 0, NOTE_TRIGGER, 0, data);
             result = kevent(queue, event, 1, nullptr, 0, nullptr);
             if (result != 0)
             {
-                throw std::runtime_error("Failed to fire yield event: " + std::to_string(result));
+                throw webcraft::async::detail::macos::kqueue_runtime_error("Failed to fire yield event: " + std::to_string(result));
             }
         });
 }
@@ -414,7 +414,7 @@ std::unique_ptr<webcraft::async::detail::runtime_event> webcraft::async::detail:
             int result = kevent(queue, event, 1, nullptr, 0, nullptr);
             if (result < 0)
             {
-                throw std::runtime_error("Failed to spawn timer event to kqueue" + std::to_string(result));
+                throw webcraft::async::detail::macos::kqueue_runtime_error("Failed to spawn timer event to kqueue" + std::to_string(result));
             }
         },
         token);
