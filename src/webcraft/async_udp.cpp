@@ -10,6 +10,7 @@
 #include <webcraft/async/runtime/macos.event.hpp>
 #include <webcraft/async/runtime/linux.event.hpp>
 #include <cstdio>
+#include <stdexcept>
 #include <webcraft/async/thread_pool.hpp>
 #include <webcraft/async/async_event.hpp>
 #include <webcraft/net/util.hpp>

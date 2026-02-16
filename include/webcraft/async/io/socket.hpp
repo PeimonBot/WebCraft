@@ -7,6 +7,7 @@
 
 #include "core.hpp"
 #include <webcraft/async/fire_and_forget_task.hpp>
+#include <stdexcept>
 
 namespace webcraft::async::io::socket
 {
@@ -14,6 +15,81 @@ namespace webcraft::async::io::socket
     {
         std::string host;
         uint16_t port;
+    };
+
+    /// Placeholder for options when joining a multicast group. Currently empty: an instance
+    /// of this type indicates default multicast join behavior. Fields may be added in the future.
+    struct multicast_join_options
+    {
+    };
+
+    namespace detail
+    {
+        /// Returns true if the given address string is a valid IPv4 or IPv6 multicast address.
+        inline bool is_multicast_address(const std::string &addr)
+        {
+            if (addr.empty()) return false;
+            if (addr.find('.') != std::string::npos)
+            {
+                // IPv4: 224.0.0.0 - 239.255.255.255
+                unsigned a = 0, b = 0, c = 0, d = 0;
+                int n = 0;
+                if (std::sscanf(addr.c_str(), "%u.%u.%u.%u%n", &a, &b, &c, &d, &n) != 4) return false;
+                if (addr.size() != static_cast<std::size_t>(n)) return false;
+                if (a > 255u || b > 255u || c > 255u || d > 255u) return false;
+                if (a < 224u || a > 239u) return false;
+                return true;
+            }
+            if (addr.find(':') != std::string::npos)
+            {
+                // IPv6: ff00::/8 — first 16-bit segment must be 0xff00–0xffff
+                std::size_t i = 0;
+                while (i < addr.size() && addr[i] == ':') ++i;
+                while (i < addr.size())
+                {
+                    std::size_t start = i;
+                    while (i < addr.size() && addr[i] != ':')
+                    {
+                        char ch = addr[i];
+                        if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))
+                            ++i;
+                        else
+                            return false;
+                    }
+                    if (i > start)
+                    {
+                        if (i - start >= 2u && i - start <= 4u)
+                        {
+                            if ((addr[start] == 'f' || addr[start] == 'F') && (addr[start + 1] == 'f' || addr[start + 1] == 'F'))
+                                return true;
+                        }
+                        return false;
+                    }
+                    if (i < addr.size()) ++i;
+                }
+                return false;
+            }
+            return false;
+        }
+    }
+
+    /// Represents a multicast group address. Use resolve() to create from a string (e.g. "239.255.0.1").
+    struct multicast_group
+    {
+        std::string host;  ///< Multicast group address (e.g. "239.255.0.1")
+        uint16_t port{0};  ///< Port used when sending to the group; must be set to the desired (non-zero) UDP port before calling send functions.
+
+        /// Resolve a multicast group from an address string (IPv4 or IPv6 multicast address).
+        /// \throws std::invalid_argument if addr is not a valid multicast address.
+        static multicast_group resolve(std::string_view addr)
+        {
+            std::string s(addr);
+            if (!detail::is_multicast_address(s))
+                throw std::invalid_argument("Not a multicast address: " + s);
+            multicast_group g;
+            g.host = std::move(s);
+            return g;
+        }
     };
 
     enum class ip_version
@@ -30,7 +106,6 @@ namespace webcraft::async::io::socket
 
     namespace detail
     {
-
         class tcp_descriptor_base
         {
         public:
