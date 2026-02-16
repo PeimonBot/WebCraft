@@ -302,7 +302,7 @@ namespace webcraft::async::io::socket
 
         task<tcp_socket> accept()
         {
-            co_return co_await descriptor->accept();
+            co_return tcp_socket(co_await descriptor->accept());
         }
 
         task<void> close()
