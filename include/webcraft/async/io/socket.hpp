@@ -152,6 +152,11 @@ namespace webcraft::async::io::socket
 
             virtual task<size_t> recvfrom(std::span<char> buffer, connection_info &info) = 0;
             virtual task<size_t> sendto(std::span<const char> buffer, const connection_info &info) = 0;
+
+            /// Join a multicast group. Optional; no-op if not supported (e.g. mock).
+            virtual void join_group(const multicast_group &group, const multicast_join_options &opts) { (void)group; (void)opts; }
+            /// Leave a multicast group.
+            virtual void leave_group(const multicast_group &group) { (void)group; }
         };
 
         std::shared_ptr<tcp_socket_descriptor> make_tcp_socket_descriptor();
