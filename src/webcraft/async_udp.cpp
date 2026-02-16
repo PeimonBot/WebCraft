@@ -960,6 +960,26 @@ private:
                 throw std::system_error(ec, "Failed to create UDP socket");
             }
 
+            // Enable multicast loopback on macOS so that send/receive on the same host
+            // works (e.g. TestMulticastSendReceive). Without this, multicast packets
+            // sent by the sender are not delivered to local receivers.
+            int one = 1;
+#if defined(SO_DOMAIN)
+            int domain = 0;
+            socklen_t domain_len = sizeof(domain);
+            if (::getsockopt(socket, SOL_SOCKET, SO_DOMAIN, &domain, &domain_len) == 0)
+            {
+                if (domain == AF_INET)
+                    ::setsockopt(socket, IPPROTO_IP, IP_MULTICAST_LOOP, &one, sizeof(one));
+                else if (domain == AF_INET6)
+                    ::setsockopt(socket, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &one, sizeof(one));
+            }
+#else
+            // Fallback: set both IPv4 and IPv6 loop (only one will apply to the socket)
+            ::setsockopt(socket, IPPROTO_IP, IP_MULTICAST_LOOP, &one, sizeof(one));
+            ::setsockopt(socket, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &one, sizeof(one));
+#endif
+
             register_with_queue();
         }
     }
