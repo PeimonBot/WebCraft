@@ -87,11 +87,7 @@ install(
     DESTINATION share/WebCraft
 )
 
-# --- 4. Multicast support ---
-# Set to OFF on environments where multicast loopback is unreliable (e.g. some macOS CI runners).
-option(WEBCRAFT_HAS_MULTICAST "Build and run tests that require multicast/loopback support" ON)
-
-# --- 5. Testing ---
+# --- 4. Testing ---
 option(WEBCRAFT_BUILD_TESTS "Build WebCraft tests" OFF)
 if(WEBCRAFT_BUILD_TESTS)
     enable_testing()
