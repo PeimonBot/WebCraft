@@ -87,7 +87,13 @@ install(
     DESTINATION share/WebCraft
 )
 
-# --- 4. Testing ---
+# --- 4. Examples ---
+option(WEBCRAFT_BUILD_EXAMPLES "Build WebCraft examples" OFF)
+if(WEBCRAFT_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+# --- 5. Testing ---
 option(WEBCRAFT_BUILD_TESTS "Build WebCraft tests" OFF)
 if(WEBCRAFT_BUILD_TESTS)
     enable_testing()
