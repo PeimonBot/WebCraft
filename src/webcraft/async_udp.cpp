@@ -577,6 +577,11 @@ public:
         if (res->ai_family == AF_INET)
         {
             auto *sa = (struct sockaddr_in *)res->ai_addr;
+            if (!IN_MULTICAST(ntohl(sa->sin_addr.s_addr)))
+            {
+                freeaddrinfo(res);
+                throw std::invalid_argument("Not a multicast address: " + group.host);
+            }
             ip_mreq mreq{};
             mreq.imr_multiaddr = sa->sin_addr;
             mreq.imr_interface.s_addr = INADDR_ANY;
@@ -588,6 +593,11 @@ public:
         if (res->ai_family == AF_INET6)
         {
             auto *sa = (struct sockaddr_in6 *)res->ai_addr;
+            if (!IN6_IS_ADDR_MULTICAST(&sa->sin6_addr))
+            {
+                freeaddrinfo(res);
+                throw std::invalid_argument("Not a multicast address: " + group.host);
+            }
             ipv6_mreq mreq6{};
             mreq6.ipv6mr_multiaddr = sa->sin6_addr;
             mreq6.ipv6mr_interface = 0;
@@ -870,6 +880,8 @@ public:
             in_addr maddr4;
             if (inet_pton(AF_INET, group.host.c_str(), &maddr4) == 1)
             {
+                if (!IN_MULTICAST(ntohl(maddr4.s_addr)))
+                    throw std::invalid_argument("Not a multicast address: " + group.host);
                 struct ip_mreq mreq{};
                 mreq.imr_multiaddr = maddr4;
                 mreq.imr_interface.s_addr = INADDR_ANY;
@@ -883,6 +895,8 @@ public:
             struct in6_addr maddr6;
             if (inet_pton(AF_INET6, group.host.c_str(), &maddr6) == 1)
             {
+                if (!IN6_IS_ADDR_MULTICAST(&maddr6))
+                    throw std::invalid_argument("Not a multicast address: " + group.host);
                 struct ipv6_mreq mreq6{};
                 mreq6.ipv6mr_multiaddr = maddr6;
                 mreq6.ipv6mr_interface = 0;
@@ -1224,6 +1238,8 @@ public:
         in_addr maddr4;
         if (inet_pton(AF_INET, group.host.c_str(), &maddr4) == 1)
         {
+            if (!IN_MULTICAST(ntohl(maddr4.s_addr)))
+                throw std::invalid_argument("Not a multicast address: " + group.host);
             struct ip_mreq mreq{};
             mreq.imr_multiaddr = maddr4;
             mreq.imr_interface.s_addr = INADDR_ANY;
@@ -1237,6 +1253,8 @@ public:
         struct in6_addr maddr6;
         if (inet_pton(AF_INET6, group.host.c_str(), &maddr6) == 1)
         {
+            if (!IN6_IS_ADDR_MULTICAST(&maddr6))
+                throw std::invalid_argument("Not a multicast address: " + group.host);
             struct ipv6_mreq mreq6{};
             mreq6.ipv6mr_multiaddr = maddr6;
             mreq6.ipv6mr_interface = 0;
