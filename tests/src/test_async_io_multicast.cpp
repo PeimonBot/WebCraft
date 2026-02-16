@@ -68,25 +68,15 @@ TEST_CASE(TestMulticastJoinLeave)
 #if WEBCRAFT_HAS_MULTICAST
 TEST_CASE(TestMulticastInvalidAddressThrows)
 {
-    runtime_context context;
+    // As of PR #79, resolve() validates and throws std::invalid_argument for non-multicast/invalid addresses.
+    EXPECT_THROW(
+        (void)multicast_group::resolve("not.an.ip.address"),
+        std::invalid_argument);
 
-    auto task_fn = co_async
-    {
-        multicast_socket socket = make_multicast_socket(version);
-        socket.bind(bind_info);
-
-        // Resolve with an invalid/non-multicast string; join may throw std::invalid_argument or std::system_error
-        multicast_group invalid_group = multicast_group::resolve("not.an.ip.address");
-        invalid_group.port = multicast_port;
-
-#if !defined(WEBCRAFT_UDP_MOCK)
-        EXPECT_THROW(socket.join(invalid_group), std::exception);
-#endif
-
-        co_await socket.close();
-    };
-
-    sync_wait(task_fn());
+    // Non-multicast but valid IPv4 (e.g. 192.168.1.1) should also throw from resolve().
+    EXPECT_THROW(
+        (void)multicast_group::resolve("192.168.1.1"),
+        std::invalid_argument);
 }
 #else
 TEST_CASE(TestMulticastInvalidAddressThrows)
