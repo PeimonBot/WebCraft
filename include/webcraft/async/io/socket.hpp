@@ -421,6 +421,16 @@ namespace webcraft::async::io::socket
             descriptor->bind(info);
         }
 
+        void join(const multicast_group &group)
+        {
+            descriptor->join_group(group, multicast_join_options{});
+        }
+
+        void leave(const multicast_group &group)
+        {
+            descriptor->leave_group(group);
+        }
+
         task<size_t> recvfrom(std::span<char> buffer, connection_info &info)
         {
             return descriptor->recvfrom(buffer, info);
@@ -430,7 +440,16 @@ namespace webcraft::async::io::socket
         {
             return descriptor->sendto(buffer, info);
         }
+
+        task<size_t> sendto(std::span<const char> buffer, const multicast_group &group)
+        {
+            connection_info info{group.host, group.port};
+            return descriptor->sendto(buffer, info);
+        }
     };
+
+    /// Alias for UDP socket used in multicast contexts (same type; join/leave/sendto(group) available).
+    using multicast_socket = udp_socket;
 
     inline tcp_socket make_tcp_socket()
     {
@@ -445,5 +464,10 @@ namespace webcraft::async::io::socket
     inline udp_socket make_udp_socket(std::optional<ip_version> version = std::nullopt)
     {
         return udp_socket(detail::make_udp_socket_descriptor(version));
+    }
+
+    inline multicast_socket make_multicast_socket(std::optional<ip_version> version = std::nullopt)
+    {
+        return make_udp_socket(version);
     }
 }
