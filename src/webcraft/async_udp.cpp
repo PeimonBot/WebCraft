@@ -31,6 +31,13 @@ using namespace webcraft::async::io::socket::detail;
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <MSWSock.h>
+// Windows uses IPV6_ADD_MEMBERSHIP/IPV6_DROP_MEMBERSHIP; POSIX uses IPV6_JOIN_GROUP/IPV6_LEAVE_GROUP.
+#ifndef IPV6_JOIN_GROUP
+#define IPV6_JOIN_GROUP IPV6_ADD_MEMBERSHIP
+#endif
+#ifndef IPV6_LEAVE_GROUP
+#define IPV6_LEAVE_GROUP IPV6_DROP_MEMBERSHIP
+#endif
 
 #elif defined(__APPLE__)
 
