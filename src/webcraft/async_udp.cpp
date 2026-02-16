@@ -23,6 +23,7 @@ using namespace webcraft::async::io::socket::detail;
 #include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 
 #elif defined(_WIN32)
 
@@ -37,6 +38,7 @@ using namespace webcraft::async::io::socket::detail;
 #include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 
 #endif
 
@@ -562,6 +564,72 @@ public:
 
         co_return bytes_sent;
     }
+
+    void join_group(const webcraft::async::io::socket::multicast_group &group, const webcraft::async::io::socket::multicast_join_options &) override
+    {
+        if (socket == INVALID_SOCKET) return;
+        struct addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_flags = AI_NUMERICHOST;
+        struct addrinfo *res = nullptr;
+        if (getaddrinfo(group.host.c_str(), nullptr, &hints, &res) != 0 || !res)
+            throw std::invalid_argument("Invalid multicast address: " + group.host);
+        if (res->ai_family == AF_INET)
+        {
+            auto *sa = (struct sockaddr_in *)res->ai_addr;
+            ip_mreq mreq{};
+            mreq.imr_multiaddr = sa->sin_addr;
+            mreq.imr_interface.s_addr = INADDR_ANY;
+            freeaddrinfo(res);
+            if (setsockopt(socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&mreq, sizeof(mreq)) == SOCKET_ERROR)
+                throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to join IPv4 multicast group");
+            return;
+        }
+        if (res->ai_family == AF_INET6)
+        {
+            auto *sa = (struct sockaddr_in6 *)res->ai_addr;
+            ipv6_mreq mreq6{};
+            mreq6.ipv6mr_multiaddr = sa->sin6_addr;
+            mreq6.ipv6mr_interface = 0;
+            freeaddrinfo(res);
+            if (setsockopt(socket, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char *)&mreq6, sizeof(mreq6)) == SOCKET_ERROR)
+                throw webcraft::async::detail::windows::overlapped_winsock2_runtime_error("Failed to join IPv6 multicast group");
+            return;
+        }
+        freeaddrinfo(res);
+        throw std::invalid_argument("Invalid multicast address: " + group.host);
+    }
+
+    void leave_group(const webcraft::async::io::socket::multicast_group &group) override
+    {
+        if (socket == INVALID_SOCKET) return;
+        struct addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_flags = AI_NUMERICHOST;
+        struct addrinfo *res = nullptr;
+        if (getaddrinfo(group.host.c_str(), nullptr, &hints, &res) != 0 || !res) return;
+        if (res->ai_family == AF_INET)
+        {
+            auto *sa = (struct sockaddr_in *)res->ai_addr;
+            ip_mreq mreq{};
+            mreq.imr_multiaddr = sa->sin_addr;
+            mreq.imr_interface.s_addr = INADDR_ANY;
+            freeaddrinfo(res);
+            setsockopt(socket, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char *)&mreq, sizeof(mreq));
+            return;
+        }
+        if (res->ai_family == AF_INET6)
+        {
+            auto *sa = (struct sockaddr_in6 *)res->ai_addr;
+            ipv6_mreq mreq6{};
+            mreq6.ipv6mr_multiaddr = sa->sin6_addr;
+            mreq6.ipv6mr_interface = 0;
+            freeaddrinfo(res);
+            setsockopt(socket, IPPROTO_IPV6, IPV6_LEAVE_GROUP, (char *)&mreq6, sizeof(mreq6));
+        }
+        else
+            freeaddrinfo(res);
+    }
 };
 
 std::shared_ptr<webcraft::async::io::socket::detail::udp_socket_descriptor> webcraft::async::io::socket::detail::make_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version)
@@ -760,42 +828,96 @@ public:
         co_return event.get_result();
     }
 
-    task<size_t> sendto(std::span<const char> buffer, const webcraft::async::io::socket::connection_info &info) override
-    {
-        if (closed)
-            co_return 0;
-
-        int socket = this->socket;
-        int bytes_sent = -1;
-
-        std::function<task<bool>(sockaddr *, socklen_t)> async_func = [&bytes_sent, buffer, socket](sockaddr *addr, socklen_t len) -> task<bool>
+        task<size_t> sendto(std::span<const char> buffer, const webcraft::async::io::socket::connection_info &info) override
         {
-            auto event = webcraft::async::detail::as_awaitable(
-                webcraft::async::detail::linux::create_io_uring_event(
-                    [socket, buffer, addr, len](struct io_uring_sqe *sqe)
-                    {
-                        io_uring_prep_sendto(sqe, socket, buffer.data(), buffer.size(), 0, addr, len);
-                    }));
+            if (closed)
+                co_return 0;
 
-            co_await event;
+            int socket = this->socket;
+            int bytes_sent = -1;
 
-            bytes_sent = event.get_result();
+            std::function<task<bool>(sockaddr *, socklen_t)> async_func = [&bytes_sent, buffer, socket](sockaddr *addr, socklen_t len) -> task<bool>
+            {
+                auto event = webcraft::async::detail::as_awaitable(
+                    webcraft::async::detail::linux::create_io_uring_event(
+                        [socket, buffer, addr, len](struct io_uring_sqe *sqe)
+                        {
+                            io_uring_prep_sendto(sqe, socket, buffer.data(), buffer.size(), 0, addr, len);
+                        }));
 
-            co_return bytes_sent >= 0;
-        };
+                co_await event;
 
-        bool flag = co_await async_host_port_to_addr(
-            info, async_func);
+                bytes_sent = event.get_result();
 
-        if (!flag)
-        {
-            std::error_code ec(errno, std::system_category());
-            throw std::system_error(ec, "Failed to send data");
+                co_return bytes_sent >= 0;
+            };
+
+            bool flag = co_await async_host_port_to_addr(
+                info, async_func);
+
+            if (!flag)
+            {
+                std::error_code ec(errno, std::system_category());
+                throw std::system_error(ec, "Failed to send data");
+            }
+
+            co_return bytes_sent;
         }
 
-        co_return bytes_sent;
-    }
-};
+        void join_group(const webcraft::async::io::socket::multicast_group &group, const webcraft::async::io::socket::multicast_join_options &) override
+        {
+            if (socket < 0) return;
+            in_addr maddr4;
+            if (inet_pton(AF_INET, group.host.c_str(), &maddr4) == 1)
+            {
+                struct ip_mreq mreq{};
+                mreq.imr_multiaddr = maddr4;
+                mreq.imr_interface.s_addr = INADDR_ANY;
+                if (setsockopt(socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0)
+                {
+                    std::error_code ec(errno, std::system_category());
+                    throw std::system_error(ec, "Failed to join IPv4 multicast group");
+                }
+                return;
+            }
+            struct in6_addr maddr6;
+            if (inet_pton(AF_INET6, group.host.c_str(), &maddr6) == 1)
+            {
+                struct ipv6_mreq mreq6{};
+                mreq6.ipv6mr_multiaddr = maddr6;
+                mreq6.ipv6mr_interface = 0;
+                if (setsockopt(socket, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6, sizeof(mreq6)) < 0)
+                {
+                    std::error_code ec(errno, std::system_category());
+                    throw std::system_error(ec, "Failed to join IPv6 multicast group");
+                }
+                return;
+            }
+            throw std::invalid_argument("Invalid multicast address: " + group.host);
+        }
+
+        void leave_group(const webcraft::async::io::socket::multicast_group &group) override
+        {
+            if (socket < 0) return;
+            in_addr maddr4;
+            if (inet_pton(AF_INET, group.host.c_str(), &maddr4) == 1)
+            {
+                struct ip_mreq mreq{};
+                mreq.imr_multiaddr = maddr4;
+                mreq.imr_interface.s_addr = INADDR_ANY;
+                setsockopt(socket, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
+                return;
+            }
+            struct in6_addr maddr6;
+            if (inet_pton(AF_INET6, group.host.c_str(), &maddr6) == 1)
+            {
+                struct ipv6_mreq mreq6{};
+                mreq6.ipv6mr_multiaddr = maddr6;
+                mreq6.ipv6mr_interface = 0;
+                setsockopt(socket, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &mreq6, sizeof(mreq6));
+            }
+        }
+    };
 
 std::shared_ptr<webcraft::async::io::socket::detail::udp_socket_descriptor> webcraft::async::io::socket::detail::make_udp_socket_descriptor(std::optional<webcraft::async::io::socket::ip_version> version)
 {
@@ -1073,6 +1195,60 @@ public:
         if (filter == EVFILT_READ)
         {
             read_event.notify();
+        }
+    }
+
+    void join_group(const webcraft::async::io::socket::multicast_group &group, const webcraft::async::io::socket::multicast_join_options &) override
+    {
+        if (socket < 0) return;
+        in_addr maddr4;
+        if (inet_pton(AF_INET, group.host.c_str(), &maddr4) == 1)
+        {
+            struct ip_mreq mreq{};
+            mreq.imr_multiaddr = maddr4;
+            mreq.imr_interface.s_addr = INADDR_ANY;
+            if (setsockopt(socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0)
+            {
+                std::error_code ec(errno, std::system_category());
+                throw std::system_error(ec, "Failed to join IPv4 multicast group");
+            }
+            return;
+        }
+        struct in6_addr maddr6;
+        if (inet_pton(AF_INET6, group.host.c_str(), &maddr6) == 1)
+        {
+            struct ipv6_mreq mreq6{};
+            mreq6.ipv6mr_multiaddr = maddr6;
+            mreq6.ipv6mr_interface = 0;
+            if (setsockopt(socket, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6, sizeof(mreq6)) < 0)
+            {
+                std::error_code ec(errno, std::system_category());
+                throw std::system_error(ec, "Failed to join IPv6 multicast group");
+            }
+            return;
+        }
+        throw std::invalid_argument("Invalid multicast address: " + group.host);
+    }
+
+    void leave_group(const webcraft::async::io::socket::multicast_group &group) override
+    {
+        if (socket < 0) return;
+        in_addr maddr4;
+        if (inet_pton(AF_INET, group.host.c_str(), &maddr4) == 1)
+        {
+            struct ip_mreq mreq{};
+            mreq.imr_multiaddr = maddr4;
+            mreq.imr_interface.s_addr = INADDR_ANY;
+            setsockopt(socket, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
+            return;
+        }
+        struct in6_addr maddr6;
+        if (inet_pton(AF_INET6, group.host.c_str(), &maddr6) == 1)
+        {
+            struct ipv6_mreq mreq6{};
+            mreq6.ipv6mr_multiaddr = maddr6;
+            mreq6.ipv6mr_interface = 0;
+            setsockopt(socket, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &mreq6, sizeof(mreq6));
         }
     }
 };

@@ -7,6 +7,7 @@
 
 #include "core.hpp"
 #include <webcraft/async/fire_and_forget_task.hpp>
+#include <string_view>
 
 namespace webcraft::async::io::socket
 {
@@ -14,6 +15,26 @@ namespace webcraft::async::io::socket
     {
         std::string host;
         uint16_t port;
+    };
+
+    /// Options when joining a multicast group (e.g. interface index). Empty for default behavior.
+    struct multicast_join_options
+    {
+    };
+
+    /// Represents a multicast group address. Use resolve() to create from a string (e.g. "239.255.0.1").
+    struct multicast_group
+    {
+        std::string host;  ///< Multicast group address (e.g. "239.255.0.1")
+        uint16_t port{0};  ///< Port used when sending to the group (0 = use socket's bound port or set before sendto)
+
+        /// Resolve a multicast group from an address string (IPv4 or IPv6 multicast address).
+        static multicast_group resolve(std::string_view addr)
+        {
+            multicast_group g;
+            g.host = std::string(addr);
+            return g;
+        }
     };
 
     enum class ip_version
@@ -77,6 +98,11 @@ namespace webcraft::async::io::socket
 
             virtual task<size_t> recvfrom(std::span<char> buffer, connection_info &info) = 0;
             virtual task<size_t> sendto(std::span<const char> buffer, const connection_info &info) = 0;
+
+            /// Join a multicast group. Optional; no-op if not supported (e.g. mock).
+            virtual void join_group(const multicast_group &group, const multicast_join_options &opts) { (void)group; (void)opts; }
+            /// Leave a multicast group.
+            virtual void leave_group(const multicast_group &group) { (void)group; }
         };
 
         std::shared_ptr<tcp_socket_descriptor> make_tcp_socket_descriptor();
@@ -352,6 +378,60 @@ namespace webcraft::async::io::socket
         }
     };
 
+    /// UDP socket that can join multicast groups and send/receive to/from those groups.
+    class multicast_socket
+    {
+    private:
+        std::shared_ptr<detail::udp_socket_descriptor> descriptor;
+
+    public:
+        explicit multicast_socket(std::shared_ptr<detail::udp_socket_descriptor> desc) : descriptor(std::move(desc)) {}
+        ~multicast_socket()
+        {
+            fire_and_forget(close());
+        }
+
+        void bind(const connection_info &info)
+        {
+            descriptor->bind(info);
+        }
+
+        /// Join a multicast group. Call after bind().
+        void join(const multicast_group &group, const multicast_join_options &opts = {})
+        {
+            descriptor->join_group(group, opts);
+        }
+
+        /// Leave a multicast group.
+        void leave(const multicast_group &group)
+        {
+            descriptor->leave_group(group);
+        }
+
+        task<size_t> recvfrom(std::span<char> buffer, connection_info &info)
+        {
+            return descriptor->recvfrom(buffer, info);
+        }
+
+        /// Send data to a multicast group. Uses group.host and group.port (if port is 0, send may use a default).
+        task<size_t> sendto(std::span<const char> buffer, const multicast_group &group)
+        {
+            connection_info info;
+            info.host = group.host;
+            info.port = group.port;
+            return descriptor->sendto(buffer, info);
+        }
+
+        task<void> close()
+        {
+            if (descriptor)
+            {
+                co_await descriptor->close();
+                descriptor.reset();
+            }
+        }
+    };
+
     inline tcp_socket make_tcp_socket()
     {
         return tcp_socket(detail::make_tcp_socket_descriptor());
@@ -365,5 +445,10 @@ namespace webcraft::async::io::socket
     inline udp_socket make_udp_socket(std::optional<ip_version> version = std::nullopt)
     {
         return udp_socket(detail::make_udp_socket_descriptor(version));
+    }
+
+    inline multicast_socket make_multicast_socket(std::optional<ip_version> version = std::nullopt)
+    {
+        return multicast_socket(detail::make_udp_socket_descriptor(version));
     }
 }
